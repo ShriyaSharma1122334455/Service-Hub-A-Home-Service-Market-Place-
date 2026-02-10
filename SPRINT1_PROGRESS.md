@@ -17,13 +17,32 @@
 
 ---
 
-## Day 2 - 🔄 IN PROGRESS
-**Target:** MongoDB Atlas setup and integration
+## Day 2 - ✅ COMPLETED
+**Date:** [Add today's date]
+**Story Points Completed:** 20/42
+
+### Achievements:
+- [x] MongoDB Atlas account created
+- [x] Database cluster configured (M0 Free tier)
+- [x] Database access and network settings configured
+- [x] Connection string obtained
+- [x] Database configuration file created
+- [x] Server integrated with MongoDB
+- [x] Health check endpoint working
+- [x] Connection tested successfully
+
+### Branch: `feature/mongodb-integration`
+### Commit: Integrate MongoDB Atlas database
+
+---
+
+## Day 3 - 🔄 IN PROGRESS
+**Target:** Cloudinary setup for file storage
 
 ### Tasks:
-- [ ] Create MongoDB Atlas account
-- [ ] Configure cluster
-- [ ] Set up database connection
-- [ ] Test connection
+- [ ] Create Cloudinary account
+- [ ] Configure Cloudinary credentials
+- [ ] Set up file upload configuration
+- [ ] Test file upload
 
 ---
