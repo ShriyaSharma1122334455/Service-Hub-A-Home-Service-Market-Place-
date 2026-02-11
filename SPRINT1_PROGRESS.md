@@ -53,7 +53,24 @@
 
 ---
 
-## Day 4 - 🔄 IN PROGRESS
-**Target:** Email service setup with Resend
+## Day 4 - ✅ COMPLETED
+**Date:** [Add today's date]
+**Story Points Completed:** 33/42
+
+### Achievements:
+- [x] Resend account created
+- [x] API key obtained
+- [x] Email service implemented
+- [x] Welcome and booking email templates created
+- [x] Test endpoint created
+- [x] Email sending verified successfully
+
+### Branch: `feature/email-service`
+### Commit: Implement email service with Resend
+
+---
+
+## Day 5 - 🔄 IN PROGRESS
+**Target:** Database models creation
 
 ---
