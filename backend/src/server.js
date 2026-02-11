@@ -7,7 +7,10 @@ import morgan from 'morgan';
 import mongoose from 'mongoose';
 import cloudinary from './config/cloudinary.js';
 import connectDB from './config/database.js';
+
+// Import routes
 import testRoutes from './routes/testRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -28,7 +31,10 @@ app.use(compression()); // Compress responses
 app.use(morgan('dev')); // HTTP request logger
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+
+// API Routes
 app.use('/api/test', testRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Basic routes
 app.get('/', (req, res) => {
