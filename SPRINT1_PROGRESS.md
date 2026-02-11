@@ -36,13 +36,24 @@
 
 ---
 
-## Day 3 - 🔄 IN PROGRESS
-**Target:** Cloudinary setup for file storage
+## Day 3 - ✅ COMPLETED
+**Date:** [Add today's date]
+**Story Points Completed:** 27/42
 
-### Tasks:
-- [ ] Create Cloudinary account
-- [ ] Configure Cloudinary credentials
-- [ ] Set up file upload configuration
-- [ ] Test file upload
+### Achievements:
+- [x] Cloudinary account created
+- [x] Upload preset configured
+- [x] Cloudinary credentials obtained
+- [x] Configuration file created
+- [x] Server integrated with Cloudinary
+- [x] Connection tested successfully
+
+### Branch: `feature/cloudinary-setup`
+### Commit: Integrate Cloudinary for file storage
+
+---
+
+## Day 4 - 🔄 IN PROGRESS
+**Target:** Email service setup with Resend
 
 ---
