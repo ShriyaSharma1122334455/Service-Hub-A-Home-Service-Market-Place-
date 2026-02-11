@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
+import cloudinary from './config/cloudinary.js';
 import connectDB from './config/database.js';
 
 // Load environment variables
