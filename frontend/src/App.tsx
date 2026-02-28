@@ -4,6 +4,7 @@ import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { FAQ } from "./pages/FAQ";
 
 const App = () => {
   const [user, setUser] = useState<User | Provider | null>(null);
@@ -81,6 +82,8 @@ const App = () => {
             onLoginClick={() => navigate("/login")}
           />
         );
+      case "/faq":
+        return <FAQ />;
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
