@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import type { UserRole } from "../../types";
-import { Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import { UserRole } from "../../types";
+import { Menu, X, LogOut } from "lucide-react";
 
 interface NavbarProps {
   user: { name: string; role: UserRole; avatar?: string } | null;
@@ -54,6 +54,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 Home
               </span>
+              {user?.role === UserRole.PROVIDER && (
+                <span
+                  onClick={() => onNavigate("/users")}
+                  className={navItemClass("/users")}
+                >
+                  Users
+                </span>
+              )}
+              {user?.role === UserRole.CUSTOMER && (
+                <span
+                  onClick={() => onNavigate("/providers")}
+                  className={navItemClass("/providers")}
+                >
+                  Providers
+                </span>
+              )}
             </div>
           </div>
 
@@ -61,14 +77,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden md:flex items-center gap-2">
             {user ? (
               <div className="flex items-center gap-4 bg-white/40 pl-2 pr-4 py-1.5 rounded-full border border-white/60">
-                <img
-                  src={user.avatar}
-                  alt=""
-                  className="w-8 h-8 rounded-full border border-white shadow-sm"
-                />
-                <span className="text-sm font-bold text-slate-800">
-                  {user.name}
-                </span>
+                <button
+                  onClick={() => onNavigate("/profile/me")}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <img
+                    src={user.avatar}
+                    alt=""
+                    className="w-8 h-8 rounded-full border border-white shadow-sm"
+                  />
+                  <span className="text-sm font-bold text-slate-800">
+                    {user.name}
+                  </span>
+                </button>
                 <button
                   onClick={onLogout}
                   className="p-2 hover:bg-red-50 text-red-500 rounded-full transition-colors"
@@ -119,6 +140,39 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Home
             </div>
+            {user?.role === UserRole.PROVIDER && (
+              <div
+                className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  onNavigate("/users");
+                  setIsOpen(false);
+                }}
+              >
+                Users
+              </div>
+            )}
+            {user?.role === UserRole.CUSTOMER && (
+              <div
+                className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  onNavigate("/providers");
+                  setIsOpen(false);
+                }}
+              >
+                Providers
+              </div>
+            )}
+            {user && (
+              <div
+                className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  onNavigate("/profile/me");
+                  setIsOpen(false);
+                }}
+              >
+                My Profile
+              </div>
+            )}
             <div className="h-px bg-slate-200 my-2"></div>
             {user ? (
               <div
