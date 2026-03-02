@@ -77,3 +77,36 @@ export const listProviders = async (req, res) => {
     });
   }
 }
+
+/**
+ * @description Advanced provider search with filters.
+ * Supports: category, minRating, isActive, search (business name), page, limit.
+ */
+export const searchProviders = async (req, res) => {
+  try {
+    const { category, minRating, isActive, search, page = 1, limit = 20 } = req.query;
+    const filter = {};
+    if (category)  filter.serviceCategories = category;
+    if (minRating) filter.ratingAvg = { $gte: Number(minRating) };
+    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (search)    filter.businessName = { $regex: search, $options: 'i' };
+    const skip = (Number(page) - 1) * Number(limit);
+    const [providers, total] = await Promise.all([
+      Provider.find(filter)
+        .populate('userId', 'fullName email avatarUrl')
+        .populate('serviceCategories', 'name')
+        .skip(skip).limit(Number(limit)).lean(),
+      Provider.countDocuments(filter),
+    ]);
+    const list = providers.map(p => ({
+      _id: p._id, businessName: p.businessName, description: p.description,
+      serviceCategories: p.serviceCategories, ratingAvg: p.ratingAvg,
+      ratingCount: p.ratingCount, isActive: p.isActive,
+      fullName: p.userId?.fullName, email: p.userId?.email, avatarUrl: p.userId?.avatarUrl,
+    }));
+    return res.json({ success: true, count: list.length, total, page: Number(page), data: { providers: list } });
+  } catch (err) {
+    console.error('searchProviders error:', err);
+    res.status(500).json({ success: false, error: 'Failed to search providers' });
+  }
+};

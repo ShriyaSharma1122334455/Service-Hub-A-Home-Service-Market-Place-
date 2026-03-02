@@ -13,7 +13,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 | 2   | feature/auth-middleware  | 10 | ✅ Complete |
 | 3   | feature/secure-routes         |  8 | ✅ Complete |
 | 4   | feature/services-api          | 12 | ✅ Complete |
-| 5   | feature/providers-api         | 10 | ⬜ Pending |
+| 5   | feature/providers-api         | 10 | ✅ Complete |
 | 6   | feature/booking-api           | 12 | ⬜ Pending |
 | 7   | feature/docker-setup          | 10 | ⬜ Pending |
 | 7   | feature/oop-python-refactor   | 10 | ⬜ Pending |
@@ -97,4 +97,20 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 
 ### Branch: feature/services-api
 ### Commit: feat: add Services API with CRUD and search/filter
+-----
+
+## Day 5 — ✅ COMPLETE
+**Branch:** feature/providers-api
+**Story Points Completed:** 48/80
+ 
+### Achievements:
+- [x] searchProviders() added to providerController.js
+- [x] Filters: category, minRating, isActive, business name search
+- [x] Pagination: page + limit query params
+- [x] providerRoutes.js: GET /, GET /search, GET /:id — all public
+- [x] Registered at /api/providers in server.js
+- [x] All endpoints tested
+ 
+### Branch: feature/providers-api
+### Commit: feat: add Providers API with search and filter
 -----
