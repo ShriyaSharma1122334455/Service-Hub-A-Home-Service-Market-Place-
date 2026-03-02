@@ -11,7 +11,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 |-----|--------|--------|--------|
 | 1   | feature/jest-setup  | 8  | ✅ Complete |
 | 2   | feature/auth-middleware  | 10 | ✅ Complete |
-| 3   | feature/secure-routes         |  8 | ⬜ Pending |
+| 3   | feature/secure-routes         |  8 | ✅ Complete |
 | 4   | feature/services-api          | 12 | ⬜ Pending |
 | 5   | feature/providers-api         | 10 | ⬜ Pending |
 | 6   | feature/booking-api           | 12 | ⬜ Pending |
@@ -52,3 +52,30 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 ### Branch: feature/auth-middleware
 ### Commit: feat: implement JWT auth middleware with LBYL/EAFP/Factory patterns
 ------
+## Day 3 — ✅ COMPLETE
+**Branch:** feature/secure-routes
+**Story Points Completed:** 26/80
+ 
+### Achievements:
+- [x] profileRoutes.js replaced with secured version
+- [x] GET /api/profile/me requires valid Bearer token (401 without)
+- [x] GET /api/profile/users requires valid Bearer token (401 without)
+- [x] GET /api/profile/user/:id requires valid Bearer token (401 without)
+- [x] GET /api/profile/providers remains PUBLIC (no auth required)
+- [x] GET /api/profile/provider/:id remains PUBLIC (no auth required)
+- [x] GET /api/categories remains PUBLIC (no auth required)
+- [x] All smoke tests pass
+- [x] Jest tests still all pass (npm test)
+ 
+### Endpoints secured:
+  GET /api/profile/me        → authenticate required
+  GET /api/profile/users     → authenticate required
+  GET /api/profile/user/:id  → authenticate required
+ 
+### Endpoints remaining public:
+  GET /api/profile/providers    → public browse
+  GET /api/profile/provider/:id → public browse
+  GET /api/categories           → public browse
+ 
+### Branch: feature/secure-routes
+### Commit: feat: protect profile routes with JWT authentication middleware
