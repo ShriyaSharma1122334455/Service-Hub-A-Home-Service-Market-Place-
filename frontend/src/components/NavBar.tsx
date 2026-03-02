@@ -54,6 +54,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 Home
               </span>
+              <span
+                onClick={() => onNavigate("/faq")}
+                className={navItemClass("/faq")}
+              >
+                Help
+              </span>
               {user?.role === UserRole.PROVIDER && (
                 <span
                   onClick={() => onNavigate("/users")}
@@ -139,6 +145,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               }}
             >
               Home
+            </div>
+            <div
+              className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                onNavigate("/faq");
+                setIsOpen(false);
+              }}
+            >
+              Help
             </div>
             {user?.role === UserRole.PROVIDER && (
               <div

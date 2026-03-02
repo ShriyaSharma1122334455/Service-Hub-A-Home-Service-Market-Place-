@@ -5,9 +5,11 @@ import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { FAQ } from "./pages/FAQ";
 import { Profile } from "./pages/Profile";
 import { UsersList } from "./pages/UsersList";
 import { ProvidersList } from "./pages/ProvidersList";
+
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
@@ -166,6 +168,8 @@ const App = () => {
             onLoginClick={() => navigate("/login")}
           />
         );
+      case "/faq":
+        return <FAQ />;
       case "/users":
         return <UsersList onNavigate={navigate} />;
       case "/providers":
