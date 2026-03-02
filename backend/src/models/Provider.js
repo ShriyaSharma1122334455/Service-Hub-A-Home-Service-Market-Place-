@@ -5,7 +5,8 @@ const providerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    unique: true
+    unique: true,
+    index: true,
   },
   businessName: {
     type: String,
@@ -20,7 +21,8 @@ const providerSchema = new mongoose.Schema({
   },
   serviceCategories: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category'
+    ref: 'Category',
+    index: true,
   }],
   documents: {
     idDocument: {
@@ -62,7 +64,8 @@ const providerSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     min: 0,
-    max: 5
+    max: 5,
+    index: true,
   },
   ratingCount: {
     type: Number,
@@ -77,15 +80,10 @@ const providerSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-providerSchema.index({ userId: 1 });
-providerSchema.index({ serviceCategories: 1 });
-providerSchema.index({ ratingAvg: -1 });
-
 // Virtual for full verification status
 providerSchema.virtual('isFullyVerified').get(function() {
-  return this.verification.idVerified && 
-         this.verification.faceMatched && 
+  return this.verification.idVerified &&
+         this.verification.faceMatched &&
          this.verification.nsopwChecked;
 });
 

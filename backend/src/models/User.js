@@ -4,7 +4,8 @@ const userSchema = new mongoose.Schema({
   supabaseId: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    index: true,
   },
   email: {
     type: String,
@@ -12,7 +13,8 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
+    index: true,
   },
   role: {
     type: String,
@@ -64,10 +66,6 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
-// Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ supabaseId: 1 });
 
 const User = mongoose.model('User', userSchema);
 
