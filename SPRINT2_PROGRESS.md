@@ -2,10 +2,9 @@
 # Sprint 2 Progress — Akash (Backend Lead)
  
 ## Sprint 2 Goal
-Auth middleware, secure routes, Services/Providers/Booking APIs,
-Docker setup, OOP Python refactor, CI/CD pipeline.
+Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
  
-## Story Points: 0 / 80
+## Story Points: 0 /70
  
 | Day | Branch | Points | Status |
 |-----|--------|--------|--------|
@@ -16,12 +15,12 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 | 5   | feature/providers-api         | 10 | ✅ Complete |
 | 6   | feature/booking-api           | 12 | ✅ Complete |
 | 7   | feature/docker-setup          | 10 | ✅ Complete |
-| 7   | feature/oop-python-refactor   | 10 | ⬜ Pending |
+
  
 ---
 ## Day 1 — ✅ COMPLETE
 **Branch:** feature/jest-setup
-**Story Points Completed:** 8/80
+**Story Points Completed:** 8/70
  
 ### Achievements:
 - [x] Jest 29 installed with ESM module support
@@ -35,7 +34,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 -----
 ## Day 2 — ✅ COMPLETE
 **Branch:** feature/auth-middleware
-**Story Points Completed:** 18/80
+**Story Points Completed:** 18/70
  
 ### Achievements:
 - [x] authMiddleware.js created at backend/src/middleware/
@@ -54,7 +53,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 ------
 ## Day 3 — ✅ COMPLETE
 **Branch:** feature/secure-routes
-**Story Points Completed:** 26/80
+**Story Points Completed:** 26/70
  
 ### Achievements:
 - [x] profileRoutes.js replaced with secured version
@@ -82,7 +81,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 -----
 ## Day 4 — ✅ COMPLETE
 **Branch:** feature/services-api
-**Story Points Completed:** 38/80
+**Story Points Completed:** 38/70
  
 ### Achievements:
 - [x] backend/src/controllers/serviceController.js created
@@ -101,7 +100,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 
 ## Day 5 — ✅ COMPLETE
 **Branch:** feature/providers-api
-**Story Points Completed:** 48/80
+**Story Points Completed:** 48/70
  
 ### Achievements:
 - [x] searchProviders() added to providerController.js
@@ -117,7 +116,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 
 ## Day 6 — ✅ COMPLETE
 **Branch:** feature/booking-api
-**Story Points Completed:** 60/80
+**Story Points Completed:** 60/70
  
 ### Achievements:
 - [x] bookingController.js: createBooking, listBookings, getBooking,
@@ -133,9 +132,9 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 ### Commit: feat: add Booking API with role-based access control
 ----
 
-## Day 7A — ✅ COMPLETE
+## Day 7 — ✅ COMPLETE
 **Branch:** feature/docker-setup
-**Story Points Completed:** 70/80
+**Story Points Completed:** 70/70
  
 ### Achievements:
 - [x] backend/Dockerfile — multi-stage (development + production targets)
@@ -148,7 +147,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 - [x] docker compose build — all 3 images built successfully
 - [x] docker compose up — all 3 containers healthy
 - [x] curl http://localhost:3000/health → healthy
-- [x] curl http://localhost:8000/health → healthy
+- [x] curl http://localhost:7000/health → healthy
  
 ### Branch: feature/docker-setup
 ### Commit: docker: add multi-stage Dockerfiles and root docker-compose
