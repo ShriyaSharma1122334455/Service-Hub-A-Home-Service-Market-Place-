@@ -15,7 +15,7 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 | 4   | feature/services-api          | 12 | ✅ Complete |
 | 5   | feature/providers-api         | 10 | ✅ Complete |
 | 6   | feature/booking-api           | 12 | ✅ Complete |
-| 7   | feature/docker-setup          | 10 | ⬜ Pending |
+| 7   | feature/docker-setup          | 10 | ✅ Complete |
 | 7   | feature/oop-python-refactor   | 10 | ⬜ Pending |
  
 ---
@@ -132,3 +132,25 @@ Docker setup, OOP Python refactor, CI/CD pipeline.
 ### Branch: feature/booking-api
 ### Commit: feat: add Booking API with role-based access control
 ----
+
+## Day 7A — ✅ COMPLETE
+**Branch:** feature/docker-setup
+**Story Points Completed:** 70/80
+ 
+### Achievements:
+- [x] backend/Dockerfile — multi-stage (development + production targets)
+- [x] backend/.dockerignore — excludes node_modules, .env, coverage
+- [x] frontend/Dockerfile — vite dev + nginx production
+- [x] frontend/.dockerignore
+- [x] frontend/nginx.conf — React Router support + asset caching
+- [x] docker-compose.yml at project root — all services
+- [x] Root .env created (not committed)
+- [x] docker compose build — all 3 images built successfully
+- [x] docker compose up — all 3 containers healthy
+- [x] curl http://localhost:3000/health → healthy
+- [x] curl http://localhost:8000/health → healthy
+ 
+### Branch: feature/docker-setup
+### Commit: docker: add multi-stage Dockerfiles and root docker-compose
+----
+
