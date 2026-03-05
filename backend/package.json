@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "setup": "node src/scripts/setupEnv.js",
+    "setup": "node src/scripts/setUpEnv.js",
     "test": "jest",
     "seed:categories": "node src/scripts/seedCategories.js",
     "seed:users": "node src/scripts/seedUsers.js",
