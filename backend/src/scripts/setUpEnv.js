@@ -1,12 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const rootEnv = path.join(__dirname, "../../../.env");
-const exampleEnv = path.join(__dirname, "../../../.env.example");
+function createEnv(folder) {
+  const example = path.join(folder, ".env.example");
+  const env = path.join(folder, ".env");
 
-if (!fs.existsSync(rootEnv)) {
-  fs.copyFileSync(exampleEnv, rootEnv);
-  console.log("✅ .env file created from .env.example");
-} else {
-  console.log("ℹ️ .env already exists");
+  if (!fs.existsSync(env) && fs.existsSync(example)) {
+    fs.copyFileSync(example, env);
+    console.log(`Created ${env}`);
+  } else {
+    console.log(`${env} already exists`);
+  }
 }
+
+createEnv(path.join(__dirname, "../../../backend"));
+createEnv(path.join(__dirname, "../../../frontend"));
