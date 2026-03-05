@@ -11,10 +11,14 @@ import { UsersList } from "./pages/UsersList";
 import { ProvidersList } from "./pages/ProvidersList";
 import { SupportModal } from "./components/SupportModal";
 
-
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
-type StoredAuth = { email: string; role: UserRole; name: string; avatar: string };
+type StoredAuth = {
+  email: string;
+  role: UserRole;
+  name: string;
+  avatar: string;
+};
 
 const loadStoredAuth = (): StoredAuth | null => {
   try {
@@ -37,26 +41,24 @@ const clearAuth = () => {
 };
 
 const App = () => {
-  const [user, setUser] = useState<User | Provider | null>(null);
-  const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authRestored, setAuthRestored] = useState(false);
-  const [isSupportOpen, setIsSupportOpen] = useState(false);
-
-  useEffect(() => {
+  const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
-      setUser({
+      return {
         id: "1",
         name: stored.name,
         email: stored.email,
         role: stored.role,
         avatar: stored.avatar,
-      } as User);
-      setIsAuthenticated(true);
+      } as User;
     }
-    setAuthRestored(true);
-  }, []);
+    return null;
+  });
+  const [currentPath, setCurrentPath] = useState("/");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // auth is restored from localStorage in the user lazy initializer
+  const authRestored = true;
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const [basePath, search] = currentPath.split("?");
   const searchParams = new URLSearchParams(search || "");
@@ -207,7 +209,9 @@ const App = () => {
         isOpen={isSupportOpen}
         onClose={() => setIsSupportOpen(false)}
         userId={user?.id || "guest"}
-        userRole={(user?.role?.toLowerCase() as "customer" | "provider") || "customer"}
+        userRole={
+          (user?.role?.toLowerCase() as "customer" | "provider") || "customer"
+        }
       />
     </div>
   );

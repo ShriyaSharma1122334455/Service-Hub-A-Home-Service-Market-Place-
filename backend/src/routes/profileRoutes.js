@@ -25,7 +25,7 @@
 import express from 'express';
 import { getMe, getUser, listUsers } from '../controllers/userController.js';
 import { getProvider, listProviders } from '../controllers/providerController.js';
-import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
