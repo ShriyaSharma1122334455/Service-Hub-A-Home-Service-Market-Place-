@@ -7,11 +7,13 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "setup": "node src/scripts/setupEnv.js",
+    "test": "jest",
     "seed:categories": "node src/scripts/seedCategories.js",
     "seed:users": "node src/scripts/seedUsers.js",
     "seed:providers": "node src/scripts/seedProviders.js",
-    "seed:all": "npm run seed:categories && npm run seed:users && npm run seed:providers"
+    "seed:all": "npm run seed:categories && npm run seed:users && npm run seed:providers",
+    "lint": "eslint src"
   },
   "keywords": [
     "servicehub",
@@ -53,7 +55,7 @@
   "jest": {
   "testEnvironment": "node",
   "transform": {},
-  "testMatch": ["**/tests/**/*_test.js"],
+  "testMatch": ["**/tests/**/*.test.js"],
   "collectCoverageFrom": ["src/**/*.js", "!src/scripts/**"]
 }
 
