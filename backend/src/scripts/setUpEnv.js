@@ -1,5 +1,9 @@
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function createEnv(folder) {
   const example = path.join(folder, ".env.example");
@@ -7,11 +11,14 @@ function createEnv(folder) {
 
   if (!fs.existsSync(env) && fs.existsSync(example)) {
     fs.copyFileSync(example, env);
-    console.log(`Created ${env}`);
+    console.log(`✅ Created ${env}`);
   } else {
-    console.log(`${env} already exists`);
+    console.log(`ℹ️ ${env} already exists`);
   }
 }
 
-createEnv(path.join(__dirname, "../../../backend"));
+// backend folder
+createEnv(path.join(__dirname, "../../"));
+
+// frontend folder
 createEnv(path.join(__dirname, "../../../frontend"));
