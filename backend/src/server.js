@@ -96,3 +96,5 @@ process.on('unhandledRejection', (err) => {
   // Close server & exit process
   process.exit(1);
 });
+
+export default app; // Export app for testing
