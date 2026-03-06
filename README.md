@@ -1,6 +1,5 @@
 # Service Hub — A Home Service Marketplace
 
-
 ## Short description
 
 Service Hub is a full-stack home-services marketplace that connects users with service providers (cleaning, repairs, visual damage assessment, and more). This repository contains the backend API, frontend web client, and an auxiliary visual-damage-assessment service.
