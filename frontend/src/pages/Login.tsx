@@ -1,20 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { UserRole } from "../../types";
-import { Lock, Mail } from "lucide-react";
+import { Lock, Mail, User, Briefcase } from "lucide-react";
 
 interface LoginProps {
   onLogin: (email: string, role: UserRole, password?: string) => void;
   onRegisterClick: () => void;
 }
 
+const isDev = import.meta.env.DEV;
+const USER_CREDENTIALS = isDev ? { email: "user@test.com", password: "userpass" } : null;
+const PROVIDER_CREDENTIALS = isDev ? { email: "provider@test.com", password: "providerpass" } : null;
+
 export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
-  const [email, setEmail] = useState("demo@customer.com");
-  const [password, setPassword] = useState("password123");
+  const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
+  const [email, setEmail] = useState(USER_CREDENTIALS?.email ?? "");
+  const [password, setPassword] = useState(USER_CREDENTIALS?.password ?? "");
+
+  useEffect(() => {
+    if (role === UserRole.PROVIDER && PROVIDER_CREDENTIALS) {
+      setEmail(PROVIDER_CREDENTIALS.email);
+      setPassword(PROVIDER_CREDENTIALS.password);
+    } else if (USER_CREDENTIALS) {
+      setEmail(USER_CREDENTIALS.email);
+      setPassword(USER_CREDENTIALS.password);
+    }
+  }, [role]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (email.trim() && password.trim()) {
-      onLogin(email, UserRole.CUSTOMER, password);
+      onLogin(email, role, password);
     }
   };
 
@@ -45,6 +60,38 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
 
         <div className="glass-panel py-10 px-6 sm:px-10 rounded-[3rem]">
           <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-3">
+                Sign in as
+              </label>
+              <div className="flex gap-4">
+                <label className="flex-1 flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50 border-slate-200 hover:border-slate-300">
+                  <input
+                    type="radio"
+                    name="role"
+                    value={UserRole.CUSTOMER}
+                    checked={role === UserRole.CUSTOMER}
+                    onChange={() => setRole(UserRole.CUSTOMER)}
+                    className="sr-only"
+                  />
+                  <User className="h-6 w-6 text-slate-500" />
+                  <span className="font-semibold text-slate-800">User (Customer)</span>
+                </label>
+                <label className="flex-1 flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50 border-slate-200 hover:border-slate-300">
+                  <input
+                    type="radio"
+                    name="role"
+                    value={UserRole.PROVIDER}
+                    checked={role === UserRole.PROVIDER}
+                    onChange={() => setRole(UserRole.PROVIDER)}
+                    className="sr-only"
+                  />
+                  <Briefcase className="h-6 w-6 text-slate-500" />
+                  <span className="font-semibold text-slate-800">Provider</span>
+                </label>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-2">
                 Email Address

@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     container_name: visual-damage-assessment-api
     ports:
       - "8000:8000"
