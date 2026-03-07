@@ -1,29 +1,25 @@
-# Dependencies
-node_modules/
-
-# Environment variables
+# Environment files (contain secrets)
 .env
 .env.local
-.env.*.local
+.env.production
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# Build
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
 dist/
 build/
+.venv/
+venv/
 
-# OS
-.DS_Store
-Thumbs.db
+# Node
+node_modules/
+npm-debug.log*
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Test coverage
-coverage/
+# OS
+.DS_Store
+Thumbs.db
