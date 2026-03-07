@@ -171,7 +171,7 @@ const App = () => {
           />
         );
       case "/faq":
-        return <FAQ />;
+        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider" | undefined} />;
       case "/users":
         return <UsersList onNavigate={navigate} />;
       case "/providers":
