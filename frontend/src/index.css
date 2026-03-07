@@ -66,3 +66,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-xl border border-white/60 shadow-lg shadow-black/5;
+  }
+}

@@ -4,9 +4,16 @@ import { X, MessageSquare, Loader2 } from "lucide-react";
 type UserRole = "customer" | "provider";
 type Priority = "LOW" | "MEDIUM" | "HIGH";
 
-const SUBJECT_OPTIONS = [
+const CUSTOMER_SUBJECTS = [
   "Provider did not show up",
   "Poor quality of work",
+  "Billing or payment issue",
+  "Rude or unprofessional behavior",
+  "Safety concern",
+  "Other",
+];
+
+const PROVIDER_SUBJECTS = [
   "Billing or payment issue",
   "Rude or unprofessional behavior",
   "Verification or profile appeal",
@@ -28,7 +35,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   userId,
   userRole,
 }) => {
-  const [subject, setSubject] = useState(SUBJECT_OPTIONS[0]);
+  const subjectOptions = userRole === "provider" ? PROVIDER_SUBJECTS : CUSTOMER_SUBJECTS;
+  const [subject, setSubject] = useState(subjectOptions[0]);
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,7 +46,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   if (!isOpen) return null;
 
   const resetForm = () => {
-    setSubject(SUBJECT_OPTIONS[0]);
+    setSubject(subjectOptions[0]);
     setDescription("");
     setPriority("MEDIUM");
     setError(null);
@@ -159,7 +167,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"
                 >
-                  {SUBJECT_OPTIONS.map((opt) => (
+                  {subjectOptions.map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}
                     </option>

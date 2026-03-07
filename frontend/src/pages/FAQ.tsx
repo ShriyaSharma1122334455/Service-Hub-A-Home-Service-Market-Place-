@@ -113,8 +113,19 @@ const faqData: FAQSection[] = [
   },
 ];
 
-export const FAQ: React.FC = () => {
+interface FAQProps {
+  userRole?: "customer" | "provider";
+}
+
+export const FAQ: React.FC<FAQProps> = ({ userRole }) => {
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
+
+  const visibleSections = faqData.filter((section) => {
+    if (!userRole) return true;
+    if (userRole === "customer") return section.title !== "For Providers";
+    if (userRole === "provider") return section.title !== "For Customers";
+    return true;
+  });
 
   const toggleItem = (key: string) => {
     setOpenItems((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -147,7 +158,7 @@ export const FAQ: React.FC = () => {
       {/* FAQ Sections */}
       <section className="pb-24">
         <div className="max-w-3xl mx-auto px-4 space-y-12">
-          {faqData.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.title}>
               {/* Section heading */}
               <div className="flex items-center gap-3 mb-6">
