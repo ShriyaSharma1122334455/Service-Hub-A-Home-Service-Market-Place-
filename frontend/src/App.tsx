@@ -43,6 +43,7 @@ const clearAuth = () => {
 };
 
 const App = () => {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
   const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
@@ -131,11 +132,20 @@ const App = () => {
       // fetch full profile from backend
       let profile = null;
       if (accessToken) {
-        const resp = await fetch("/api/profile/me", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const json = await resp.json();
-        if (json?.success) profile = json.data;
+        try {
+          const resp = await fetch(`${API_BASE}/api/profile/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error("Profile fetch failed", resp.status, text);
+          } else {
+            const json = await resp.json();
+            if (json?.success) profile = json.data;
+          }
+        } catch (fetchErr) {
+          console.error("Profile fetch error:", fetchErr);
+        }
       }
 
       const userData = {
@@ -191,14 +201,22 @@ const App = () => {
       if (signinError) throw signinError;
       const token = signinData?.session?.access_token;
       if (token) {
-        await fetch("/api/profile/sync", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ fullName: email.split("@")[0], role }),
-        });
+        try {
+          const resp = await fetch(`${API_BASE}/api/profile/sync`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fullName: email.split("@")[0], role }),
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error("Sync failed", resp.status, text);
+          }
+        } catch (err) {
+          console.error("Sync request error:", err);
+        }
       }
 
       // complete login flow
