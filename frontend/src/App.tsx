@@ -180,10 +180,7 @@ const App = () => {
   ) => {
     try {
       if (!password) throw new Error("Password required");
-      const { data: signupData, error: signupError } = await signUp(
-        email,
-        password,
-      );
+      const { error: signupError } = await signUp(email, password);
       if (signupError) throw signupError;
 
       // Sign in to obtain token and sync with backend
@@ -241,7 +238,7 @@ const App = () => {
       case "/register":
         return (
           <Register
-            onRegister={() => navigate("/login")}
+            onRegister={handleRegister}
             onLoginClick={() => navigate("/login")}
           />
         );
