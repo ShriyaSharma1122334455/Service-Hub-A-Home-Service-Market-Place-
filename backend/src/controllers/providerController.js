@@ -1,6 +1,12 @@
 import Provider from "../models/Provider.js";
+import mongoose from 'mongoose';
+
+
 
 export const getProvider = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        return res.status(400).json({ success: false, error: 'Invalid ID format' });
+    }
     try {
         const { id } = req.params;
         const provider = await Provider.findById(id)
@@ -66,9 +72,14 @@ export const listProviders = async (req, res) => {
     });
 
     return res.json({
-      success: true,
-      data: { providers: list }
-    });
+  success: true,
+  data: { providers: list },
+  pagination: {
+    total: list.length,
+    page: 1,
+    limit: list.length
+  }
+});
   } catch (err) {
     console.error('Error fetching providers:', err);
     res.status(500).json({
@@ -110,3 +121,5 @@ export const searchProviders = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to search providers' });
   }
 };
+
+

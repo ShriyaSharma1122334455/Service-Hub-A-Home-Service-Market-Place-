@@ -34,7 +34,7 @@ export const getService = async (req, res) => {
     const service = await Service.findById(req.params.id).populate('categoryId','name').lean();
     if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
     res.json({ success: true, data: service });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to fetch service' });
   }
 };
@@ -66,7 +66,7 @@ export const deleteService = async (req, res) => {
     const service = await Service.findByIdAndDelete(req.params.id);
     if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
     res.json({ success: true, message: 'Service deleted' });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to delete service' });
   }
 };

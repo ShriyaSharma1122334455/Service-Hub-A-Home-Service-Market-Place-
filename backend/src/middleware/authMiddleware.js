@@ -212,7 +212,7 @@ export const optionalAuthenticate = async (req, res, next) => {
         supabaseId: data.user.id,
       };
     }
-  } catch (_) {
+  } catch (_err) {
     // Intentionally silent
   }
 

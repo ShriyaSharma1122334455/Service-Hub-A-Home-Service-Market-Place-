@@ -23,7 +23,7 @@ export const listBookings = async (req, res) => {
       .populate('providerId', 'businessName')
       .sort({ createdAt: -1 }).lean();
     res.json({ success: true, count: bookings.length, data: bookings });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to list bookings' });
   }
 };
@@ -34,7 +34,7 @@ export const getBooking = async (req, res) => {
       .populate('serviceId').populate('providerId').lean();
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
     res.json({ success: true, data: booking });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to fetch booking' });
   }
 };
@@ -46,7 +46,7 @@ export const acceptBooking = async (req, res) => {
     );
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
     res.json({ success: true, data: booking });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to accept booking' });
   }
 };
@@ -60,7 +60,7 @@ export const rejectBooking = async (req, res) => {
     );
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
     res.json({ success: true, data: booking });
-  } catch (err) {
+  } catch (_err) {
     res.status(500).json({ success: false, error: 'Failed to reject booking' });
   }
 };
