@@ -25,7 +25,8 @@
 import express from 'express';
 import { getMe, getUser, listUsers } from '../controllers/userController.js';
 import { getProvider, listProviders } from '../controllers/providerController.js';
-import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { syncUser } from '../controllers/syncController.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -51,6 +52,12 @@ router.get('/user/:id', authenticate, getUser);
  * Requires: any authenticated user.
  */
 router.get('/users', authenticate, listUsers);
+
+/**
+ * POST /api/profile/sync
+ * Upserts the authenticated Supabase user into MongoDB (create or update).
+ */
+router.post('/sync', authenticate, syncUser);
 
 // ── Public routes (no auth required — browse catalog is public) ────────────
 

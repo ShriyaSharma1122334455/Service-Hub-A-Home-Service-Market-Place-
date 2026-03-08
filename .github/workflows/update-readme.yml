@@ -1,0 +1,188 @@
+name: Auto-Generate README
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed   # only runs after a PR is merged
+
+jobs:
+  update-readme:
+    if: github.event.pull_request.merged == true
+    name: Regenerate README.md
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # full history so we can inspect changes
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Collect project metadata
+        id: meta
+        run: |
+          # Backend package info
+          BACKEND_VERSION=$(node -p "require('./backend/package.json').version" 2>/dev/null || echo "N/A")
+          BACKEND_SCRIPTS=$(node -p "Object.keys(require('./backend/package.json').scripts || {}).join(', ')" 2>/dev/null || echo "")
+          BACKEND_DEPS=$(node -p "Object.keys(require('./backend/package.json').dependencies || {}).join(', ')" 2>/dev/null || echo "")
+
+          # Frontend package info
+          FRONTEND_VERSION=$(node -p "require('./frontend/package.json').version" 2>/dev/null || echo "N/A")
+          FRONTEND_DEPS=$(node -p "Object.keys(require('./frontend/package.json').dependencies || {}).join(', ')" 2>/dev/null || echo "")
+
+          # Last 5 merged PRs for changelog
+          RECENT_PRS=$(git log --merges --pretty=format:"- %s (%ad)" --date=short -5)
+
+          # Write to env
+          echo "BACKEND_VERSION=$BACKEND_VERSION" >> $GITHUB_OUTPUT
+          echo "FRONTEND_VERSION=$FRONTEND_VERSION" >> $GITHUB_OUTPUT
+          {
+            echo "BACKEND_SCRIPTS<<EOF"
+            echo "$BACKEND_SCRIPTS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "BACKEND_DEPS<<EOF"
+            echo "$BACKEND_DEPS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "FRONTEND_DEPS<<EOF"
+            echo "$FRONTEND_DEPS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "RECENT_PRS<<EOF"
+            echo "$RECENT_PRS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Generate README.md
+        env:
+          BACKEND_VERSION: ${{ steps.meta.outputs.BACKEND_VERSION }}
+          FRONTEND_VERSION: ${{ steps.meta.outputs.FRONTEND_VERSION }}
+          BACKEND_SCRIPTS: ${{ steps.meta.outputs.BACKEND_SCRIPTS }}
+          BACKEND_DEPS: ${{ steps.meta.outputs.BACKEND_DEPS }}
+          FRONTEND_DEPS: ${{ steps.meta.outputs.FRONTEND_DEPS }}
+          RECENT_PRS: ${{ steps.meta.outputs.RECENT_PRS }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          TODAY: ${{ github.event.pull_request.merged_at }}
+        run: |
+          cat > README.md << 'HEREDOC'
+          # 🏠 Service Hub — Home Service Marketplace
+
+          > Auto-generated on merge of PR #${PR_NUMBER}: "${PR_TITLE}" by @${PR_AUTHOR}
+
+          [![CI](https://github.com/${REPO}/actions/workflows/ci.yml/badge.svg)](https://github.com/${REPO}/actions/workflows/ci.yml)
+
+          ## Overview
+          Service Hub is a full-stack home-services marketplace connecting homeowners with verified service providers.
+
+          ---
+
+          ## 🚀 Quick Start (One Command)
+
+          ```bash
+          npm run setup        # generates .env files + installs all dependencies
+          npm run dev          # starts backend and frontend concurrently
+          ```
+
+          ---
+
+          ## 📁 Project Structure
+
+          ```
+          ├── backend/
+          │   ├── src/
+          │   │   ├── config/        # DB & app config
+          │   │   ├── controllers/   # Route handlers
+          │   │   ├── middleware/    # Auth, error handling
+          │   │   ├── models/        # Mongoose schemas
+          │   │   ├── routes/        # Express routers
+          │   │   ├── scripts/       # Seed & setup scripts
+          │   │   └── services/      # Business logic
+          │   └── tests/             # Jest test suites
+          ├── frontend/              # React / Vite app
+          ├── visual-damage-assessment/
+          └── docker-compose.yml
+          ```
+
+          ---
+
+          ## ⚙️ Environment Variables
+
+          ### Backend (`backend/.env`)
+          | Variable | Description |
+          |----------|-------------|
+          | `MONGO_URI` | MongoDB connection string |
+          | `JWT_SECRET` | Secret for signing JWTs |
+          | `STRIPE_SECRET_KEY` | Stripe server-side key |
+          | `EMAIL_USER` / `EMAIL_PASS` | SMTP credentials |
+
+          ### Frontend (`frontend/.env`)
+          | Variable | Description |
+          |----------|-------------|
+          | `VITE_API_URL` | Backend API base URL |
+          | `VITE_STRIPE_PUBLIC_KEY` | Stripe publishable key |
+
+          ---
+
+          ## 🧪 Running Tests
+
+          ```bash
+          cd backend && npm test          # unit + integration tests
+          cd backend && npm run test:watch  # watch mode
+          ```
+
+          ---
+
+          ## 🐳 Docker
+
+          ```bash
+          docker-compose up --build
+          ```
+
+          ---
+
+          ## 📦 Backend Info
+          - **Version:** ${BACKEND_VERSION}
+          - **Available Scripts:** ${BACKEND_SCRIPTS}
+          - **Key Dependencies:** ${BACKEND_DEPS}
+
+          ## 🖥️ Frontend Info
+          - **Version:** ${FRONTEND_VERSION}
+          - **Key Dependencies:** ${FRONTEND_DEPS}
+
+          ---
+
+          ## 📋 Recent Changes
+          ${RECENT_PRS}
+
+          ---
+
+          ## 📖 API Documentation
+
+          See [`backend/API_DOCUMENTATION.md`](backend/API_DOCUMENTATION.md) for full endpoint reference.
+
+          ---
+
+          *Last updated: ${TODAY} via GitHub Actions*
+          HEREDOC
+
+      - name: Commit updated README
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet || git commit -m "docs: auto-update README after PR #${{ github.event.pull_request.number }} merge [skip ci]"
+          git push

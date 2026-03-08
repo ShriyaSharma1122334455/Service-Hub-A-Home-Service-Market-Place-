@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
+import { signIn, signUp } from "./lib/auth";
 import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -16,7 +17,8 @@ type StoredAuth = {
   email: string;
   role: UserRole;
   name: string;
-  avatar: string;
+  avatar?: string;
+  accessToken?: string;
 };
 
 const loadStoredAuth = (): StoredAuth | null => {
@@ -41,26 +43,25 @@ const clearAuth = () => {
 import { FAQ } from "./pages/FAQ";
 
 const App = () => {
-  const [user, setUser] = useState<User | Provider | null>(null);
-  const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authRestored, setAuthRestored] = useState(false);
-  const [isSupportOpen, setIsSupportOpen] = useState(false);
-
-  useEffect(() => {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+  const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
-      setUser({
+      return {
         id: "1",
         name: stored.name,
         email: stored.email,
         role: stored.role,
         avatar: stored.avatar,
-      } as User);
-      setIsAuthenticated(true);
+      } as User;
     }
-    setAuthRestored(true);
-  }, []);
+    return null;
+  });
+  const [currentPath, setCurrentPath] = useState("/");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // auth is restored from localStorage in the user lazy initializer
+  const authRestored = true;
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const [basePath, search] = currentPath.split("?");
   const searchParams = new URLSearchParams(search || "");
@@ -114,23 +115,64 @@ const App = () => {
     window.location.hash = path;
   };
 
-  const handleLogin = (email: string, role: UserRole) => {
-    const name = email.split("@")[0];
-    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=0F172A&color=fff`;
-    const userData = {
-      id: "1",
-      name,
-      email,
-      role,
-      avatar,
-    } as User;
-    setUser(userData);
-    setIsAuthenticated(true);
-    saveAuth({ email, role, name, avatar });
-    if (role === UserRole.PROVIDER) {
-      navigate("/users");
-    } else {
-      navigate("/providers");
+  const handleLogin = async (
+    email: string,
+    role: UserRole,
+    password?: string,
+  ) => {
+    try {
+      if (!password) throw new Error("Password required");
+      const { data, error } = await signIn(email, password);
+      if (error) throw error;
+      const accessToken = data?.session?.access_token;
+      const supabaseUser = data?.user;
+      const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+      // fetch full profile from backend
+      let profile = null;
+      if (accessToken) {
+        try {
+          const resp = await fetch(`${API_BASE}/api/profile/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error("Profile fetch failed", resp.status, text);
+          } else {
+            const json = await resp.json();
+            if (json?.success) profile = json.data;
+          }
+        } catch (fetchErr) {
+          console.error("Profile fetch error:", fetchErr);
+        }
+      }
+
+      const userData = {
+        id: profile?._id || "1",
+        name: profile?.fullName || name,
+        email,
+        role: profile?.role || role,
+        avatar: profile?.avatarUrl || avatar,
+      } as User;
+
+      setUser(userData);
+      setIsAuthenticated(true);
+      saveAuth({
+        email,
+        role: userData.role,
+        name: userData.name,
+        avatar: userData.avatar,
+        accessToken,
+      });
+      if (userData.role === UserRole.PROVIDER) {
+        navigate("/users");
+      } else {
+        navigate("/providers");
+      }
+    } catch (err) {
+      console.error("Login failed", err);
+      // TODO: show UI error
     }
   };
 
@@ -139,6 +181,50 @@ const App = () => {
     setUser(null);
     clearAuth();
     navigate("/");
+  };
+
+  const handleRegister = async (
+    email: string,
+    role: UserRole,
+    password?: string,
+  ) => {
+    try {
+      if (!password) throw new Error("Password required");
+      const { error: signupError } = await signUp(email, password);
+      if (signupError) throw signupError;
+
+      // Sign in to obtain token and sync with backend
+      const { data: signinData, error: signinError } = await signIn(
+        email,
+        password,
+      );
+      if (signinError) throw signinError;
+      const token = signinData?.session?.access_token;
+      if (token) {
+        try {
+          const resp = await fetch(`${API_BASE}/api/profile/sync`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fullName: email.split("@")[0], role }),
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error("Sync failed", resp.status, text);
+          }
+        } catch (err) {
+          console.error("Sync request error:", err);
+        }
+      }
+
+      // complete login flow
+      await handleLogin(email, role, password);
+    } catch (err) {
+      console.error("Register failed", err);
+      // TODO: show UI error
+    }
   };
 
   const renderContent = () => {
@@ -170,7 +256,7 @@ const App = () => {
       case "/register":
         return (
           <Register
-            onRegister={() => navigate("/login")}
+            onRegister={handleRegister}
             onLoginClick={() => navigate("/login")}
           />
         );
@@ -211,7 +297,9 @@ const App = () => {
         isOpen={isSupportOpen}
         onClose={() => setIsSupportOpen(false)}
         userId={user?.id || "guest"}
-        userRole={(user?.role?.toLowerCase() as "customer" | "provider") || "customer"}
+        userRole={
+          (user?.role?.toLowerCase() as "customer" | "provider") || "customer"
+        }
       />
     </div>
   );

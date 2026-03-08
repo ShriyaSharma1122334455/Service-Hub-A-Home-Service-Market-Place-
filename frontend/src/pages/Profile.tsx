@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { profileService } from "../services/profile";
 import type { BackendUser, BackendProvider } from "../services/profile";
-import { User as UserIcon, Mail, Shield, ArrowLeft, Loader2, Star, Briefcase } from "lucide-react";
+import {
+  User as UserIcon,
+  Mail,
+  Shield,
+  ArrowLeft,
+  Loader2,
+  Star,
+  Briefcase,
+} from "lucide-react";
 
 interface ProfileProps {
   profileId: string;
@@ -48,7 +56,11 @@ export const Profile: React.FC<ProfileProps> = ({
         if (cancelled) return;
         if (meResponse.success && meResponse.data) {
           const d = meResponse.data;
-          setProfile({ type: d.type, data: d });
+          if (d.type === "provider") {
+            setProfile({ type: "provider", data: d as BackendProvider });
+          } else {
+            setProfile({ type: "user", data: d as BackendUser });
+          }
         } else if (currentUser && "name" in currentUser) {
           const role = (currentUser as { role?: string }).role || "customer";
           const type = role === "provider" ? "provider" : "user";
@@ -56,7 +68,8 @@ export const Profile: React.FC<ProfileProps> = ({
             type,
             data: {
               _id: "me",
-              fullName: (currentUser as { name?: string }).name || email.split("@")[0],
+              fullName:
+                (currentUser as { name?: string }).name || email.split("@")[0],
               email,
               avatarUrl: (currentUser as { avatar?: string }).avatar,
               role,
@@ -117,12 +130,12 @@ export const Profile: React.FC<ProfileProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [profileId, initialType, currentUser?.email]);
+  }, [profileId, initialType, currentUser, currentUser?.email]);
 
   const getRoleLabel = (role: string) => {
     switch (role?.toLowerCase()) {
       case "customer":
-        return "Customer";
+        return "User (Customer)";
       case "provider":
         return "Service Provider";
       case "admin":
@@ -161,7 +174,9 @@ export const Profile: React.FC<ProfileProps> = ({
           <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <UserIcon className="h-8 w-8 text-red-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Error Loading Profile</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            Error Loading Profile
+          </h2>
           <p className="text-slate-500 mb-6">{error}</p>
           <button
             onClick={() => onNavigate("/")}
@@ -178,7 +193,9 @@ export const Profile: React.FC<ProfileProps> = ({
     return (
       <div className="min-h-[calc(100vh-140px)] flex flex-col items-center justify-center px-4">
         <div className="glass-panel p-8 rounded-[3rem] text-center max-w-md">
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Profile Not Found</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            Profile Not Found
+          </h2>
           <p className="text-slate-500 mb-6">Profile data not available.</p>
           <button
             onClick={() => onNavigate("/")}
@@ -193,11 +210,14 @@ export const Profile: React.FC<ProfileProps> = ({
 
   const isProvider = profile.type === "provider";
   const data = profile.data;
-  const fullName = (data as BackendProvider).businessName || data.fullName || "Unknown";
+  const fullName =
+    (data as BackendProvider).businessName || data.fullName || "Unknown";
   const avatarUrl = data.avatarUrl;
   const role = data.role || (isProvider ? "provider" : "customer");
   const email = data.email;
-  const bio = data.bio || (isProvider ? (data as BackendProvider).description : undefined);
+  const bio =
+    data.bio ||
+    (isProvider ? (data as BackendProvider).description : undefined);
   const rating = isProvider
     ? ((data as BackendProvider).ratingAvg ?? (data as BackendProvider).rating)
     : (data as BackendUser).provider?.rating;
@@ -210,10 +230,12 @@ export const Profile: React.FC<ProfileProps> = ({
           onClick={() =>
             onNavigate(
               profileId === "me"
-                ? (isProvider ? "/users" : "/providers")
+                ? isProvider
+                  ? "/users"
+                  : "/providers"
                 : isProvider
                   ? "/providers"
-                  : "/users"
+                  : "/users",
             )
           }
           className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-medium mb-8 transition-colors"
@@ -224,7 +246,7 @@ export const Profile: React.FC<ProfileProps> = ({
 
         <div className="glass-panel rounded-[3rem] overflow-hidden">
           <div className="bg-gradient-to-r from-slate-900 to-slate-700 h-32"></div>
-          
+
           <div className="px-8 pb-8">
             <div className="relative -mt-16 mb-6">
               <div className="h-32 w-32 rounded-full bg-white p-1 shadow-xl">
@@ -243,9 +265,17 @@ export const Profile: React.FC<ProfileProps> = ({
             </div>
 
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">{fullName}</h1>
-              <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}>
-                {isProvider ? <Briefcase className="h-4 w-4 mr-1.5" /> : <Shield className="h-4 w-4 mr-1.5" />}
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                {fullName}
+              </h1>
+              <span
+                className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
+              >
+                {isProvider ? (
+                  <Briefcase className="h-4 w-4 mr-1.5" />
+                ) : (
+                  <Shield className="h-4 w-4 mr-1.5" />
+                )}
                 {getRoleLabel(role)}
               </span>
             </div>
@@ -255,7 +285,9 @@ export const Profile: React.FC<ProfileProps> = ({
                 <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
                   <Mail className="h-5 w-5 text-slate-400" />
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Email</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Email
+                    </p>
                     <p className="text-slate-900 font-medium">{email}</p>
                   </div>
                 </div>
@@ -265,25 +297,35 @@ export const Profile: React.FC<ProfileProps> = ({
                 <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
                   <Briefcase className="h-5 w-5 text-slate-400" />
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Service Category</p>
-                    <p className="text-slate-900 font-medium">{serviceCategory}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Service Category
+                    </p>
+                    <p className="text-slate-900 font-medium">
+                      {serviceCategory}
+                    </p>
                   </div>
                 </div>
               )}
 
               {bio && (
                 <div className="p-4 bg-slate-50 rounded-2xl">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Bio</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Bio
+                  </p>
                   <p className="text-slate-700">{bio}</p>
                 </div>
               )}
 
               {rating !== undefined && (
                 <div className="p-4 bg-slate-50 rounded-2xl">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rating</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Rating
+                  </p>
                   <div className="flex items-center gap-2">
                     <Star className="h-6 w-6 text-amber-500 fill-amber-500" />
-                    <span className="text-2xl font-bold text-slate-900">{rating.toFixed(1)}</span>
+                    <span className="text-2xl font-bold text-slate-900">
+                      {rating.toFixed(1)}
+                    </span>
                     <span className="text-slate-400">/ 5.0</span>
                   </div>
                 </div>
@@ -291,7 +333,9 @@ export const Profile: React.FC<ProfileProps> = ({
 
               {profileId === "me" && (
                 <div className="p-4 bg-slate-50 rounded-2xl">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">ID</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    ID
+                  </p>
                   <p className="text-slate-500 text-sm font-mono">{data._id}</p>
                 </div>
               )}

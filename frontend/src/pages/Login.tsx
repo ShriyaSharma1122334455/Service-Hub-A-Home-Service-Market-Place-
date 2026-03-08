@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { UserRole } from "../../types";
 import { Lock, Mail, User, Briefcase } from "lucide-react";
 
@@ -8,23 +8,29 @@ interface LoginProps {
 }
 
 const isDev = import.meta.env.DEV;
-const USER_CREDENTIALS = isDev ? { email: "user@test.com", password: "userpass" } : null;
-const PROVIDER_CREDENTIALS = isDev ? { email: "provider@test.com", password: "providerpass" } : null;
+const USER_CREDENTIALS = isDev
+  ? { email: "user@test.com", password: "userpass" }
+  : null;
+const PROVIDER_CREDENTIALS = isDev
+  ? { email: "provider@test.com", password: "providerpass" }
+  : null;
 
 export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
   const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
-  const [email, setEmail] = useState(USER_CREDENTIALS?.email ?? "");
-  const [password, setPassword] = useState(USER_CREDENTIALS?.password ?? "");
 
-  useEffect(() => {
+  const [email, setEmail] = useState<string>(() => {
     if (role === UserRole.PROVIDER && PROVIDER_CREDENTIALS) {
-      setEmail(PROVIDER_CREDENTIALS.email);
-      setPassword(PROVIDER_CREDENTIALS.password);
-    } else if (USER_CREDENTIALS) {
-      setEmail(USER_CREDENTIALS.email);
-      setPassword(USER_CREDENTIALS.password);
+      return PROVIDER_CREDENTIALS.email;
     }
-  }, [role]);
+    return USER_CREDENTIALS?.email ?? "";
+  });
+
+  const [password, setPassword] = useState<string>(() => {
+    if (role === UserRole.PROVIDER && PROVIDER_CREDENTIALS) {
+      return PROVIDER_CREDENTIALS.password;
+    }
+    return USER_CREDENTIALS?.password ?? "";
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +81,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
                     className="sr-only"
                   />
                   <User className="h-6 w-6 text-slate-500" />
-                  <span className="font-semibold text-slate-800">User (Customer)</span>
+                  <span className="font-semibold text-slate-800">
+                    User (Customer)
+                  </span>
                 </label>
                 <label className="flex-1 flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50 border-slate-200 hover:border-slate-300">
                   <input
