@@ -4,7 +4,7 @@
 ## Sprint 2 Goal
 Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
  
-## Story Points: 0 /70
+## Story Points: 80 /80
  
 | Day | Branch | Points | Status |
 |-----|--------|--------|--------|
@@ -15,12 +15,12 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 | 5   | feature/providers-api         | 10 | ✅ Complete |
 | 6   | feature/booking-api           | 12 | ✅ Complete |
 | 7   | feature/docker-setup          | 10 | ✅ Complete |
-
+| 8   | feature/profile-ui            | 10 | ✅ Complete |
  
 ---
 ## Day 1 — ✅ COMPLETE
 **Branch:** feature/jest-setup
-**Story Points Completed:** 8/70
+**Story Points Completed:** 8/80
  
 ### Achievements:
 - [x] Jest 29 installed with ESM module support
@@ -34,7 +34,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 -----
 ## Day 2 — ✅ COMPLETE
 **Branch:** feature/auth-middleware
-**Story Points Completed:** 18/70
+**Story Points Completed:** 18/80
  
 ### Achievements:
 - [x] authMiddleware.js created at backend/src/middleware/
@@ -53,7 +53,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 ------
 ## Day 3 — ✅ COMPLETE
 **Branch:** feature/secure-routes
-**Story Points Completed:** 26/70
+**Story Points Completed:** 26/80
  
 ### Achievements:
 - [x] profileRoutes.js replaced with secured version
@@ -81,7 +81,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 -----
 ## Day 4 — ✅ COMPLETE
 **Branch:** feature/services-api
-**Story Points Completed:** 38/70
+**Story Points Completed:** 38/80
  
 ### Achievements:
 - [x] backend/src/controllers/serviceController.js created
@@ -100,7 +100,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 
 ## Day 5 — ✅ COMPLETE
 **Branch:** feature/providers-api
-**Story Points Completed:** 48/70
+**Story Points Completed:** 48/80
  
 ### Achievements:
 - [x] searchProviders() added to providerController.js
@@ -116,7 +116,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 
 ## Day 6 — ✅ COMPLETE
 **Branch:** feature/booking-api
-**Story Points Completed:** 60/70
+**Story Points Completed:** 60/80
  
 ### Achievements:
 - [x] bookingController.js: createBooking, listBookings, getBooking,
@@ -134,7 +134,7 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 
 ## Day 7 — ✅ COMPLETE
 **Branch:** feature/docker-setup
-**Story Points Completed:** 70/70
+**Story Points Completed:** 70/80
  
 ### Achievements:
 - [x] backend/Dockerfile — multi-stage (development + production targets)
@@ -153,3 +153,27 @@ Auth middleware, secure routes, Services/Providers/Booking APIs, Docker setup.
 ### Commit: docker: add multi-stage Dockerfiles and root docker-compose
 ----
 
+## Day 8 — ✅ COMPLETE
+Deliver Profile UI enhancements, Vitest test infrastructure, and Docker verification
+
+**Branch:** feature/profile-ui
+**Story Points Completed:** 10/10
+### Commit: feat: enhance Profile UI with vitest test infrastructure
+
+- [x] Vitest + @testing-library/react + jsdom installed
+- [x] vite.config.ts updated with test block (globals, jsdom, setupFiles)
+- [x] frontend/src/test/setup.ts created (@testing-library/jest-dom import)
+- [x] npm test script added to frontend/package.json
+- [x] Profile.tsx enhanced: Edit Profile button for /me, verified badge, availability status, hourly rate
+- [x] frontend/src/pages/Profile.test.tsx: 10 tests, all passing
+- [x] Frontend dev build confirmed (npm run build)
+- [x] Docker standalone build + run verified (nginx 200 OK)
+- [x] Full docker compose up --build confirmed healthy
+
+### Branch:### feature/profile-ui
+### Commit: feat: enhance Profile UI with vitest test infrastructure
+---
+
+## Next tasks (Sprint 3 remaining):
+- Availability API (backend)
+- Booking flow UI

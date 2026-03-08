@@ -49,26 +49,26 @@ services:
       - servicehub-network
 
   # ── React Frontend ──────────────────────────────────────────────────────────
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: servicehub-frontend
-  #   image: servicehub-frontend:local
-  #   ports:
-  #     - "5173:5173"
-  #   env_file:
-  #     - ./frontend/.env              # reads VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, etc.
-  #   environment:
-  #     - VITE_API_URL=http://localhost:3000   # always points to local backend
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     backend:
-  #       condition: service_healthy
-  #   networks:
-  #     - servicehub-network
+   frontend:
+     build:
+      context: ./frontend
+       dockerfile: Dockerfile
+     container_name: servicehub-frontend
+     image: servicehub-frontend:local
+     ports:
+       - "5173:5173"
+     env_file:
+       - ./frontend/.env              # reads VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, etc.
+     environment:
+       - VITE_API_URL=http://localhost:3000   # always points to local backend
+     volumes:
+       - ./frontend:/app
+       - /app/node_modules
+     depends_on:
+       backend:
+         condition: service_healthy
+     networks:
+       - servicehub-network
 
   # ── Visual Damage Assessment (Python/FastAPI) ───────────────────────────────
   visual-assessment:
@@ -92,7 +92,7 @@ services:
       - servicehub-network
 
   # ── User Verification (Python/FastAPI) ─────────────────────────────────────
-  # Uncomment when Prithvi's service is ready
+  # Uncomment when service is ready
   # user-verification:
   #   build:
   #     context: ./user-verification

@@ -48,7 +48,11 @@ export const Profile: React.FC<ProfileProps> = ({
         if (cancelled) return;
         if (meResponse.success && meResponse.data) {
           const d = meResponse.data;
-          setProfile({ type: d.type, data: d });
+          if (d.type === "provider") {
+            setProfile({ type: "provider", data: d });
+          } else {
+            setProfile({ type: "user", data: d });
+          }
         } else if (currentUser && "name" in currentUser) {
           const role = (currentUser as { role?: string }).role || "customer";
           const type = role === "provider" ? "provider" : "user";
@@ -202,7 +206,10 @@ export const Profile: React.FC<ProfileProps> = ({
     ? ((data as BackendProvider).ratingAvg ?? (data as BackendProvider).rating)
     : (data as BackendUser).provider?.rating;
   const serviceCategory = (data as BackendProvider).serviceCategory;
-
+  const isVerified = isProvider && !!(data as BackendProvider).verified;
+  const availabilityStatus = isProvider
+    ? (data as BackendProvider).availabilityStatus
+    : undefined;
   return (
     <div className="min-h-[calc(100vh-140px)] py-12 px-4">
       <div className="max-w-2xl mx-auto">
@@ -242,12 +249,22 @@ export const Profile: React.FC<ProfileProps> = ({
               </div>
             </div>
 
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">{fullName}</h1>
-              <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}>
-                {isProvider ? <Briefcase className="h-4 w-4 mr-1.5" /> : <Shield className="h-4 w-4 mr-1.5" />}
-                {getRoleLabel(role)}
-              </span>
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">{fullName}</h1>
+                <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}>
+                  {isProvider ? <Briefcase className="h-4 w-4 mr-1.5" /> : <Shield className="h-4 w-4 mr-1.5" />}
+                  {getRoleLabel(role)}
+                </span>
+              </div>
+              {profileId === "me" && (
+                <button
+                  aria-label="Edit profile"
+                  className="mt-1 px-4 py-2 rounded-full text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all"
+                >
+                  Edit Profile
+                </button>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -267,6 +284,16 @@ export const Profile: React.FC<ProfileProps> = ({
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Service Category</p>
                     <p className="text-slate-900 font-medium">{serviceCategory}</p>
+                  </div>
+                </div>
+              )}
+
+              {isProvider && (data as BackendProvider).hourlyRate !== undefined && (
+                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+                  <Briefcase className="h-5 w-5 text-slate-400" />
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Hourly Rate</p>
+                    <p className="text-slate-900 font-medium">${(data as BackendProvider).hourlyRate}/hr</p>
                   </div>
                 </div>
               )}
@@ -293,6 +320,34 @@ export const Profile: React.FC<ProfileProps> = ({
                 <div className="p-4 bg-slate-50 rounded-2xl">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">ID</p>
                   <p className="text-slate-500 text-sm font-mono">{data._id}</p>
+                </div>
+              )}
+
+              {isVerified && (
+                <div className="flex items-center gap-3 p-4 bg-green-50 rounded-2xl">
+                  <Shield className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Verified Provider</p>
+                    <p className="text-green-700 text-sm font-medium">Identity verified by ServiceHub</p>
+                  </div>
+                </div>
+              )}
+
+              {availabilityStatus && (
+                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+                  <div
+                    className={`h-3 w-3 rounded-full ${
+                      availabilityStatus === "AVAILABLE"
+                        ? "bg-green-500"
+                        : availabilityStatus === "BUSY"
+                        ? "bg-amber-500"
+                        : "bg-slate-400"
+                    }`}
+                  />
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Availability</p>
+                    <p className="text-slate-900 font-medium capitalize">{availabilityStatus.toLowerCase().replace("_", " ")}</p>
+                  </div>
                 </div>
               )}
             </div>
