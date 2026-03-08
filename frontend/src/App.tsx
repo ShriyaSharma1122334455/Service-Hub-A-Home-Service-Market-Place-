@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
+import { signIn, signUp } from "./lib/auth";
 import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -17,7 +18,8 @@ type StoredAuth = {
   email: string;
   role: UserRole;
   name: string;
-  avatar: string;
+  avatar?: string;
+  accessToken?: string;
 };
 
 const loadStoredAuth = (): StoredAuth | null => {
@@ -112,23 +114,55 @@ const App = () => {
     window.location.hash = path;
   };
 
-  const handleLogin = (email: string, role: UserRole) => {
-    const name = email.split("@")[0];
-    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=0F172A&color=fff`;
-    const userData = {
-      id: "1",
-      name,
-      email,
-      role,
-      avatar,
-    } as User;
-    setUser(userData);
-    setIsAuthenticated(true);
-    saveAuth({ email, role, name, avatar });
-    if (role === UserRole.PROVIDER) {
-      navigate("/users");
-    } else {
-      navigate("/providers");
+  const handleLogin = async (
+    email: string,
+    role: UserRole,
+    password?: string,
+  ) => {
+    try {
+      if (!password) throw new Error("Password required");
+      const { data, error } = await signIn(email, password);
+      if (error) throw error;
+      const accessToken = data?.session?.access_token;
+      const supabaseUser = data?.user;
+      const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+      // fetch full profile from backend
+      let profile = null;
+      if (accessToken) {
+        const resp = await fetch("/api/profile/me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const json = await resp.json();
+        if (json?.success) profile = json.data;
+      }
+
+      const userData = {
+        id: profile?._id || "1",
+        name: profile?.fullName || name,
+        email,
+        role: profile?.role || role,
+        avatar: profile?.avatarUrl || avatar,
+      } as User;
+
+      setUser(userData);
+      setIsAuthenticated(true);
+      saveAuth({
+        email,
+        role: userData.role,
+        name: userData.name,
+        avatar: userData.avatar,
+        accessToken,
+      });
+      if (userData.role === UserRole.PROVIDER) {
+        navigate("/users");
+      } else {
+        navigate("/providers");
+      }
+    } catch (err) {
+      console.error("Login failed", err);
+      // TODO: show UI error
     }
   };
 
@@ -137,6 +171,45 @@ const App = () => {
     setUser(null);
     clearAuth();
     navigate("/");
+  };
+
+  const handleRegister = async (
+    email: string,
+    role: UserRole,
+    password?: string,
+  ) => {
+    try {
+      if (!password) throw new Error("Password required");
+      const { data: signupData, error: signupError } = await signUp(
+        email,
+        password,
+      );
+      if (signupError) throw signupError;
+
+      // Sign in to obtain token and sync with backend
+      const { data: signinData, error: signinError } = await signIn(
+        email,
+        password,
+      );
+      if (signinError) throw signinError;
+      const token = signinData?.session?.access_token;
+      if (token) {
+        await fetch("/api/profile/sync", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ fullName: email.split("@")[0], role }),
+        });
+      }
+
+      // complete login flow
+      await handleLogin(email, role, password);
+    } catch (err) {
+      console.error("Register failed", err);
+      // TODO: show UI error
+    }
   };
 
   const renderContent = () => {

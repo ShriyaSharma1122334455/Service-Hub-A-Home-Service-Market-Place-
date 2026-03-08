@@ -3,9 +3,9 @@ import Provider from "../models/Provider.js";
 
 export const getMe = async (req, res) => {
   try {
-    const email = req.headers['x-user-email'];
+    const email = req.user?.email || req.headers['x-user-email'];
     if (!email) {
-      return res.status(400).json({ success: false, error: 'X-User-Email header required' });
+      return res.status(400).json({ success: false, error: 'Authenticated user email required' });
     }
     const user = await User.findOne({ email: email.toLowerCase().trim() })
       .select('_id supabaseId fullName email avatarUrl role')
