@@ -70,33 +70,33 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-3">
                 Sign in as
               </label>
-              <div className="flex gap-4">
-                <label className="flex-1 flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50 border-slate-200 hover:border-slate-300">
-                  <input
-                    type="radio"
-                    name="role"
-                    value={UserRole.CUSTOMER}
-                    checked={role === UserRole.CUSTOMER}
-                    onChange={() => setRole(UserRole.CUSTOMER)}
-                    className="sr-only"
-                  />
-                  <User className="h-6 w-6 text-slate-500" />
-                  <span className="font-semibold text-slate-800">
-                    User (Customer)
-                  </span>
-                </label>
-                <label className="flex-1 flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all has-[:checked]:border-slate-900 has-[:checked]:bg-slate-50 border-slate-200 hover:border-slate-300">
-                  <input
-                    type="radio"
-                    name="role"
-                    value={UserRole.PROVIDER}
-                    checked={role === UserRole.PROVIDER}
-                    onChange={() => setRole(UserRole.PROVIDER)}
-                    className="sr-only"
-                  />
-                  <Briefcase className="h-6 w-6 text-slate-500" />
-                  <span className="font-semibold text-slate-800">Provider</span>
-                </label>
+              <div className="ml-4">
+                <div className="inline-flex bg-slate-100 p-1 rounded-full shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setRole(UserRole.CUSTOMER)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                      role === UserRole.CUSTOMER
+                        ? "bg-white text-slate-900 shadow"
+                        : "text-slate-600"
+                    }`}
+                    aria-pressed={role === UserRole.CUSTOMER}
+                  >
+                    User
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole(UserRole.PROVIDER)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                      role === UserRole.PROVIDER
+                        ? "bg-white text-slate-900 shadow"
+                        : "text-slate-600"
+                    }`}
+                    aria-pressed={role === UserRole.PROVIDER}
+                  >
+                    Provider
+                  </button>
+                </div>
               </div>
             </div>
 

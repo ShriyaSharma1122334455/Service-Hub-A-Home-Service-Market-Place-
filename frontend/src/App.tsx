@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
-import { signIn, signUp } from "./lib/auth";
+import { signIn, signUp, signUpWithRole } from "./lib/auth";
 import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -148,11 +148,18 @@ const App = () => {
         }
       }
 
+      const normalizeRole = (r?: string, fallback?: UserRole) => {
+        if (!r) return fallback || UserRole.CUSTOMER;
+        return (
+          (String(r).toUpperCase() as UserRole) || fallback || UserRole.CUSTOMER
+        );
+      };
+
       const userData = {
         id: profile?._id || "1",
         name: profile?.fullName || name,
         email,
-        role: profile?.role || role,
+        role: normalizeRole(profile?.role, role),
         avatar: profile?.avatarUrl || avatar,
       } as User;
 
@@ -190,7 +197,13 @@ const App = () => {
   ) => {
     try {
       if (!password) throw new Error("Password required");
-      const { error: signupError } = await signUp(email, password);
+      // ensure role stored in Supabase as lowercase (backend expects lowercase)
+      const roleLower = String(role).toLowerCase();
+      const { error: signupError } = await signUpWithRole(
+        email,
+        password,
+        roleLower,
+      );
       if (signupError) throw signupError;
 
       // Sign in to obtain token and sync with backend
@@ -208,7 +221,10 @@ const App = () => {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ fullName: email.split("@")[0], role }),
+            body: JSON.stringify({
+              fullName: email.split("@")[0],
+              role: roleLower,
+            }),
           });
           if (!resp.ok) {
             const text = await resp.text();
@@ -260,11 +276,7 @@ const App = () => {
             onLoginClick={() => navigate("/login")}
           />
         );
-<<<<<<< HEAD
-=======
-      case "/faq":
-        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider" | undefined} />;
->>>>>>> 62045dc (fix: opaque navbar glass effect and role-based FAQ sections (#18))
+
       case "/users":
         return <UsersList onNavigate={navigate} />;
       case "/providers":
