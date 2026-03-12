@@ -8,14 +8,24 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import app from '../server.js'; 
+import { MongoMemoryServer } from 'mongodb-memory-server';
 
-// ─── Test database ────────────────────────────────────────────────────────────
+let mongod;
+
+// ─── Test database - connection to remote MongoDB ────────────────────────────────────────────────────────────
+// beforeAll(async () => {
+//   if (mongoose.connection.readyState === 0) { // 0 = disconnected
+//     const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/service_hub_test';
+//     await mongoose.connect(uri);
+//   }
+// });
+
+// ─── Test database - in-memory MongoDB (faster, isolated) ───────────────────────────────────────────────────
+
 beforeAll(async () => {
-  if (mongoose.connection.readyState === 0) { // 0 = disconnected
-    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/service_hub_test';
-    await mongoose.connect(uri);
-  }
-});
+  mongod = await MongoMemoryServer.create();
+  await mongoose.connect(mongod.getUri());
+}, 30000);
 
 afterAll(async () => {
   await mongoose.connection.close();
