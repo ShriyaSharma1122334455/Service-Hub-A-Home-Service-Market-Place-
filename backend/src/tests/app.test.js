@@ -12,7 +12,7 @@ import app from '../server.js';
 // ─── Test database ────────────────────────────────────────────────────────────
 beforeAll(async () => {
   if (mongoose.connection.readyState === 0) { // 0 = disconnected
-    const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/service_hub_test';
+    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/service_hub_test';
     await mongoose.connect(uri);
   }
 });

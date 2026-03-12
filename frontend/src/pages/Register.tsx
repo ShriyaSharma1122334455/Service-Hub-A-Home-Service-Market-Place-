@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { UserRole } from "../../types";
-import { Lock, Mail, User, Briefcase } from "lucide-react";
+import { Lock, Mail, User } from "lucide-react";
 
 interface RegisterProps {
   onRegister: (email: string, role: UserRole, password?: string) => void;
@@ -59,7 +59,9 @@ export const Register: React.FC<RegisterProps> = ({
                     type="button"
                     onClick={() => setRole(UserRole.CUSTOMER)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      role === UserRole.CUSTOMER ? "bg-white text-slate-900 shadow" : "text-slate-600"
+                      role === UserRole.CUSTOMER
+                        ? "bg-white text-slate-900 shadow"
+                        : "text-slate-600"
                     }`}
                     aria-pressed={role === UserRole.CUSTOMER}
                   >
@@ -69,7 +71,9 @@ export const Register: React.FC<RegisterProps> = ({
                     type="button"
                     onClick={() => setRole(UserRole.PROVIDER)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      role === UserRole.PROVIDER ? "bg-white text-slate-900 shadow" : "text-slate-600"
+                      role === UserRole.PROVIDER
+                        ? "bg-white text-slate-900 shadow"
+                        : "text-slate-600"
                     }`}
                     aria-pressed={role === UserRole.PROVIDER}
                   >

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { UserRole } from "../../types";
-import { Lock, Mail, User, Briefcase } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
 
 interface LoginProps {
   onLogin: (email: string, role: UserRole, password?: string) => void;

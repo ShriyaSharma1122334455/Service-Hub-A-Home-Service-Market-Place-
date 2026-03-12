@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
-import { signIn, signUp, signUpWithRole } from "./lib/auth";
+import { signIn, signUpWithRole } from "./lib/auth";
 import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";

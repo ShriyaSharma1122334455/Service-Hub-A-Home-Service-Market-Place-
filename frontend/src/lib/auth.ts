@@ -1,15 +1,5 @@
 import { supabase } from "./supabase"
 
-export const signUp = async (
-  email: string,
-  password: string
-) => {
-  return supabase.auth.signUp({
-    email,
-    password,
-  })
-}
-
 export const signUpWithRole = async (
   email: string,
   password: string,
