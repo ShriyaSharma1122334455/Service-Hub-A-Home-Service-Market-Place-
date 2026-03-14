@@ -58,8 +58,7 @@ const App = () => {
     return null;
   });
   const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  // auth is restored from localStorage in the user lazy initializer
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredAuth());
   const authRestored = true;
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
@@ -101,7 +100,9 @@ const App = () => {
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
-    if (basePath === "/providers" && user.role === UserRole.PROVIDER) {
+    if (basePath === "/login" || basePath === "/register") {
+      window.location.hash = "/profile/me";
+    } else if (basePath === "/providers" && user.role === UserRole.PROVIDER) {
       window.location.hash = "/users";
     } else if (basePath === "/users" && user.role === UserRole.CUSTOMER) {
       window.location.hash = "/providers";
