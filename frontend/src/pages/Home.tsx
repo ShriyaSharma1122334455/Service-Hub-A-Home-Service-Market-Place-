@@ -15,7 +15,7 @@ interface HomeProps {
   user: User | Provider | null;
 }
 
-export const Home: React.FC<HomeProps> = () => {
+export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <div className="flex flex-col min-h-[calc(100vh-100px)]">
       <section className="relative py-20 lg:py-32 overflow-visible">
@@ -37,7 +37,10 @@ export const Home: React.FC<HomeProps> = () => {
             design. Instant booking, transparent pricing.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <button className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center gap-2">
+            <button
+              onClick={() => onNavigate("/register")}
+              className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center gap-2"
+            >
               Get Started Free <ArrowRight size={20} />
             </button>
           </div>
