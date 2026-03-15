@@ -1,6 +1,12 @@
-const API_BASE_URL = 'http://localhost:3000/api';
+import { supabase } from "./supabase"
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const TEST_TOKEN = 'test-token-for-development';
+
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+}
 
 export type ApiResponse<T> = {
   success: boolean;
@@ -13,10 +19,11 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
-
+  const token = await getAuthToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${TEST_TOKEN}`,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...options.headers,
   };
 

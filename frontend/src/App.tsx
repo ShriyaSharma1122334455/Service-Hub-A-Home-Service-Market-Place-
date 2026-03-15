@@ -134,7 +134,7 @@ const App = () => {
       let profile = null;
       if (accessToken) {
         try {
-          const resp = await fetch(`${API_BASE}/api/profile/me`, {
+          const resp = await fetch(`${API_BASE}/profile/me`, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (!resp.ok) {
