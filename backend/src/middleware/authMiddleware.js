@@ -1,52 +1,47 @@
 /**
  * @fileoverview Authentication middleware for ServiceHub Express backend.
  *
- * Verifies Supabase user session tokens using JWKS (JSON Web Key Set).
+ * Verifies Supabase user session tokens by calling supabase.auth.getUser(token)
+ * on a cached admin client initialised with SUPABASE_SERVICE_ROLE_KEY.
  *
- * How it works:
- *  Supabase publishes its public signing keys at:
- *    <SUPABASE_URL>/.well-known/jwks.json
- *  This endpoint is public — no API key or secret needed.
- *  We fetch the keys once (lazily on first request) and cache them.
- *  jose's createRemoteJWKSet automatically re-fetches when Supabase
- *  rotates keys, so key rotation is handled transparently.
+ * Why this over local JWKS verification:
+ *  - Works for both the current ECC/ES256 tokens and the legacy HS256 tokens
+ *    that may still be in active sessions during Supabase's migration window.
+ *  - The sb_secret_* format service-role key is accepted by Supabase v2.95+.
+ *  - One network call per request (sub-ms because Supabase auth is in the
+ *    same region), but always returns up-to-date session validity (revoked
+ *    tokens are caught immediately, unlike local JWT verification).
  *
- * Why JWKS over supabase.auth.getUser():
- *  - Supabase has migrated from legacy JWT-based API keys (eyJ...) to
- *    new opaque API keys (sb_secret_*, sb_publishable_*). The old
- *    supabase.auth.getUser() approach required a JWT-format service role
- *    key as the apikey header — which the new key format breaks.
- *  - JWKS verification is fully local after the first fetch, requires
- *    zero secrets in .env, and works with both the current ECC (P-256)
- *    signing key and the legacy HS256 key (still used for unexpired tokens).
- *
- * Required .env:  SUPABASE_URL   (already present — no new secrets needed)
+ * Required .env:
+ *   SUPABASE_URL              (e.g. https://xxx.supabase.co)
+ *   SUPABASE_SERVICE_ROLE_KEY (sb_secret_* or legacy eyJ... service role key)
  *
  * @module middleware/authMiddleware
  */
 
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 
-// ── JWKS cache ────────────────────────────────────────────────────────────
-// Lazily created on first authenticate() call so that SUPABASE_URL is
-// guaranteed to be loaded from .env by the time we read it.
-// createRemoteJWKSet caches the keys in memory and only re-fetches when
-// it encounters a key ID it hasn't seen before (i.e. after a rotation).
+// ── Cached admin client ────────────────────────────────────────────────────
+// Created lazily on first authenticate() call so that env vars are loaded.
+// createClient is stateless for auth.getUser — persistSession: false ensures
+// no session is stored between requests.
 
-let _jwks = null;
+let _adminClient = null;
 
-function getJWKS() {
-  if (!_jwks) {
+function getAdminClient() {
+  if (!_adminClient) {
     const supabaseUrl = process.env.SUPABASE_URL;
-    if (!supabaseUrl) {
-      throw new Error('SUPABASE_URL is not set in .env');
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      throw new Error(
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in .env'
+      );
     }
-    // Supabase's JWKS endpoint lives under /auth/v1/ not at the root
-    _jwks = createRemoteJWKSet(
-      new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
-    );
+    _adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
   }
-  return _jwks;
+  return _adminClient;
 }
 
 // ── authenticate ──────────────────────────────────────────────────────────
@@ -54,7 +49,7 @@ function getJWKS() {
 /**
  * Express middleware that authenticates requests via Supabase JWT.
  *
- * Verifies the token against Supabase's public JWKS endpoint.
+ * Calls supabase.auth.getUser(token) on the admin client.
  * On success: attaches req.user = { id, email, role, supabaseId } → next()
  * On failure: responds 401.
  *
@@ -86,20 +81,24 @@ export const authenticate = async (req, res, next) => {
   }
 
   try {
-    const { payload } = await jwtVerify(token, getJWKS(), {
-      // Validates that the token was issued by this Supabase project
-      issuer:   `${process.env.SUPABASE_URL}/auth/v1`,
-      // Only accept tokens for authenticated users (not the anon/service role keys)
-      audience: 'authenticated',
-    });
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient.auth.getUser(token);
+
+    if (error || !data?.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'Invalid or expired token.',
+      });
+    }
 
     req.user = {
-      id:         payload.sub,
-      email:      payload.email,
-      role:       payload.user_metadata?.role
-                  || payload.app_metadata?.role
+      id:         data.user.id,
+      email:      data.user.email,
+      role:       data.user.user_metadata?.role
+                  || data.user.app_metadata?.role
                   || 'customer',
-      supabaseId: payload.sub,
+      supabaseId: data.user.id,
     };
 
     return next();
@@ -164,21 +163,22 @@ export const optionalAuthenticate = async (req, res, next) => {
   if (!token?.trim()) return next();
 
   try {
-    const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer:   `${process.env.SUPABASE_URL}/auth/v1`,
-      audience: 'authenticated',
-    });
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient.auth.getUser(token);
 
-    req.user = {
-      id:         payload.sub,
-      email:      payload.email,
-      role:       payload.user_metadata?.role
-                  || payload.app_metadata?.role
-                  || 'customer',
-      supabaseId: payload.sub,
-    };
+    if (!error && data?.user) {
+      req.user = {
+        id:         data.user.id,
+        email:      data.user.email,
+        role:       data.user.user_metadata?.role
+                    || data.user.app_metadata?.role
+                    || 'customer',
+        supabaseId: data.user.id,
+      };
+    }
+    // Intentionally silent on error — optional auth never blocks a request
   } catch (_err) {
-    // Intentionally silent — optional auth never blocks a request
+    // Intentionally silent
   }
 
   return next();
@@ -187,14 +187,12 @@ export const optionalAuthenticate = async (req, res, next) => {
 // ── test helpers (no-ops) ─────────────────────────────────────────────────
 
 /**
- * @deprecated JWKS verification has no client to inject.
- * Kept as a no-op for backward compatibility with existing tests.
+ * @deprecated Kept as a no-op for backward compatibility with existing tests.
  */
 export const setSupabaseClient = (_client) => {};
 
 /**
- * @deprecated No longer needed.
- * Kept as a no-op for backward compatibility with existing tests.
+ * @deprecated Kept as a no-op for backward compatibility with existing tests.
  */
 export const resetSupabaseClient = () => {};
 
