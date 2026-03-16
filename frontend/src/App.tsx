@@ -7,8 +7,9 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { Profile } from "./pages/Profile";
-import { UsersList } from "./pages/UsersList";
-import { ProvidersList } from "./pages/ProvidersList";
+import { ProviderDashboard } from "./pages/ProviderDashboard";
+import { FAQ } from "./pages/FAQ";
+import { ServiceProviders } from "./pages/ServiceProviders";
 import { SupportModal } from "./components/SupportModal";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
@@ -40,8 +41,6 @@ const saveAuth = (auth: StoredAuth) => {
 const clearAuth = () => {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 };
-import { FAQ } from "./pages/FAQ";
-import { ServiceProviders } from "./pages/ServiceProviders";
 
 const App = () => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -82,10 +81,12 @@ const App = () => {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
+  // Protected paths require a logged-in session
   const isProtectedPath =
-    basePath === "/users" ||
-    basePath === "/providers" ||
+    basePath === "/dashboard" ||
     basePath.startsWith("/profile");
+
+  // Redirect unauthenticated users away from protected pages
   useEffect(() => {
     if (!authRestored) return;
     if (isProtectedPath && !isAuthenticated) {
@@ -93,21 +94,8 @@ const App = () => {
     }
   }, [isProtectedPath, isAuthenticated, authRestored]);
 
-  useEffect(() => {
-    if (basePath === "/profile" && isAuthenticated && user) {
-      window.location.hash =
-        user.role === UserRole.PROVIDER ? "/users" : "/providers";
-    }
-  }, [basePath, isAuthenticated, user]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    if (basePath === "/providers" && user.role === UserRole.PROVIDER) {
-      window.location.hash = "/users";
-    } else if (basePath === "/users" && user.role === UserRole.CUSTOMER) {
-      window.location.hash = "/providers";
-    }
-  }, [basePath, isAuthenticated, user]);
+  // Redirect providers away from /dashboard if not authenticated
+  // (handled by isProtectedPath guard above)
 
   const profileIdMatch = basePath.match(/^\/profile\/(.+)$/);
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
@@ -193,9 +181,9 @@ const App = () => {
         accessToken,
       });
       if (userData.role === UserRole.PROVIDER) {
-        navigate("/users");
+        navigate("/dashboard");
       } else {
-        navigate("/providers");
+        navigate("/");
       }
     } catch (err) {
       console.error("Login failed", err);
@@ -300,11 +288,8 @@ const App = () => {
             onLoginClick={() => navigate("/login")}
           />
         );
-
-      case "/users":
-        return <UsersList onNavigate={navigate} />;
-      case "/providers":
-        return <ProvidersList onNavigate={navigate} />;
+      case "/dashboard":
+        return <ProviderDashboard user={user} onNavigate={navigate} />;
       case "/faq":
         return <FAQ />;
       default:
