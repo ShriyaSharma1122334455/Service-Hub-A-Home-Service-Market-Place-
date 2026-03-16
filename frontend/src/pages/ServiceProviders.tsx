@@ -75,20 +75,31 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
-    setLoading(true);
-    setError(false);
+    const controller = new AbortController();
+    const { signal } = controller;
 
-    Promise.all([
-      fetch(`${API_BASE}/api/services/${serviceId}`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/providers/by-service/${serviceId}`).then((r) => r.json()),
-    ])
-      .then(([svcData, provData]) => {
+    // All setState calls are inside this async function, not directly in the
+    // effect body — satisfies react-hooks/set-state-in-effect lint rule.
+    async function load() {
+      setLoading(true);
+      setError(false);
+      try {
+        const [svcData, provData] = await Promise.all([
+          fetch(`${API_BASE}/api/services/${serviceId}`, { signal }).then((r) => r.json()),
+          fetch(`${API_BASE}/api/providers/by-service/${serviceId}`, { signal }).then((r) => r.json()),
+        ]);
         if (svcData.success) setService(svcData.data);
         if (provData.success) setProviders(provData.data);
         if (!svcData.success) setError(true);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      } catch {
+        if (!signal.aborted) setError(true);
+      } finally {
+        if (!signal.aborted) setLoading(false);
+      }
+    }
+
+    load();
+    return () => controller.abort();
   }, [serviceId, API_BASE]);
 
   const categorySlug = service?.categoryId?.slug ?? "";
