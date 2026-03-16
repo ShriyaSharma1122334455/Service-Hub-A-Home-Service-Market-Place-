@@ -103,10 +103,12 @@ export const authenticate = async (req, res, next) => {
 
     return next();
   } catch (_err) {
-    return res.status(401).json({
+    // getUser() threw unexpectedly (network failure, config error, etc.).
+    // This is a server-side problem — return 500, not 401.
+    return res.status(500).json({
       success: false,
-      error: 'Unauthorized',
-      message: 'Invalid or expired token.',
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred during authentication.',
     });
   }
 };
@@ -184,17 +186,21 @@ export const optionalAuthenticate = async (req, res, next) => {
   return next();
 };
 
-// ── test helpers (no-ops) ─────────────────────────────────────────────────
+// ── test helpers ──────────────────────────────────────────────────────────
+// Allow tests to inject a mock Supabase client without real network calls.
+// Call setSupabaseClient(mock) in beforeAll/beforeEach, resetSupabaseClient()
+// in afterAll/afterEach.
 
 /**
- * @deprecated Kept as a no-op for backward compatibility with existing tests.
+ * Injects a mock Supabase client. Used by unit tests to avoid real network calls.
+ * @param {object} client - Object with { auth: { getUser: jest.fn() } }
  */
-export const setSupabaseClient = (_client) => {};
+export const setSupabaseClient = (client) => { _adminClient = client; };
 
 /**
- * @deprecated Kept as a no-op for backward compatibility with existing tests.
+ * Resets the cached admin client so the real createClient() is used again.
  */
-export const resetSupabaseClient = () => {};
+export const resetSupabaseClient = () => { _adminClient = null; };
 
 export default {
   authenticate,
