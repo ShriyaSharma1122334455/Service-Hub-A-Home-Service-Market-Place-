@@ -1,48 +1,69 @@
 /**
  * @fileoverview Authentication middleware for ServiceHub Express backend.
  *
- * Validates Supabase JWT tokens LOCALLY using jsonwebtoken + SUPABASE_JWT_SECRET.
- * No Supabase API call is made on every request — verification is instant and
- * works without a service role key.
+ * Verifies Supabase user session tokens by calling supabase.auth.getUser(token)
+ * on a cached admin client initialised with SUPABASE_SERVICE_ROLE_KEY.
  *
- * How it works:
- *  Supabase signs every user session token with the project's JWT Secret
- *  (a plain HS256 string visible in Dashboard → Project Settings → API → JWT Secret).
- *  We verify the signature locally with jwt.verify(), then read the decoded payload
- *  to extract the user's id (sub), email, and role.
+ * Why this over local JWKS verification:
+ *  - Works for both the current ECC/ES256 tokens and the legacy HS256 tokens
+ *    that may still be in active sessions during Supabase's migration window.
+ *  - The sb_secret_* format service-role key is accepted by Supabase v2.95+.
+ *  - One network call per request (sub-ms because Supabase auth is in the
+ *    same region), but always returns up-to-date session validity (revoked
+ *    tokens are caught immediately, unlike local JWT verification).
  *
- * SOLID Principles Applied:
- *  - SRP: Only handles auth concern.
- *  - OCP: New auth strategies addable without modifying this file.
- *  - LSP: All middleware functions follow Express (req, res, next) contract.
- *  - ISP: requireRole separated from authenticate.
+ * Required .env:
+ *   SUPABASE_URL              (e.g. https://xxx.supabase.co)
+ *   SUPABASE_SERVICE_ROLE_KEY (sb_secret_* or legacy eyJ... service role key)
  *
  * @module middleware/authMiddleware
  */
 
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+
+// ── Cached admin client ────────────────────────────────────────────────────
+// Created lazily on first authenticate() call so that env vars are loaded.
+// createClient is stateless for auth.getUser — persistSession: false ensures
+// no session is stored between requests.
+
+let _adminClient = null;
+
+function getAdminClient() {
+  if (!_adminClient) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      throw new Error(
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in .env'
+      );
+    }
+    _adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+  }
+  return _adminClient;
+}
 
 // ── authenticate ──────────────────────────────────────────────────────────
 
 /**
  * Express middleware that authenticates requests via Supabase JWT.
  *
- * Verifies the token LOCALLY using SUPABASE_JWT_SECRET (no API call).
- * On success: attaches req.user = { id, email, role, supabaseId } and calls next().
+ * Calls supabase.auth.getUser(token) on the admin client.
+ * On success: attaches req.user = { id, email, role, supabaseId } → next()
  * On failure: responds 401.
  *
- * @param {import('express').Request} req
+ * @param {import('express').Request}  req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
- * @returns {void}
  *
  * @example
  * router.get('/protected', authenticate, myController);
  */
 export const authenticate = async (req, res, next) => {
-  // LBYL: check header before any work
+  // Check header is present and well-formed
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized',
@@ -51,9 +72,7 @@ export const authenticate = async (req, res, next) => {
   }
 
   const token = authHeader.split(' ')[1];
-
-  // LBYL: ensure token is not blank
-  if (!token || token.trim() === '') {
+  if (!token?.trim()) {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized',
@@ -61,25 +80,25 @@ export const authenticate = async (req, res, next) => {
     });
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET;
-  if (!jwtSecret) {
-    console.error('❌ SUPABASE_JWT_SECRET is not set in .env');
-    return res.status(500).json({
-      success: false,
-      error: 'Internal Server Error',
-      message: 'Auth configuration error. Set SUPABASE_JWT_SECRET in .env.',
-    });
-  }
-
-  // EAFP: verify locally — no network call needed
   try {
-    const payload = jwt.verify(token, jwtSecret);
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient.auth.getUser(token);
+
+    if (error || !data?.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'Invalid or expired token.',
+      });
+    }
 
     req.user = {
-      id:         payload.sub,
-      email:      payload.email,
-      role:       payload.user_metadata?.role || payload.app_metadata?.role || 'customer',
-      supabaseId: payload.sub,
+      id:         data.user.id,
+      email:      data.user.email,
+      role:       data.user.user_metadata?.role
+                  || data.user.app_metadata?.role
+                  || 'customer',
+      supabaseId: data.user.id,
     };
 
     return next();
@@ -106,7 +125,6 @@ export const authenticate = async (req, res, next) => {
  */
 export const requireRole = (...allowedRoles) => {
   return (req, res, next) => {
-    // LBYL: ensure authenticate ran first
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -130,50 +148,58 @@ export const requireRole = (...allowedRoles) => {
 // ── optionalAuthenticate ──────────────────────────────────────────────────
 
 /**
- * Attaches user context if a valid token is present, but never blocks the request.
- * Silent failure — useful for public routes that show extra data when logged in.
+ * Attaches user context if a valid token is present, but never blocks.
+ * Useful for public routes that show extra data when logged in.
  *
- * @param {import('express').Request} req
+ * @param {import('express').Request}  req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
 export const optionalAuthenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
-  }
+  if (!authHeader?.startsWith('Bearer ')) return next();
 
   const token = authHeader.split(' ')[1];
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET;
-
-  if (!token || !jwtSecret) return next();
+  if (!token?.trim()) return next();
 
   try {
-    const payload = jwt.verify(token, jwtSecret);
-    req.user = {
-      id:         payload.sub,
-      email:      payload.email,
-      role:       payload.user_metadata?.role || payload.app_metadata?.role || 'customer',
-      supabaseId: payload.sub,
-    };
+    const adminClient = getAdminClient();
+    const { data, error } = await adminClient.auth.getUser(token);
+
+    if (!error && data?.user) {
+      req.user = {
+        id:         data.user.id,
+        email:      data.user.email,
+        role:       data.user.user_metadata?.role
+                    || data.user.app_metadata?.role
+                    || 'customer',
+        supabaseId: data.user.id,
+      };
+    }
+    // Intentionally silent on error — optional auth never blocks a request
   } catch (_err) {
-    // Intentionally silent — optional auth never blocks
+    // Intentionally silent
   }
 
   return next();
 };
 
-// ── test helpers ──────────────────────────────────────────────────────────
+// ── test helpers (no-ops) ─────────────────────────────────────────────────
 
 /**
- * @deprecated No longer needed — kept for backward compatibility with existing tests.
- * Local JWT verification has no admin client to inject.
+ * @deprecated Kept as a no-op for backward compatibility with existing tests.
  */
 export const setSupabaseClient = (_client) => {};
 
 /**
- * @deprecated No longer needed — kept for backward compatibility with existing tests.
+ * @deprecated Kept as a no-op for backward compatibility with existing tests.
  */
 export const resetSupabaseClient = () => {};
 
-export default { authenticate, requireRole, optionalAuthenticate, setSupabaseClient, resetSupabaseClient };
+export default {
+  authenticate,
+  requireRole,
+  optionalAuthenticate,
+  setSupabaseClient,
+  resetSupabaseClient,
+};
