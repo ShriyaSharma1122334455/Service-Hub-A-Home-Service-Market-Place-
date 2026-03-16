@@ -1,4 +1,5 @@
 import UserModel from '../models/User.js';
+import Provider from '../models/Provider.js';
 
 export const syncUser = async (req, res) => {
   try {
@@ -24,6 +25,24 @@ export const syncUser = async (req, res) => {
       update,
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).lean();
+
+    // Auto-create a Provider document when a provider-role user syncs.
+    // Uses $setOnInsert so fields are only written on the FIRST creation —
+    // subsequent logins never overwrite businessName / serviceCategories / servicesOffered.
+    if ((update.role || '').toLowerCase() === 'provider') {
+      await Provider.findOneAndUpdate(
+        { userId: user._id },
+        {
+          $setOnInsert: {
+            userId: user._id,
+            businessName: (update.fullName || email.split('@')[0]) + ' Services',
+            serviceCategories: [],
+            servicesOffered: [],
+          },
+        },
+        { upsert: true }
+      );
+    }
 
     return res.json({ success: true, data: user });
   } catch (err) {
