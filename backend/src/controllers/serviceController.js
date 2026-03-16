@@ -18,7 +18,9 @@ export const listServices = async (req, res) => {
     }
     const skip = (Number(page) - 1) * Number(limit);
     const [services, total] = await Promise.all([
-      Service.find(filter).populate('categoryId', 'name').skip(skip).limit(Number(limit)).lean(),
+      Service.find(filter)
+        .populate('categoryId', 'name slug')
+        .skip(skip).limit(Number(limit)).lean(),
       Service.countDocuments(filter),
     ]);
     return res.json({ success: true, count: services.length, total, page: Number(page), data: services });
@@ -31,7 +33,9 @@ export const listServices = async (req, res) => {
 /** Get single service by ID */
 export const getService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id).populate('categoryId','name').lean();
+    const service = await Service.findById(req.params.id)
+      .populate('categoryId', 'name slug')
+      .lean();
     if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
     res.json({ success: true, data: service });
   } catch (_err) {

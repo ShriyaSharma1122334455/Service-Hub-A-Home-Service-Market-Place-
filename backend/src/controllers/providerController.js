@@ -90,6 +90,48 @@ export const listProviders = async (req, res) => {
 }
 
 /**
+ * Returns all active providers who have the given serviceId in their servicesOffered array.
+ * Also returns their custom price / description for that service (if set).
+ * GET /api/providers/by-service/:serviceId
+ */
+export const getProvidersByService = async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(serviceId)) {
+      return res.status(400).json({ success: false, error: 'Invalid service ID' });
+    }
+
+    const providers = await Provider.find({
+      'servicesOffered.serviceId': serviceId,
+      isActive: true,
+    })
+      .populate('userId', 'fullName avatarUrl')
+      .lean();
+
+    const list = providers.map((p) => {
+      const offered = p.servicesOffered.find(
+        (s) => s.serviceId?.toString() === serviceId
+      );
+      return {
+        _id: p._id,
+        businessName: p.businessName,
+        ratingAvg: p.ratingAvg,
+        ratingCount: p.ratingCount,
+        fullName: p.userId?.fullName || null,
+        avatarUrl: p.userId?.avatarUrl || null,
+        customPrice: offered?.customPrice ?? null,
+        customDescription: offered?.customDescription ?? null,
+      };
+    });
+
+    return res.json({ success: true, count: list.length, data: list });
+  } catch (err) {
+    console.error('getProvidersByService error:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch providers for service' });
+  }
+};
+
+/**
  * @description Advanced provider search with filters.
  * Supports: category, minRating, isActive, search (business name), page, limit.
  */

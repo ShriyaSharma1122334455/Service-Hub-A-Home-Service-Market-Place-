@@ -41,6 +41,7 @@ const clearAuth = () => {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 };
 import { FAQ } from "./pages/FAQ";
+import { ServiceProviders } from "./pages/ServiceProviders";
 
 const App = () => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -111,6 +112,9 @@ const App = () => {
   const profileIdMatch = basePath.match(/^\/profile\/(.+)$/);
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
 
+  const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
+  const bookServiceId = bookServiceMatch ? bookServiceMatch[1] : null;
+
   const navigate = (path: string) => {
     window.location.hash = path;
   };
@@ -128,6 +132,22 @@ const App = () => {
       const supabaseUser = data?.user;
       const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+      // Sync Supabase user → MongoDB on every login (idempotent upsert).
+      // This covers: first-time login, email-confirmation-delayed signups, and role updates.
+      if (accessToken) {
+        const metaRole =
+          (supabaseUser?.user_metadata?.role as string) ||
+          String(role).toLowerCase();
+        fetch(`${API_BASE}/api/profile/sync`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ fullName: name, role: metaRole }),
+        }).catch((e) => console.error("Sync error:", e));
+      }
 
       // fetch full profile from backend
       let profile = null;
@@ -257,6 +277,10 @@ const App = () => {
           currentUser={user}
         />
       );
+    }
+
+    if (bookServiceId) {
+      return <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} />;
     }
 
     switch (basePath) {

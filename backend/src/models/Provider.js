@@ -60,6 +60,22 @@ const providerSchema = new mongoose.Schema({
       default: null
     }
   },
+  servicesOffered: [{
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Service',
+    },
+    customPrice: {
+      type: Number,
+      min: 0,
+      default: null,         // null = use the platform service's basePrice
+    },
+    customDescription: {
+      type: String,
+      trim: true,
+      default: null,         // null = use the platform service's description
+    },
+  }],
   ratingAvg: {
     type: Number,
     default: 0,
