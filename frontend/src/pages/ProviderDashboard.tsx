@@ -45,10 +45,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
   user,
   onNavigate,
 }) => {
-  const displayName =
-    (user as Provider)?.businessName ||
-    user?.name ||
-    "Provider";
+  const displayName = user?.name || "Provider";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
