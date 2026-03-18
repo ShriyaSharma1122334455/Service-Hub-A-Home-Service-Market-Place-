@@ -33,6 +33,11 @@ const serviceSchema = new mongoose.Schema({
     required: [true, 'Duration is required'],
     min: [15, 'Duration must be at least 15 minutes']
   },
+  location: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Location cannot exceed 200 characters'],
+  },
   isActive: {
     type: Boolean,
     default: true

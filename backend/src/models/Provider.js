@@ -72,6 +72,12 @@ const providerSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  location: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Location cannot exceed 200 characters'],
+    index: true,
+  },
   isActive: {
     type: Boolean,
     default: true
