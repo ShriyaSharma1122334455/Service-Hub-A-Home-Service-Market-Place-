@@ -39,6 +39,7 @@ export type BackendProvider = {
   verified?: boolean;
   availabilityStatus?: string;
   description?: string;
+  location?: string;
 };
 
 export type GetMeResponse = (BackendUser & { type: 'user' }) | (BackendProvider & { type: 'provider' });
