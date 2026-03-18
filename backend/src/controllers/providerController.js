@@ -52,7 +52,7 @@ export const getProvider = async (req, res) => {
 export const listProviders = async (req, res) => {
   try {
     const providers = await Provider.find({})
-        .select('businessName description serviceCategories ratingAvg ratingCount userId')
+        .select('businessName description serviceCategories ratingAvg ratingCount location userId')
         .populate("userId", "fullName email avatarUrl")
         .lean();
 
@@ -65,6 +65,7 @@ export const listProviders = async (req, res) => {
             serviceCategories: p.serviceCategories,
             ratingAvg: p.ratingAvg,
             ratingCount: p.ratingCount,
+            location: p.location,
             fullName: user?.fullName || p.businessName,
             email: user?.email,
             avatarUrl: user?.avatarUrl,
@@ -95,12 +96,13 @@ export const listProviders = async (req, res) => {
  */
 export const searchProviders = async (req, res) => {
   try {
-    const { category, minRating, isActive, search, page = 1, limit = 20 } = req.query;
+    const { category, minRating, isActive, search, location, page = 1, limit = 20 } = req.query;
     const filter = {};
     if (category)  filter.serviceCategories = category;
     if (minRating) filter.ratingAvg = { $gte: Number(minRating) };
     if (isActive !== undefined) filter.isActive = isActive === 'true';
     if (search)    filter.businessName = { $regex: search, $options: 'i' };
+    if (location)  filter.location = { $regex: location, $options: 'i' };
     const skip = (Number(page) - 1) * Number(limit);
     const [providers, total] = await Promise.all([
       Provider.find(filter)
@@ -112,7 +114,7 @@ export const searchProviders = async (req, res) => {
     const list = providers.map(p => ({
       _id: p._id, businessName: p.businessName, description: p.description,
       serviceCategories: p.serviceCategories, ratingAvg: p.ratingAvg,
-      ratingCount: p.ratingCount, isActive: p.isActive,
+      ratingCount: p.ratingCount, location: p.location, isActive: p.isActive,
       fullName: p.userId?.fullName, email: p.userId?.email, avatarUrl: p.userId?.avatarUrl,
     }));
     return res.json({ success: true, count: list.length, total, page: Number(page), data: { providers: list } });

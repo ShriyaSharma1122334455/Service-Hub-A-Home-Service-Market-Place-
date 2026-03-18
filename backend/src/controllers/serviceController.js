@@ -7,10 +7,11 @@ import Service from '../models/Service.js';
 /** List services with optional search and filter */
 export const listServices = async (req, res) => {
   try {
-    const { category, minPrice, maxPrice, search, page = 1, limit = 20 } = req.query;
+    const { category, minPrice, maxPrice, search, location, page = 1, limit = 20 } = req.query;
     const filter = {};
     if (category)  filter.categoryId = category;
     if (search)    filter.name = { $regex: search, $options: 'i' };
+    if (location)  filter.location = { $regex: location, $options: 'i' };
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = Number(minPrice);
