@@ -10,6 +10,7 @@ import { Profile } from "./pages/Profile";
 import { UsersList } from "./pages/UsersList";
 import { ProvidersList } from "./pages/ProvidersList";
 import { SupportModal } from "./components/SupportModal";
+import { Chatbot } from "./components/Chatbot";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
@@ -320,19 +321,7 @@ const App = () => {
         }
       />
 
-      {/* Chatbot coming soon bubble */}
-      <div className="fixed bottom-6 right-6 z-50 group">
-        <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-full whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-          AI Assistant — Coming Soon
-        </div>
-        <button
-          disabled
-          className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 shadow-lg shadow-teal-500/30 flex items-center justify-center text-2xl cursor-not-allowed opacity-90 hover:scale-105 transition-transform duration-200"
-          aria-label="AI Assistant coming soon"
-        >
-          🤖
-        </button>
-      </div>
+      <Chatbot user={user} />
     </div>
   );
 };
