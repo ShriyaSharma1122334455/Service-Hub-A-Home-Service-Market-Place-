@@ -1,7 +1,9 @@
 ### 📢 Latest Project Update
-> **Change:** Update Supabase configuration variables in .env.example
-> **Date:** Thu Mar 12 19:11:47 UTC 2026
+> **Change:** fix(auth): JWKS-based token verification — no secrets required (#25)
+> **Date:** Mon Mar 23 19:01:53 UTC 2026
 ---
+
+
 
 
 

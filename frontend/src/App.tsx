@@ -58,8 +58,7 @@ const App = () => {
     return null;
   });
   const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  // auth is restored from localStorage in the user lazy initializer
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredAuth());
   const authRestored = true;
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
