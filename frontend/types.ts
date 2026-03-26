@@ -20,7 +20,7 @@ export const ServiceCategory = {
   CLEANING: 'Cleaning',
   PLUMBING: 'Plumbing',
   ELECTRICAL: 'Electrical',
-  INTERIOR_DESIGN: 'Interior Design'
+  PEST_CONTROL: 'Pest Control'
 } as const;
 export type ServiceCategory = (typeof ServiceCategory)[keyof typeof ServiceCategory];
 

@@ -1,7 +1,8 @@
 ### 📢 Latest Project Update
-> **Change:** issue(auth): initialize authentication state from localStorage and update navigation logic (#23)
-> **Date:** Sun Mar 15 17:41:47 UTC 2026
+> **Change:** fix(auth): JWKS-based token verification — no secrets required (#25)
+> **Date:** Mon Mar 23 19:01:53 UTC 2026
 ---
+
 
 
 

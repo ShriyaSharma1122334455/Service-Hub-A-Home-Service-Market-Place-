@@ -4,7 +4,7 @@ const serviceSchema = new mongoose.Schema({
   providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Provider',
-    required: true
+    required: false   // optional — services are platform-defined, not tied to a single provider
   },
   categoryId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -37,6 +37,9 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [200, 'Location cannot exceed 200 characters'],
+  subCategory: {
+    type: String,
+    trim: true   // e.g. "Home Cleaning", "Drainage", "Installation"
   },
   isActive: {
     type: Boolean,
@@ -47,7 +50,6 @@ const serviceSchema = new mongoose.Schema({
 });
 
 // Indexes
-serviceSchema.index({ providerId: 1, isActive: 1 });
 serviceSchema.index({ categoryId: 1, isActive: 1 });
 
 const Service = mongoose.model('Service', serviceSchema);

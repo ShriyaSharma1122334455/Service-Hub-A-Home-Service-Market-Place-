@@ -19,7 +19,7 @@ const seedProviders = async () => {
 
     const categoryList = [
       categories.find(c => c.slug === 'plumbing'),
-      categories.find(c => c.slug === 'electrician'),
+      categories.find(c => c.slug === 'electrical'),
       categories.find(c => c.slug === 'cleaning')
     ].filter(Boolean);
     const defaultCategory = categoryList[0] || categories[0];

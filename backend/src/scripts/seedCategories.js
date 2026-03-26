@@ -12,8 +12,8 @@ const categories = [
     icon: 'plumbing-icon.svg'
   },
   {
-    name: 'Electrician',
-    slug: 'electrician',  // Add slug manually
+    name: 'Electrical',
+    slug: 'electrical',
     description: 'Licensed electrical services including wiring, outlet installation, panel upgrades, and lighting fixture installation.',
     icon: 'electrical-icon.svg'
   },

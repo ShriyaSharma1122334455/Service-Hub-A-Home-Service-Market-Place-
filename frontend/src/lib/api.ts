@@ -1,6 +1,6 @@
-const API_BASE_URL = 'http://localhost:3000/api';
+import { supabase } from './supabase';
 
-const TEST_TOKEN = 'test-token-for-development';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 export type ApiResponse<T> = {
   success: boolean;
@@ -14,9 +14,17 @@ async function fetchApi<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
 
+  // Get the current Supabase session token dynamically.
+  // supabase.auth.getSession() automatically refreshes the access token
+  // when it is expired, so we always get a valid (or null) token here.
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${TEST_TOKEN}`,
+    // Only add Authorization if we actually have a token
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    // Caller-supplied headers override the defaults (e.g. X-User-Email)
     ...options.headers,
   };
 

@@ -1,21 +1,60 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ServiceCategory } from "../../types";
 import type { User, Provider } from "../../types";
 import { Star, ArrowRight } from "lucide-react";
+import { ServiceCatalogModal } from "../components/ServiceCatalogModal";
 
 const SERVICE_ICONS: Record<string, string> = {
   [ServiceCategory.CLEANING]: "✨",
   [ServiceCategory.PLUMBING]: "🔧",
   [ServiceCategory.ELECTRICAL]: "⚡",
-  [ServiceCategory.INTERIOR_DESIGN]: "🎨",
+  [ServiceCategory.PEST_CONTROL]: "🐛",
 };
+
+// Map display name → backend slug
+const SLUG_MAP: Record<string, string> = {
+  [ServiceCategory.CLEANING]: "cleaning",
+  [ServiceCategory.PLUMBING]: "plumbing",
+  [ServiceCategory.ELECTRICAL]: "electrical",
+  [ServiceCategory.PEST_CONTROL]: "pest-control",
+};
+
+interface BackendCategory {
+  _id: string;
+  name: string;
+  slug: string;
+}
 
 interface HomeProps {
   onNavigate: (path: string) => void;
   user: User | Provider | null;
 }
 
-export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
+export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
+  const [categories, setCategories] = useState<BackendCategory[]>([]);
+  const [activeCategory, setActiveCategory] = useState<BackendCategory | null>(null);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/categories`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setCategories(data.data);
+      })
+      .catch(() => {
+        // Silently fail — categories still display, just no modal functionality
+      });
+  }, [API_BASE]);
+
+  const handleCategoryClick = (displayName: string) => {
+    const slug = SLUG_MAP[displayName];
+    const match = categories.find((c) => c.slug === slug);
+    if (match) {
+      setActiveCategory(match);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-100px)]">
       <section className="relative py-20 lg:py-32 overflow-visible">
@@ -56,6 +95,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             {Object.values(ServiceCategory).map((service) => (
               <div
                 key={service}
+                onClick={() => handleCategoryClick(service)}
                 className="group glass-panel rounded-[2.5rem] p-8 text-center cursor-pointer hover:bg-white/80 hover:scale-[1.02] transition-all duration-500 flex flex-col items-center justify-center h-64 relative overflow-hidden"
               >
                 <div className="text-6xl mb-6 group-hover:scale-110 transition-transform duration-500 opacity-70 group-hover:opacity-100">
@@ -80,6 +120,18 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           © 2024 ServiceHub Inc. All rights reserved.
         </p>
       </footer>
+
+      {/* Service catalog modal */}
+      {activeCategory && (
+        <ServiceCatalogModal
+          categoryId={activeCategory._id}
+          categoryName={activeCategory.name}
+          categoryIcon={SERVICE_ICONS[activeCategory.name] ?? "🔧"}
+          onClose={() => setActiveCategory(null)}
+          user={user}
+          onNavigate={onNavigate}
+        />
+      )}
     </div>
   );
 };
