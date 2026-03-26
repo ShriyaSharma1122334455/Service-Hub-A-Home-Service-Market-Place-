@@ -3,7 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazily initialised so that missing RESEND_API_KEY in test/CI environments
+// does not throw at import time and crash every test suite that imports server.js
+let _resend = null;
+const getResend = () => {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+};
 
 /**
  * Send email using Resend
@@ -11,9 +17,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export const sendEmail = async ({ to, subject, html, text }) => {
   try {
     console.log('🔧 Attempting to send email via Resend...');
-    
+
     // Resend returns { data, error }
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
       to: [to],
       subject,

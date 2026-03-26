@@ -29,6 +29,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.connection.close();
+  if (mongod) await mongod.stop();
 });
 
 // ─── 1. Health check ──────────────────────────────────────────────────────────
