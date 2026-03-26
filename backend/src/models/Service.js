@@ -37,6 +37,7 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [200, 'Location cannot exceed 200 characters'],
+  },
   subCategory: {
     type: String,
     trim: true   // e.g. "Home Cleaning", "Drainage", "Installation"
