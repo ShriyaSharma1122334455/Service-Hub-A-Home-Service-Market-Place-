@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.routes import verification, health, profile
+from app.routes import verification, health, profile, ocr
 from app.middleware.timer import TimingMiddleware
 
 
@@ -41,6 +41,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/health", tags=["Health"])
 app.include_router(verification.router, prefix="/api/v1/verify", tags=["Verification"])
 app.include_router(profile.router, prefix="/api/v1/profile", tags=["Profile"])
+app.include_router(ocr.router, prefix="/ai/ocr", tags=["OCR"])
 
 
 @app.get("/")

@@ -10,6 +10,8 @@ import {
   Star,
   Briefcase,
 } from "lucide-react";
+import { VerificationBadge } from "../components/verification/VerificationBadge";
+import { VerificationDetailsModal } from "../components/verification/VerificationDetailsModal";
 
 interface ProfileProps {
   profileId: string;
@@ -31,6 +33,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,8 +268,16 @@ export const Profile: React.FC<ProfileProps> = ({
             </div>
 
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
                 {fullName}
+                {isProvider && (
+                  <VerificationBadge 
+                    status={(data as any).verificationStatus || "unverified"} 
+                    onClick={() => setIsModalOpen(true)}
+                    className="ml-2 hover:scale-105 transition-transform"
+                    showText
+                  />
+                )}
               </h1>
               <span
                 className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
@@ -332,16 +343,34 @@ export const Profile: React.FC<ProfileProps> = ({
               )}
 
               {profileId === "me" && (
-                <div className="p-4 bg-slate-50 rounded-2xl">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    ID
-                  </p>
-                  <p className="text-slate-500 text-sm font-mono">{data._id}</p>
+                <div className="p-4 bg-slate-50 rounded-2xl flex flex-col gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      ID
+                    </p>
+                    <p className="text-slate-500 text-sm font-mono">{data._id}</p>
+                  </div>
+                  
+                  <button 
+                    onClick={() => onNavigate('/verify')}
+                    className="flex justify-center items-center w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md"
+                  >
+                    <Shield className="w-5 h-5 mr-2 text-teal-400" />
+                    Go to Verification Center
+                  </button>
                 </div>
               )}
             </div>
           </div>
         </div>
+        
+        {isProvider && (
+          <VerificationDetailsModal 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
+            userId={(data as any)._id} 
+          />
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { Profile } from "./pages/Profile";
 import { ProviderDashboard } from "./pages/ProviderDashboard";
 import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
+import { Verify } from "./pages/verify";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
 
@@ -84,6 +85,7 @@ const App = () => {
   // Protected paths require a logged-in session
   const isProtectedPath =
     basePath === "/dashboard" ||
+    basePath === "/verify" ||
     basePath.startsWith("/profile");
 
   // Redirect unauthenticated users away from protected pages
@@ -290,6 +292,8 @@ const App = () => {
         );
       case "/dashboard":
         return <ProviderDashboard user={user} onNavigate={navigate} />;
+      case "/verify":
+        return <Verify user={user} onNavigate={navigate} />;
       case "/faq":
         return <FAQ />;
       default:

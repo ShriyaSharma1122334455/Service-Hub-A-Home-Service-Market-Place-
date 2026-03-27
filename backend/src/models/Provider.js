@@ -60,6 +60,11 @@ const providerSchema = new mongoose.Schema({
       default: null
     }
   },
+  verificationStatus: {
+    type: String,
+    enum: ['unverified', 'pending', 'verified', 'failed'],
+    default: 'unverified',
+  },
   servicesOffered: [{
     serviceId: {
       type: mongoose.Schema.Types.ObjectId,

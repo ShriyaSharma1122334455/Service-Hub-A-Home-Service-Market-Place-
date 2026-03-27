@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ArrowLeft, Star, DollarSign, Clock } from "lucide-react";
+import { VerificationBadge } from "../components/verification/VerificationBadge";
 
 interface ServiceDetail {
   _id: string;
@@ -20,6 +21,7 @@ interface ProviderCard {
   avatarUrl?: string;
   customPrice?: number | null;
   customDescription?: string | null;
+  verificationStatus?: "verified" | "pending" | "unverified" | "failed";
 }
 
 interface ServiceProvidersProps {
@@ -192,9 +194,12 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                   </div>
                 )}
                 <div className="min-w-0">
-                  <h3 className="font-bold text-slate-900 leading-snug truncate">
-                    {provider.businessName}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 leading-snug truncate">
+                      {provider.businessName}
+                    </h3>
+                    <VerificationBadge status={provider.verificationStatus || "unverified"} />
+                  </div>
                   {provider.fullName && (
                     <p className="text-xs text-slate-400 mt-0.5 truncate">
                       {provider.fullName}
@@ -234,17 +239,18 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                 )}
               </div>
 
-              {/* Book button — disabled, coming soon */}
-              <div className="relative group/btn">
+              {/* Book button */}
+              <div className="relative group/btn mt-auto pt-4">
                 <button
-                  disabled
-                  className="w-full py-2.5 rounded-xl bg-teal-50 text-teal-400 font-semibold text-sm border border-teal-100 cursor-not-allowed"
+                  disabled={provider.verificationStatus !== "verified"}
+                  className={`w-full py-2.5 rounded-xl font-semibold text-sm border transition-all ${
+                    provider.verificationStatus === "verified"
+                      ? "bg-teal-600 text-white hover:bg-teal-700 border-teal-700 shadow-md"
+                      : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  }`}
                 >
-                  Book with Provider
+                  {provider.verificationStatus === "verified" ? "Book with Provider" : "Provider Not Verified"}
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  Coming Soon
-                </span>
               </div>
             </div>
           ))}

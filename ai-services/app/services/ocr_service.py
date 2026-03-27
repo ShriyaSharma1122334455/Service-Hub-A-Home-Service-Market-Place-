@@ -183,3 +183,204 @@ def _estimate_confidence(response) -> float:
         return round(sum(scores) / len(scores), 3) if scores else 0.75
     except Exception:
         return 0.75
+
+
+# ── MRZ Parsing (Passport TD3 — two 44‑char lines) ──────────────────────
+
+def _parse_mrz(raw_text: str) -> Optional[dict]:
+    """
+    Attempt to find and parse Machine Readable Zone (TD3 format).
+
+    TD3 layout (ICAO 9303):
+      Line 1 (44 chars): P<ISSUING_COUNTRY SURNAME<<GIVEN_NAMES<<<…
+      Line 2 (44 chars): DOC_NUMBER(9) CHK NATIONALITY DOB(6) CHK SEX EXP(6) CHK OPT(14) CHK OVERALL_CHK
+
+    Returns dict with parsed fields on success, or None if no valid MRZ found.
+    """
+    # Find candidate MRZ lines — sequences of 44+ chars using MRZ charset
+    mrz_pattern = re.compile(r"[A-Z0-9<]{44,}")
+    candidates = mrz_pattern.findall(raw_text.upper().replace(" ", ""))
+
+    if len(candidates) < 2:
+        # Also try line-by-line (OCR often adds spaces within MRZ)
+        lines = raw_text.upper().split("\n")
+        cleaned = [re.sub(r"[^A-Z0-9<]", "", line) for line in lines]
+        candidates = [c for c in cleaned if len(c) >= 44]
+
+    if len(candidates) < 2:
+        return None
+
+    line1 = candidates[-2][:44]  # Take last two qualifying lines
+    line2 = candidates[-1][:44]
+
+    # Validate line 1 starts with P (passport)
+    if not line1.startswith("P"):
+        return None
+
+    # ── Parse Line 1 ──────────────────────────────────────────────────
+    issuing_country = line1[2:5].replace("<", "")
+
+    name_section = line1[5:]
+    name_parts = name_section.split("<<")
+    surname = name_parts[0].replace("<", " ").strip().title() if name_parts else ""
+    given_names = (
+        name_parts[1].replace("<", " ").strip().title()
+        if len(name_parts) > 1 else ""
+    )
+    full_name = f"{given_names} {surname}".strip() if given_names else surname
+
+    # ── Parse Line 2 ──────────────────────────────────────────────────
+    doc_number = line2[0:9].replace("<", "").strip()
+    nationality = line2[10:13].replace("<", "")
+    dob_raw = line2[13:19]       # YYMMDD
+    expiry_raw = line2[21:27]    # YYMMDD
+
+    dob_iso = _mrz_date_to_iso(dob_raw, is_birth_date=True)
+    expiry_iso = _mrz_date_to_iso(expiry_raw, is_birth_date=False)
+
+    return {
+        "full_name": full_name,
+        "document_number": doc_number,
+        "issuing_state": issuing_country or nationality,
+        "date_of_birth": dob_iso,
+        "expiry_date": expiry_iso,
+    }
+
+
+def _mrz_date_to_iso(yymmdd: str, is_birth_date: bool = True) -> Optional[str]:
+    """Convert MRZ YYMMDD to ISO YYYY-MM-DD.
+
+    For birth dates: YY > 50 → 19XX, else 20XX.
+    For expiry dates: always 20XX (passports don't expire in the 1900s).
+    """
+    if not yymmdd or len(yymmdd) != 6 or not yymmdd.isdigit():
+        return None
+
+    yy = int(yymmdd[0:2])
+    mm = yymmdd[2:4]
+    dd = yymmdd[4:6]
+
+    if is_birth_date:
+        century = 1900 if yy > 50 else 2000
+    else:
+        century = 2000
+
+    year = century + yy
+
+    try:
+        # Validate the date is real
+        datetime.strptime(f"{year}-{mm}-{dd}", "%Y-%m-%d")
+        return f"{year}-{mm}-{dd}"
+    except ValueError:
+        return None
+
+
+# ── Public API: parse_id_document ────────────────────────────────────────
+
+async def parse_id_document(
+    image_url: str,
+    document_type: str,
+) -> "OcrParseResponse":
+    """
+    Unified OCR entry point for the /ai/ocr/parse-id endpoint.
+
+    1. Download image → 2. Vision OCR → 3. Route to MRZ or regex parser
+    → 4. Return normalised OcrParseResponse.
+    """
+    from app.models.schemas import OcrParseResponse
+
+    # 1. Download image
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(image_url)
+            resp.raise_for_status()
+            image_bytes = resp.content
+    except httpx.HTTPError as exc:
+        logger.error("Image download failed: %s", exc)
+        return OcrParseResponse(
+            success=False,
+            error="image_download_failed",
+            document_type=document_type,
+        )
+
+    # 2. Call Vision API
+    try:
+        vision_client = _build_vision_client()
+        image = vision.Image(content=image_bytes)
+        response = vision_client.text_detection(image=image)
+
+        if response.error.message:
+            raise RuntimeError(response.error.message)
+
+        full_text = (
+            response.full_text_annotation.text
+            if response.full_text_annotation else ""
+        )
+        confidence = _estimate_confidence(response)
+
+    except Exception as exc:
+        logger.error("Vision API error: %s", exc)
+        return OcrParseResponse(
+            success=False,
+            error="vision_api_error",
+            document_type=document_type,
+        )
+
+    # No text detected
+    if not full_text.strip():
+        return OcrParseResponse(
+            success=False,
+            error="no_text_detected",
+            document_type=document_type,
+            raw_text="",
+        )
+
+    # 3. Dispatch to correct parser
+    if document_type == "passport":
+        mrz_result = _parse_mrz(full_text)
+        if mrz_result:
+            return OcrParseResponse(
+                success=True,
+                document_type=document_type,
+                extracted_name=mrz_result["full_name"],
+                extracted_dob=mrz_result["date_of_birth"],
+                document_number=mrz_result["document_number"],
+                expiry_date=mrz_result["expiry_date"],
+                issuing_state=mrz_result["issuing_state"],
+                raw_text=full_text,
+                confidence=confidence,
+                parse_method="mrz",
+            )
+        else:
+            # Fallback to regex if MRZ lines not found
+            logger.warning("No MRZ lines found in passport — falling back to regex")
+            parsed = _parse_id_text(full_text)
+            return OcrParseResponse(
+                success=True,
+                document_type=document_type,
+                extracted_name=parsed.full_name,
+                extracted_dob=parsed.date_of_birth,
+                document_number=parsed.id_number,
+                expiry_date=parsed.expiration_date,
+                issuing_state=parsed.issue_state,
+                raw_text=full_text,
+                confidence=confidence,
+                parse_method="regex",
+            )
+
+    else:
+        # drivers_license — use existing AAMVA regex parser
+        parsed = _parse_id_text(full_text)
+        return OcrParseResponse(
+            success=True,
+            document_type=document_type,
+            extracted_name=parsed.full_name,
+            extracted_dob=parsed.date_of_birth,
+            document_number=parsed.id_number,
+            expiry_date=parsed.expiration_date,
+            issuing_state=parsed.issue_state,
+            raw_text=full_text,
+            confidence=confidence,
+            parse_method="regex",
+        )
+

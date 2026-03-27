@@ -120,3 +120,24 @@ class ImageUploadResponse(BaseModel):
     message:    str
     secure_url: str
     public_id:  str
+
+
+# ── OCR Parse (dedicated endpoint) ───────────────────────────────────────
+
+class OcrParseRequest(BaseModel):
+    image_url:     str = Field(..., description="URL of the ID document image (e.g. Cloudinary)")
+    document_type: str = Field(..., description="Type of document", pattern="^(passport|drivers_license)$")
+
+
+class OcrParseResponse(BaseModel):
+    success:         bool
+    document_type:   Optional[str]  = None
+    extracted_name:  Optional[str]  = None
+    extracted_dob:   Optional[str]  = None   # ISO: YYYY-MM-DD
+    document_number: Optional[str]  = None
+    expiry_date:     Optional[str]  = None   # ISO: YYYY-MM-DD
+    issuing_state:   Optional[str]  = None
+    raw_text:        Optional[str]  = None
+    confidence:      Optional[float] = None  # 0.0–1.0
+    parse_method:    Optional[str]  = None   # "mrz" or "regex"
+    error:           Optional[str]  = None

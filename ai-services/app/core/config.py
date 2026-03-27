@@ -1,11 +1,11 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
 class Settings(BaseSettings):
     # ── Service ───────────────────────────────────────────────────────────
     ENV: str = "development"
-    PORT: int = 8001
+    PORT: int = 8000
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",   # React frontend dev server
         "http://localhost:5000",   # Express backend
@@ -33,9 +33,7 @@ class Settings(BaseSettings):
     # Express backend sends this header so only it can call this service
     INTERNAL_API_KEY: str = "change-me-in-production"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

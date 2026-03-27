@@ -3,9 +3,19 @@
  * @module controllers/bookingController
  */
 import Booking from '../models/Booking.js';
+import Provider from '../models/Provider.js';
  
 export const createBooking = async (req, res) => {
   try {
+    const provider = await Provider.findById(req.body.providerId);
+    if (!provider) {
+      return res.status(404).json({ success: false, error: 'Provider not found' });
+    }
+
+    if (provider.verificationStatus !== 'verified') {
+      return res.status(403).json({ success: false, error: 'Cannot book an unverified provider' });
+    }
+
     const booking = await Booking.create({ ...req.body, customerId: req.user.id });
     res.status(201).json({ success: true, data: booking });
   } catch (err) {

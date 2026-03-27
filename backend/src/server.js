@@ -17,6 +17,7 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import authRoutes from './routes/authRoutes.js'; // Ensure this file exists at src/routes/authRoutes.js
 import userRoutes from './routes/userRoutes.js';
+import verificationRoutes from './routes/verificationRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -61,6 +62,7 @@ app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/verification', verificationRoutes);
 
 // Basic routes
 app.get('/', (req, res) => {

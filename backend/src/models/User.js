@@ -56,8 +56,8 @@ const userSchema = new mongoose.Schema({
   }],
   verificationStatus: {
     type: String,
-    enum: ['pending', 'verified', 'rejected'],
-    default: 'pending'
+    enum: ['unverified', 'pending', 'verified', 'failed'],
+    default: 'unverified'
   },
   isActive: {
     type: Boolean,
