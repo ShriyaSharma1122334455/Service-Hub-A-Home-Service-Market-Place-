@@ -1,9 +1,15 @@
 import React, { useState } from "react";
 import { UserRole } from "../../types";
-import { Lock, Mail, User } from "lucide-react";
+import { Lock, Mail, User, Phone } from "lucide-react";
 
 interface RegisterProps {
-  onRegister: (email: string, role: UserRole, password?: string) => void;
+  onRegister: (
+    email: string,
+    role: UserRole,
+    password?: string,
+    name?: string,
+    phone?: string,
+  ) => void;
   onLoginClick: () => void;
 }
 
@@ -15,11 +21,12 @@ export const Register: React.FC<RegisterProps> = ({
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
+  const [phone, setPhone] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Pass selected role to the registration handler
-    onRegister(email, role, password);
+    // Pass all fields to the registration handler
+    onRegister(email, role, password, name, phone);
   };
 
   return (
@@ -117,6 +124,25 @@ export const Register: React.FC<RegisterProps> = ({
                   onChange={(e) => setEmail(e.target.value)}
                   className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
                   placeholder="name@example.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-2">
+                Phone Number
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Phone className="h-5 w-5 text-slate-300" />
+                </div>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
+                  placeholder="+1 (555) 000-0000"
                 />
               </div>
             </div>

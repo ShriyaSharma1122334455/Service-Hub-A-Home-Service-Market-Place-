@@ -1,42 +1,59 @@
-import User from "../models/User.js";
-import Provider from "../models/Provider.js";
+import supabase from '../config/supabase.js';
 
 export const getMe = async (req, res) => {
   try {
-    const email = req.user?.email || req.headers['x-user-email'];
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Authenticated user email required' });
+    const supabaseId = req.user?.id;
+    if (!supabaseId) {
+      return res.status(400).json({ success: false, error: 'Authenticated user required' });
     }
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
-      .select('_id supabaseId fullName email avatarUrl role')
-      .lean();
-    if (!user) {
+
+    // Get user from public.users
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, supabase_id, full_name, email, avatar_url, role')
+      .eq('supabase_id', supabaseId)
+      .single();
+
+    if (error || !user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
+
+    // If provider, fetch their profile too
     if (user.role === 'provider') {
-      const provider = await Provider.findOne({ userId: user._id })
-        .select('businessName description serviceCategories ratingAvg ratingCount')
-        .lean();
-      if (!provider) {
+      const { data: provider, error: providerError } = await supabase
+        .from('providers')
+        .select('id, business_name, description, rating_avg, rating_count, provider_categories(category_id)')
+        .eq('user_id', user.id)
+        .single();
+
+      if (providerError || !provider) {
         return res.status(404).json({ success: false, error: 'Provider profile not found' });
       }
-      const providerData = {
-        type: 'provider',
-        _id: provider._id,
-        businessName: provider.businessName,
-        description: provider.description,
-        serviceCategories: provider.serviceCategories,
-        ratingAvg: provider.ratingAvg,
-        ratingCount: provider.ratingCount,
-        fullName: user.fullName,
-        email: user.email,
-        avatarUrl: user.avatarUrl,
-        role: user.role,
-      };
-      return res.json({ success: true, data: providerData });
+
+      return res.json({
+        success: true,
+        data: {
+          type: 'provider',
+          id: provider.id,
+          business_name: provider.business_name,
+          description: provider.description,
+          rating_avg: provider.rating_avg,
+          rating_count: provider.rating_count,
+          service_categories: provider.provider_categories,
+          full_name: user.full_name,
+          email: user.email,
+          avatar_url: user.avatar_url,
+          role: user.role,
+        }
+      });
     }
-    const userData = { type: 'user', ...user };
-    return res.json({ success: true, data: userData });
+
+    // Customer
+    return res.json({
+      success: true,
+      data: { type: 'user', ...user }
+    });
+
   } catch (err) {
     console.error('Error fetching me:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
@@ -44,46 +61,44 @@ export const getMe = async (req, res) => {
 };
 
 export const getUser = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const user = await User.findById(id).select('supabaseId fullName avatarUrl role bio provider.services provider.rating'); 
-        
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                error: 'User not found'
-            });
-        }
-        
-        res.json({
-            success: true,
-            data: user
-        });
+  try {
+    const { id } = req.params;
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, supabase_id, full_name, avatar_url, role')
+      .eq('id', id)  // id here is the public.users UUID, not supabase_id
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
-    catch (error) {
-        console.error('Error fetching profile:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch profile'
-        });
-    }
-}
+
+    res.json({ success: true, data: user });
+
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch profile' });
+  }
+};
 
 export const listUsers = async (req, res) => {
   try {
-    const users = await User.find({ role: 'customer' })
-        .select('_id supabaseId fullName avatarUrl role email')
-        .lean();
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, supabase_id, full_name, avatar_url, role, email')
+      .eq('role', 'customer');
 
-    return res.json({
-      success: true,
-      data: { users }
-    });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, data: { users } });
+
   } catch (err) {
     console.error('Error fetching users:', err);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch users'
-    });
+    res.status(500).json({ success: false, error: 'Failed to fetch users' });
   }
-}
+};
+
+export default { getMe, getUser, listUsers };

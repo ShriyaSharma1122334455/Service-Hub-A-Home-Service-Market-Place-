@@ -3,14 +3,19 @@ import { supabase } from "./supabase"
 export const signUpWithRole = async (
   email: string,
   password: string,
-  role?: string
+  role?: string,
+  fullName?: string,
+  phone?: string
 ) => {
   // store role in user_metadata (lowercase expected by backend)
   return supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { role: role || 'customer' },
+      data: { role: role || 'customer',
+        phone: phone || null,
+        fullName: fullName || email.split("@")[0],
+       },
     },
   });
 }

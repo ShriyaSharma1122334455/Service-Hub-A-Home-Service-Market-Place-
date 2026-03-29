@@ -4,10 +4,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
-//API Imports
-import connectDB from './config/database.js';
+import  { checkSupabaseConnection } from './config/supabase.js';
+
+
 import testRoutes from './routes/testRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
@@ -15,44 +15,37 @@ import profileRoutes from './routes/profileRoutes.js';
 import providerRoutes from './routes/providerRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
-import authRoutes from './routes/authRoutes.js'; // Ensure this file exists at src/routes/authRoutes.js
+import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
-// Load environment variables
 dotenv.config();
 
-// Initialize Express app
 const app = express();
 
-// Connect to MongoDB
 if (process.env.NODE_ENV !== 'test') {
-  connectDB();
+  checkSupabaseConnection();
 }
 
 // Rate limiting
+
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,                   // max 10 attempts
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: { success: false, error: 'Too many login attempts' }
 });
 
-// Middleware
-app.use(helmet()); // Security headers
+app.use(helmet());
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true
 }));
-app.use(compression()); // Compress responses
-app.use(morgan('dev')); // HTTP request logger
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use('/api/auth/login', loginLimiter); // Apply rate limiting to login route
-
+app.use(compression());
+app.use(morgan('dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRoutes);
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
-// API Routes
 app.use('/api/test', testRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/profile', profileRoutes);
@@ -62,7 +55,6 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/users', userRoutes);
 
-// Basic routes
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to ServiceHub API',
@@ -76,11 +68,10 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    database: 'supabase'  // ✅ CHANGED: removed mongoose.connection.readyState check
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
@@ -88,7 +79,6 @@ app.use((req, res) => {
   });
 });
 
-// Error handler
 app.use((err, req, res, _next) => {
   console.error('❌ Error:', err);
   res.status(err.status || 500).json({
@@ -97,7 +87,6 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
@@ -108,11 +97,9 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Rejection:', err);
-  // Close server & exit process
   process.exit(1);
 });
 
-export default app; // Export app for testing
+export default app;

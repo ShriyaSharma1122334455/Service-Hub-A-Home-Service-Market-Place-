@@ -1,77 +1,154 @@
-/**
- * @fileoverview Service controller — CRUD operations + search/filter.
- * @module controllers/serviceController
- */
-import Service from '../models/Service.js';
- 
-/** List services with optional search and filter */
+import supabase from '../config/supabase.js';
+
 export const listServices = async (req, res) => {
   try {
     const { category, minPrice, maxPrice, search, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (category)  filter.categoryId = category;
-    if (search)    filter.name = { $regex: search, $options: 'i' };
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
-    }
-    const skip = (Number(page) - 1) * Number(limit);
-    const [services, total] = await Promise.all([
-      Service.find(filter)
-        .populate('categoryId', 'name slug')
-        .skip(skip).limit(Number(limit)).lean(),
-      Service.countDocuments(filter),
-    ]);
-    return res.json({ success: true, count: services.length, total, page: Number(page), data: services });
+
+    let query = supabase
+      .from('services')
+      .select(`*, category:categories(name, slug)`)
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    // Filters
+    if (category) query = query.eq('category_id', category);
+    if (search)   query = query.ilike('name', `%${search}%`); // replaces $regex
+    if (minPrice) query = query.gte('base_price', Number(minPrice));
+    if (maxPrice) query = query.lte('base_price', Number(maxPrice));
+
+    // Pagination
+    const from = (Number(page) - 1) * Number(limit);
+    const to   = from + Number(limit) - 1;
+    query = query.range(from, to);
+
+    const { data: services, error, count } = await query;
+
+    if (error) return res.status(400).json({ success: false, error: error.message });
+
+    return res.json({
+      success: true,
+      count: services.length,
+      total: count,
+      page: Number(page),
+      data: services
+    });
+
   } catch (err) {
     console.error('listServices error:', err);
     res.status(500).json({ success: false, error: 'Failed to list services' });
   }
 };
- 
-/** Get single service by ID */
+
 export const getService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id)
-      .populate('categoryId', 'name slug')
-      .lean();
-    if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
+    const { data: service, error } = await supabase
+      .from('services')
+      .select(`*, category:categories(name, slug)`)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !service) {
+      return res.status(404).json({ success: false, error: 'Service not found' });
+    }
+
     res.json({ success: true, data: service });
-  } catch (_err) {
+
+  } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch service' });
   }
 };
- 
-/** Create service — provider only */
+
 export const createService = async (req, res) => {
   try {
-    const service = await Service.create({ ...req.body, providerId: req.user.id });
+    const { category_id, name, description, base_price, duration_minutes, sub_category } = req.body;
+
+    if (!category_id || !name || !base_price || !duration_minutes) {
+      return res.status(400).json({ success: false, error: 'category_id, name, base_price and duration_minutes are required' });
+    }
+
+    // Get provider id from user
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', req.user.id)  // req.user.id is supabase_id here — need internal user first
+      .single();
+
+    // Actually need internal user id first
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_id', req.user.id)
+      .single();
+
+    const { data: providerProfile } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!providerProfile) {
+      return res.status(403).json({ success: false, error: 'Provider profile not found' });
+    }
+
+    const { data: service, error } = await supabase
+      .from('services')
+      .insert({
+        provider_id:      providerProfile.id,
+        category_id,
+        name,
+        description,
+        base_price,
+        duration_minutes,
+        sub_category:     sub_category || null,
+        is_active:        true
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(400).json({ success: false, error: error.message });
+
     res.status(201).json({ success: true, data: service });
+
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    console.error('createService error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create service' });
   }
 };
- 
-/** Update service — provider only */
+
 export const updateService = async (req, res) => {
   try {
-    const service = await Service.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
+    const { data: service, error } = await supabase
+      .from('services')
+      .update({ ...req.body, updated_at: new Date() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error || !service) {
+      return res.status(404).json({ success: false, error: 'Service not found' });
+    }
+
     res.json({ success: true, data: service });
+
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: 'Failed to update service' });
   }
 };
- 
-/** Delete service — provider only */
+
 export const deleteService = async (req, res) => {
   try {
-    const service = await Service.findByIdAndDelete(req.params.id);
-    if (!service) return res.status(404).json({ success: false, error: 'Service not found' });
+    const { error } = await supabase
+      .from('services')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) return res.status(404).json({ success: false, error: 'Service not found' });
+
     res.json({ success: true, message: 'Service deleted' });
-  } catch (_err) {
+
+  } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete service' });
   }
 };
 
+export default { listServices, getService, createService, updateService, deleteService };

@@ -44,7 +44,7 @@ const clearAuth = () => {
 };
 
 const App = () => {
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
@@ -59,7 +59,9 @@ const App = () => {
     return null;
   });
   const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredAuth());
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => !!loadStoredAuth(),
+  );
   const authRestored = true;
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
@@ -83,8 +85,7 @@ const App = () => {
 
   // Protected paths require a logged-in session
   const isProtectedPath =
-    basePath === "/dashboard" ||
-    basePath.startsWith("/profile");
+    basePath === "/dashboard" || basePath.startsWith("/profile");
 
   // Redirect unauthenticated users away from protected pages
   useEffect(() => {
@@ -123,19 +124,6 @@ const App = () => {
 
       // Sync Supabase user → MongoDB on every login (idempotent upsert).
       // This covers: first-time login, email-confirmation-delayed signups, and role updates.
-      if (accessToken) {
-        const metaRole =
-          (supabaseUser?.user_metadata?.role as string) ||
-          String(role).toLowerCase();
-        fetch(`${API_BASE}/api/profile/sync`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ fullName: name, role: metaRole }),
-        }).catch((e) => console.error("Sync error:", e));
-      }
 
       // fetch full profile from backend
       let profile = null;
@@ -164,11 +152,11 @@ const App = () => {
       };
 
       const userData = {
-        id: profile?._id || "1",
-        name: profile?.fullName || name,
+        id: profile?.id || "1",
+        name: profile?.full_name || name,
         email,
         role: normalizeRole(profile?.role, role),
-        avatar: profile?.avatarUrl || avatar,
+        avatar: profile?.avatar_url || avatar,
       } as User;
 
       setUser(userData);
@@ -202,6 +190,8 @@ const App = () => {
     email: string,
     role: UserRole,
     password?: string,
+    name?: string,
+    phone?: string,
   ) => {
     try {
       if (!password) throw new Error("Password required");
@@ -211,37 +201,10 @@ const App = () => {
         email,
         password,
         roleLower,
+        name,
+        phone,
       );
       if (signupError) throw signupError;
-
-      // Sign in to obtain token and sync with backend
-      const { data: signinData, error: signinError } = await signIn(
-        email,
-        password,
-      );
-      if (signinError) throw signinError;
-      const token = signinData?.session?.access_token;
-      if (token) {
-        try {
-          const resp = await fetch(`${API_BASE}/api/profile/sync`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              fullName: email.split("@")[0],
-              role: roleLower,
-            }),
-          });
-          if (!resp.ok) {
-            const text = await resp.text();
-            console.error("Sync failed", resp.status, text);
-          }
-        } catch (err) {
-          console.error("Sync request error:", err);
-        }
-      }
 
       // complete login flow
       await handleLogin(email, role, password);
@@ -268,7 +231,9 @@ const App = () => {
     }
 
     if (bookServiceId) {
-      return <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} />;
+      return (
+        <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} />
+      );
     }
 
     switch (basePath) {
