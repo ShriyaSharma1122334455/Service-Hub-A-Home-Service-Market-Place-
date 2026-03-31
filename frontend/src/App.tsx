@@ -186,17 +186,46 @@ const App = () => {
     navigate("/");
   };
 
+  // const handleRegister = async (
+  //   email: string,
+  //   role: UserRole,
+  //   password?: string,
+  //   name?: string,
+  //   phone?: string,
+  // ) => {
+  //   try {
+  //     if (!password) throw new Error("Password required");
+  //     // ensure role stored in Supabase as lowercase (backend expects lowercase)
+  //     const roleLower = String(role).toLowerCase();
+  //     const { error: signupError } = await signUpWithRole(
+  //       email,
+  //       password,
+  //       roleLower,
+  //       name,
+  //       phone,
+  //     );
+  //     if (signupError) throw signupError;
+
+  //     // complete login flow
+  //     await handleLogin(email, role, password);
+  //   } catch (err) {
+  //     console.error("Register failed", err);
+  //     // TODO: show UI error
+  //   }
+  // };
+
   const handleRegister = async (
     email: string,
     role: UserRole,
     password?: string,
     name?: string,
     phone?: string,
-  ) => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
-      if (!password) throw new Error("Password required");
-      // ensure role stored in Supabase as lowercase (backend expects lowercase)
+      if (!password) return { success: false, message: "Password required" };
+
       const roleLower = String(role).toLowerCase();
+
       const { error: signupError } = await signUpWithRole(
         email,
         password,
@@ -204,13 +233,26 @@ const App = () => {
         name,
         phone,
       );
-      if (signupError) throw signupError;
 
-      // complete login flow
+      if (signupError) {
+        if (signupError.message?.includes("already registered")) {
+          return {
+            success: false,
+            message:
+              "This email is already registered. Please sign in instead.",
+          };
+        }
+        return { success: false, message: signupError.message };
+      }
+
       await handleLogin(email, role, password);
+      return { success: true };
     } catch (err) {
       console.error("Register failed", err);
-      // TODO: show UI error
+      return {
+        success: false,
+        message: "An unexpected error occurred. Please try again.",
+      };
     }
   };
 
