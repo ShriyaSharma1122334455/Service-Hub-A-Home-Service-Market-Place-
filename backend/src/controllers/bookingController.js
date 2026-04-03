@@ -20,6 +20,17 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ success: false, error: 'provider_id, service_id and scheduled_at are required' });
     }
 
+    // Block bookings with unverified providers
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('verification_status')
+      .eq('id', provider_id)
+      .single();
+
+    if (!provider || provider.verification_status !== 'verified') {
+      return res.status(403).json({ success: false, error: 'Bookings are only allowed with verified providers' });
+    }
+
     // Get internal customer id
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) {
