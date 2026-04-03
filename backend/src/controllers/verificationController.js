@@ -8,6 +8,8 @@
  *  - submitVerification:  Final submission → call NSOPW check
  *  - getStatus:           Retrieve verification status for a user
  *
+ * Response shape: { success: boolean, data: object|null, error: string|null }
+ *
  * @module controllers/verificationController
  */
 
@@ -40,6 +42,12 @@ const mimeToExt = (mime) => {
   return map[mime] || 'jpg';
 };
 
+/** Allowed image mimetypes */
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** Maximum file size in bytes (5 MB) */
+const MAX_FILE_SIZE = 5242880;
+
 // ── 1. GET /api/verification/prefill/:userId ─────────────────────────────
 
 export const getPrefill = async (req, res) => {
@@ -48,26 +56,28 @@ export const getPrefill = async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('full_name, email, phone')
+      .select('full_name, email, phone, date_of_birth')
       .eq('id', userId)
       .single();
 
     if (error || !user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
-    // Only return safe, non-sensitive fields
+    // Only return safe, non-sensitive fields — never password, tokens, supabase_id
     return res.json({
       success: true,
       data: {
         fullName: user.full_name,
         email: user.email,
         phone: user.phone || null,
+        dateOfBirth: user.date_of_birth || null,
       },
+      error: null,
     });
   } catch (err) {
     console.error('getPrefill error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to fetch prefill data' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to fetch prefill data' });
   }
 };
 
@@ -77,60 +87,53 @@ export const uploadId = async (req, res) => {
   try {
     const file = req.file;
     if (!file) {
-      return res.status(400).json({ success: false, error: 'No file uploaded. Field name must be "document".' });
+      return res.status(400).json({ success: false, data: null, error: 'No file uploaded. Field name must be "document".' });
     }
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.mimetype)) {
+    if (!ALLOWED_TYPES.includes(file.mimetype)) {
       return res.status(400).json({
         success: false,
+        data: null,
         error: `Invalid file type: ${file.mimetype}. Allowed: jpeg, png, webp`,
       });
     }
 
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      return res.status(400).json({ success: false, error: 'File too large. Maximum size: 5MB' });
+    // Validate file size (5 MB = 5242880 bytes)
+    if (file.size > MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, data: null, error: 'File too large. Maximum size: 5MB' });
     }
 
     // Get internal user
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
     const documentType = req.body.documentType || 'drivers_license';
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage — path: userId/id-document-timestamp.ext
     const ext = mimeToExt(file.mimetype);
     const destPath = generateVerificationPath(internalUser.id, 'id-document', ext);
     const uploadResult = await uploadVerificationDocument(file.buffer, file.mimetype, destPath);
 
     if (!uploadResult.success) {
-      return res.status(500).json({ success: false, error: uploadResult.error });
+      return res.status(500).json({ success: false, data: null, error: uploadResult.error });
     }
 
-    // Get a signed URL for the AI service to download the image
-    const signedResult = await getSignedUrl(uploadResult.path, 600);
-    if (!signedResult.success) {
-      return res.status(500).json({ success: false, error: 'Failed to generate signed URL for AI processing' });
-    }
-
-    // Call AI OCR service
+    // Call AI OCR service at /ai/ocr/parse-id as multipart POST
     let ocrResult = null;
     try {
-      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/document`, {
+      const formData = new FormData();
+      formData.append('document', new Blob([file.buffer], { type: file.mimetype }), `id-document.${ext}`);
+      formData.append('document_type', documentType);
+
+      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/ocr/parse-id`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
-        body: JSON.stringify({
-          image_url: signedResult.signedUrl,
-          document_type: documentType,
-          user_id: internalUser.id,
-        }),
+        body: formData,
       });
 
       if (aiResp.ok) {
@@ -145,10 +148,11 @@ export const uploadId = async (req, res) => {
       ocrResult = { status: 'manual_review', error: 'OCR service unavailable' };
     }
 
-    // Upsert the Verification record
-    const extractedName = ocrResult?.extracted_data?.full_name || null;
-    const extractedDob = ocrResult?.extracted_data?.date_of_birth || null;
+    // Extract parsed fields from OCR result
+    const extractedName = ocrResult?.extractedName || ocrResult?.extracted_data?.full_name || null;
+    const extractedDob = ocrResult?.extractedDOB || ocrResult?.extracted_data?.date_of_birth || null;
 
+    // Upsert a row in public.verifications
     const { data: verification, error: upsertError } = await supabase
       .from('verifications')
       .upsert(
@@ -168,11 +172,9 @@ export const uploadId = async (req, res) => {
       .single();
 
     if (upsertError) {
-      // If upsert fails because there's no unique constraint on user_id,
-      // try insert then update pattern
+      // Fallback: try find-then-update if upsert fails (no unique constraint)
       console.error('Verification upsert error:', upsertError.message);
 
-      // Try to find existing record
       const { data: existing } = await supabase
         .from('verifications')
         .select('id')
@@ -191,6 +193,7 @@ export const uploadId = async (req, res) => {
             extracted_name: extractedName,
             extracted_dob: extractedDob,
             verification_status: 'pending',
+            updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
       } else {
@@ -214,10 +217,11 @@ export const uploadId = async (req, res) => {
         extractedDob,
         documentPath: uploadResult.path,
       },
+      error: null,
     });
   } catch (err) {
     console.error('uploadId error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to process ID document' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to process ID document' });
   }
 };
 
@@ -227,33 +231,35 @@ export const uploadSelfie = async (req, res) => {
   try {
     const file = req.file;
     if (!file) {
-      return res.status(400).json({ success: false, error: 'No file uploaded. Field name must be "selfie".' });
+      return res.status(400).json({ success: false, data: null, error: 'No file uploaded. Field name must be "selfie".' });
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.mimetype)) {
+    // Validate file type
+    if (!ALLOWED_TYPES.includes(file.mimetype)) {
       return res.status(400).json({
         success: false,
+        data: null,
         error: `Invalid file type: ${file.mimetype}. Allowed: jpeg, png, webp`,
       });
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      return res.status(400).json({ success: false, error: 'File too large. Maximum size: 5MB' });
+    // Validate file size (5 MB = 5242880 bytes)
+    if (file.size > MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, data: null, error: 'File too large. Maximum size: 5MB' });
     }
 
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
-    // Upload selfie to storage
+    // Upload selfie to storage — path: userId/selfie-timestamp.ext
     const ext = mimeToExt(file.mimetype);
     const destPath = generateVerificationPath(internalUser.id, 'selfie', ext);
     const uploadResult = await uploadVerificationDocument(file.buffer, file.mimetype, destPath);
 
     if (!uploadResult.success) {
-      return res.status(500).json({ success: false, error: uploadResult.error });
+      return res.status(500).json({ success: false, data: null, error: uploadResult.error });
     }
 
     // Get existing verification record to find the ID document
@@ -268,32 +274,45 @@ export const uploadSelfie = async (req, res) => {
     if (!verification?.id_document_url) {
       return res.status(400).json({
         success: false,
+        data: null,
         error: 'Please upload your ID document first before taking a selfie.',
       });
     }
 
-    // Get signed URLs for both images
+    // Download the stored ID document so we can send both buffers to AI
     const idSignedResult = await getSignedUrl(verification.id_document_url, 600);
-    const selfieSignedResult = await getSignedUrl(uploadResult.path, 600);
-
-    if (!idSignedResult.success || !selfieSignedResult.success) {
-      return res.status(500).json({ success: false, error: 'Failed to generate signed URLs for AI processing' });
+    if (!idSignedResult.success) {
+      return res.status(500).json({ success: false, data: null, error: 'Failed to generate signed URL for ID document' });
     }
 
-    // Call AI face match service
+    let idImageBuffer = null;
+    try {
+      const idResp = await fetch(idSignedResult.signedUrl);
+      if (idResp.ok) {
+        const arrBuf = await idResp.arrayBuffer();
+        idImageBuffer = Buffer.from(arrBuf);
+      }
+    } catch (dlErr) {
+      console.error('Failed to download ID image for face match:', dlErr.message);
+    }
+
+    if (!idImageBuffer) {
+      return res.status(500).json({ success: false, data: null, error: 'Failed to retrieve ID document for face matching' });
+    }
+
+    // Call AI face match service at /ai/face/match as multipart POST
     let faceMatchResult = null;
     try {
-      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/face`, {
+      const formData = new FormData();
+      formData.append('id_image', new Blob([idImageBuffer], { type: 'image/jpeg' }), 'id-document.jpg');
+      formData.append('selfie', new Blob([file.buffer], { type: file.mimetype }), `selfie.${ext}`);
+
+      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/face/match`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
-        body: JSON.stringify({
-          id_image_url: idSignedResult.signedUrl,
-          selfie_url: selfieSignedResult.signedUrl,
-          user_id: internalUser.id,
-        }),
+        body: formData,
       });
 
       if (aiResp.ok) {
@@ -308,12 +327,13 @@ export const uploadSelfie = async (req, res) => {
       faceMatchResult = { status: 'manual_review', error: 'Face matching service unavailable' };
     }
 
-    // Update verification record
+    // Update verification record with selfie_url and face_match_result
     await supabase
       .from('verifications')
       .update({
         selfie_url: uploadResult.path,
         face_match_result: faceMatchResult,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', verification.id);
 
@@ -323,10 +343,11 @@ export const uploadSelfie = async (req, res) => {
         faceMatchResult,
         selfiePath: uploadResult.path,
       },
+      error: null,
     });
   } catch (err) {
     console.error('uploadSelfie error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to process selfie' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to process selfie' });
   }
 };
 
@@ -336,7 +357,7 @@ export const submitVerification = async (req, res) => {
   try {
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
     // Fetch the latest verification record
@@ -349,32 +370,37 @@ export const submitVerification = async (req, res) => {
       .single();
 
     if (!verification) {
-      return res.status(400).json({ success: false, error: 'No verification record found. Please start the verification process.' });
+      return res.status(400).json({ success: false, data: null, error: 'No verification record found. Please start the verification process.' });
     }
 
-    if (!verification.id_document_url) {
-      return res.status(400).json({ success: false, error: 'ID document not uploaded yet.' });
+    // Confirm both id_document_url and selfie_url are saved
+    if (!verification.id_document_url || !verification.selfie_url) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'You must complete the ID upload and selfie steps first.',
+      });
     }
 
-    if (!verification.selfie_url) {
-      return res.status(400).json({ success: false, error: 'Selfie not uploaded yet.' });
-    }
-
-    // Call NSOPW check using extracted name
+    // Parse firstName and lastName from the extracted_name field in the OCR result
     const fullName = verification.extracted_name || internalUser.full_name;
-    let nsopwResult = null;
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || nameParts[0] || '';
 
+    // Call AI NSOPW check at /ai/nsopw/check as JSON POST
+    let nsopwResult = null;
     try {
-      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/nsopw`, {
+      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/nsopw/check`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
         body: JSON.stringify({
-          full_name: fullName,
+          firstName,
+          lastName,
           state: null,
-          user_id: internalUser.id,
         }),
       });
 
@@ -383,14 +409,14 @@ export const submitVerification = async (req, res) => {
       } else {
         const errText = await aiResp.text();
         console.error('AI NSOPW error:', aiResp.status, errText);
-        nsopwResult = { status: 'manual_review', error: 'NSOPW check returned an error' };
+        nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [], error: 'NSOPW check returned an error' };
       }
     } catch (aiErr) {
       console.error('AI NSOPW unreachable:', aiErr.message);
-      nsopwResult = { status: 'manual_review', is_clear: true, used_fallback: true };
+      nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [], selfDeclarationRequired: true };
     }
 
-    // Update verification record
+    // Update verification record: save nsopw_result, set status to pending, set submitted_at to now
     const now = new Date().toISOString();
     await supabase
       .from('verifications')
@@ -398,10 +424,11 @@ export const submitVerification = async (req, res) => {
         nsopw_result: nsopwResult,
         verification_status: 'pending',
         submitted_at: now,
+        updated_at: now,
       })
       .eq('id', verification.id);
 
-    // Also update the user's and provider's verification_status to pending
+    // Also update the user's verification_status to pending
     await supabase
       .from('users')
       .update({ verification_status: 'pending' })
@@ -418,14 +445,15 @@ export const submitVerification = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        message: 'Verification submitted successfully. Your identity is under review.',
+        status: 'pending',
         submittedAt: now,
         nsopwResult,
       },
+      error: null,
     });
   } catch (err) {
     console.error('submitVerification error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to submit verification' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to submit verification' });
   }
 };
 
@@ -448,13 +476,14 @@ export const getStatus = async (req, res) => {
       return res.json({
         success: true,
         data: { verification_status: 'unverified' },
+        error: null,
       });
     }
 
-    return res.json({ success: true, data: verification });
+    return res.json({ success: true, data: verification, error: null });
   } catch (err) {
     console.error('getStatus error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to fetch verification status' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to fetch verification status' });
   }
 };
 
