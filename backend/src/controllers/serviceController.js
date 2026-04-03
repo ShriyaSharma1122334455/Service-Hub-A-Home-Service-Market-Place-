@@ -62,8 +62,23 @@ export const createService = async (req, res) => {
   try {
     const { category_id, name, description, base_price, duration_minutes, sub_category } = req.body;
 
-    if (!category_id || !name || !base_price || !duration_minutes) {
+    if (category_id === undefined || category_id === null || !name || base_price === undefined || base_price === null || duration_minutes === undefined || duration_minutes === null) {
       return res.status(400).json({ success: false, error: 'category_id, name, base_price and duration_minutes are required' });
+    }
+
+    const price = Number(base_price);
+    const duration = Number(duration_minutes);
+
+    if (Number.isNaN(price) || Number.isNaN(duration)) {
+      return res.status(400).json({ success: false, error: 'base_price and duration_minutes must be numeric' });
+    }
+
+    if (price < 0) {
+      return res.status(400).json({ success: false, error: 'base_price must be >= 0' });
+    }
+
+    if (duration < 15) {
+      return res.status(400).json({ success: false, error: 'duration_minutes must be >= 15' });
     }
 
     // Get provider id from user
@@ -97,8 +112,8 @@ export const createService = async (req, res) => {
         category_id,
         name,
         description,
-        base_price,
-        duration_minutes,
+        base_price:       price,
+        duration_minutes: duration,
         sub_category:     sub_category || null,
         is_active:        true
       })
@@ -117,9 +132,33 @@ export const createService = async (req, res) => {
 
 export const updateService = async (req, res) => {
   try {
+    const updates = { ...req.body };
+
+    if (updates.base_price !== undefined && updates.base_price !== null) {
+      const price = Number(updates.base_price);
+      if (Number.isNaN(price)) {
+        return res.status(400).json({ success: false, error: 'base_price must be numeric' });
+      }
+      if (price < 0) {
+        return res.status(400).json({ success: false, error: 'base_price must be >= 0' });
+      }
+      updates.base_price = price;
+    }
+
+    if (updates.duration_minutes !== undefined && updates.duration_minutes !== null) {
+      const duration = Number(updates.duration_minutes);
+      if (Number.isNaN(duration)) {
+        return res.status(400).json({ success: false, error: 'duration_minutes must be numeric' });
+      }
+      if (duration < 15) {
+        return res.status(400).json({ success: false, error: 'duration_minutes must be >= 15' });
+      }
+      updates.duration_minutes = duration;
+    }
+
     const { data: service, error } = await supabase
       .from('services')
-      .update({ ...req.body, updated_at: new Date() })
+      .update({ ...updates, updated_at: new Date() })
       .eq('id', req.params.id)
       .select()
       .single();
