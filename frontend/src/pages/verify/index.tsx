@@ -1,153 +1,116 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  User as UserIcon,
-  Upload,
-  Camera,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  ArrowRight,
-  ArrowLeft,
-  RotateCcw,
-  Shield,
-  FileText,
-  ScanFace,
-  Send,
-  PartyPopper,
-} from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
 import fetchApi from "../../lib/api";
+import { supabase } from "../../lib/supabase";
+import {
+  Camera,
+  Upload,
+  Check,
+  ChevronRight,
+  X,
+  AlertCircle,
+  Loader2,
+  FileImage,
+} from "lucide-react";
 
 interface VerifyPageProps {
   userId: string;
   onNavigate: (path: string) => void;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-const STEP_LABELS = [
-  "Personal Info",
-  "Upload ID",
-  "Selfie",
-  "Review",
-  "Complete",
-];
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// ── Progress Bar ─────────────────────────────────────────────────────────
-
-const ProgressBar: React.FC<{ current: Step }> = ({ current }) => (
-  <div className="flex items-center gap-1 mb-8">
-    {STEP_LABELS.map((label, i) => {
-      const stepNum = (i + 1) as Step;
-      const isActive = stepNum === current;
-      const isDone = stepNum < current;
-      return (
-        <React.Fragment key={label}>
-          <div className="flex flex-col items-center flex-1">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${isDone ? "bg-teal-600 border-teal-600 text-white" : ""}
-                ${isActive ? "bg-white border-teal-600 text-teal-600 shadow-md scale-110" : ""}
-                ${!isDone && !isActive ? "bg-slate-100 border-slate-200 text-slate-400" : ""}`}
-            >
-              {isDone ? <CheckCircle2 size={16} /> : stepNum}
-            </div>
-            <span
-              className={`text-[10px] font-semibold mt-1 whitespace-nowrap
-                ${isActive ? "text-teal-600" : "text-slate-400"}`}
-            >
-              {label}
-            </span>
-          </div>
-          {i < STEP_LABELS.length - 1 && (
-            <div
-              className={`h-0.5 flex-1 -mt-4 rounded-full transition-all
-                ${stepNum < current ? "bg-teal-500" : "bg-slate-200"}`}
-            />
-          )}
-        </React.Fragment>
-      );
-    })}
-  </div>
-);
-
-// ── Main Component ───────────────────────────────────────────────────────
-
-export const VerifyPage: React.FC<VerifyPageProps> = ({
-  userId,
-  onNavigate,
-}) => {
-  const [step, setStep] = useState<Step>(1);
+export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) => {
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Step 1 state
+  // Step 1: Prefill & Doc Type
   const [prefill, setPrefill] = useState<{
     fullName: string;
     email: string;
-    phone: string | null;
+    phone: string;
+    dateOfBirth: string;
   } | null>(null);
-  const [documentType, setDocumentType] = useState<string>("drivers_license");
+  const [documentType, setDocumentType] = useState<"" | "passport" | "drivers_license">("");
 
-  // Step 2 state
+  // Step 2: ID Upload
   const [idFile, setIdFile] = useState<File | null>(null);
-  const [ocrResult, setOcrResult] = useState<{
-    extractedName?: string;
-    extractedDob?: string;
-    documentPath?: string;
-    ocrResult?: { confidence_score?: number; extracted_data?: { id_number?: string } };
-  } | null>(null);
+  const [idPreview, setIdPreview] = useState<string | null>(null);
+  const [ocrResult, setOcrResult] = useState<any>(null);
 
-  // Step 3 state
-  const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState(false);
-  const [faceResult, setFaceResult] = useState<{
-    faceMatchResult?: {
-      similarity_score?: number;
-      is_match?: boolean;
-      status?: string;
-    };
-  } | null>(null);
+  // Step 3: Selfie Capture
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraDenied, setCameraDenied] = useState(false);
+  const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [faceMatchResult, setFaceMatchResult] = useState<any>(null);
 
-  // Step 4 state
-  const [submitting, setSubmitting] = useState(false);
+  // Step 5: Confirmation
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-
-  // ── Step 1: Load prefill data ────────────────────────────────────────
-
+  // --- Step 1 logic ---
   useEffect(() => {
     if (!userId) return;
-    let cancelled = false;
 
-    const load = async () => {
+    let mounted = true;
+    const fetchPrefill = async () => {
       setLoading(true);
-      const resp = await fetchApi<{
-        fullName: string;
-        email: string;
-        phone: string | null;
-      }>(`/verification/prefill/${userId}`);
-
-      if (!cancelled) {
-        if (resp.success && resp.data) {
-          setPrefill(resp.data);
-        } else {
-          setError(resp.error || "Failed to load user data");
-        }
-        setLoading(false);
+      setError(null);
+      const res = await fetchApi<any>(`/verification/prefill/${userId}`);
+      if (!mounted) return;
+      if (res.success && res.data) {
+        setPrefill({
+          fullName: res.data.fullName || "",
+          email: res.data.email || "",
+          phone: res.data.phone || "",
+          dateOfBirth: res.data.dateOfBirth || "",
+        });
+      } else {
+        setError(res.error || "Failed to load prefill data.");
       }
+      setLoading(false);
     };
-    load();
-    return () => { cancelled = true; };
+
+    fetchPrefill();
+    return () => {
+      mounted = false;
+    };
   }, [userId]);
 
-  // ── Step 2: Upload ID ────────────────────────────────────────────────
+  // --- Step 2 logic ---
+  const handleIdDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    validateAndSetId(file);
+  };
 
-  const handleIdUpload = async () => {
-    if (!idFile) return;
+  const handleIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      validateAndSetId(e.target.files[0]);
+    }
+  };
+
+  const validateAndSetId = (file: File) => {
+    setError(null);
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError("Please upload a valid image (JPEG, PNG, WEBP).");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File is too large. Maximum size is 5MB.");
+      return;
+    }
+    setIdFile(file);
+    setIdPreview(URL.createObjectURL(file));
+  };
+
+  const uploadIdAndScan = async () => {
+    if (!idFile || !documentType) return;
     setLoading(true);
     setError(null);
 
@@ -156,592 +119,642 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({
     formData.append("documentType", documentType);
 
     try {
-      const { data: { session } } = await (await import("../../lib/supabase")).supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-
-      const resp = await fetch(`${API_BASE}/api/verification/upload-id`, {
+      
+      const res = await fetch(`${API_BASE}/api/verification/upload-id`, {
         method: "POST",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 
-      const json = await resp.json();
-
-      if (json.success) {
-        setOcrResult(json.data);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setOcrResult(json.data.ocrResult);
       } else {
-        setError(json.error || "Failed to process ID document");
+        setError(json.error || "Failed to upload ID document.");
       }
     } catch (err) {
-      setError("Network error uploading ID document");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Step 3: Camera / Selfie ──────────────────────────────────────────
-
-  const startCamera = useCallback(async () => {
+  // --- Step 3 logic ---
+  const startCamera = async () => {
+    setCameraDenied(false);
+    setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
-      });
-      streamRef.current = stream;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play();
       }
-      setCameraActive(true);
-      setCameraError(false);
-    } catch {
-      setCameraError(true);
-      setCameraActive(false);
+    } catch (err) {
+      console.error("Camera access denied or failed", err);
+      setCameraDenied(true);
     }
-  }, []);
+  };
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
     }
-    setCameraActive(false);
-  }, []);
+  };
 
-  const capturePhoto = useCallback(() => {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(videoRef.current, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          setSelfieBlob(blob);
-          stopCamera();
-        }
-      },
-      "image/jpeg",
-      0.9,
-    );
-  }, [stopCamera]);
-
-  useEffect(() => {
-    if (step === 3 && !selfieBlob && !cameraError) {
-      startCamera();
+  const takePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            setSelfieBlob(blob);
+            setSelfiePreview(URL.createObjectURL(blob));
+            stopCamera();
+          }
+        }, "image/jpeg");
+      }
     }
-    return () => {
-      if (step !== 3) stopCamera();
-    };
-  }, [step, selfieBlob, cameraError, startCamera, stopCamera]);
+  };
 
-  const handleSelfieUpload = async (blob: Blob) => {
+  const retakePhoto = () => {
+    setSelfieBlob(null);
+    setSelfiePreview(null);
+    startCamera();
+  };
+
+  const handleSelfieFallbackChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setError("Please upload a valid image (JPEG, PNG, WEBP).");
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setError("File is too large. Maximum size is 5MB.");
+        return;
+      }
+      setSelfieBlob(file);
+      setSelfiePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const uploadSelfieAndMatch = async () => {
+    if (!selfieBlob) return;
     setLoading(true);
     setError(null);
 
     const formData = new FormData();
-    formData.append("selfie", blob, "selfie.jpg");
+    formData.append("selfie", selfieBlob, "selfie.jpg");
 
     try {
-      const { data: { session } } = await (await import("../../lib/supabase")).supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-
-      const resp = await fetch(`${API_BASE}/api/verification/upload-selfie`, {
+      
+      const res = await fetch(`${API_BASE}/api/verification/upload-selfie`, {
         method: "POST",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       });
 
-      const json = await resp.json();
-      if (json.success) {
-        setFaceResult(json.data);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setFaceMatchResult(json.data.faceMatchResult);
       } else {
-        setError(json.error || "Failed to process selfie");
+        setError(json.error || "Failed to upload selfie.");
       }
-    } catch {
-      setError("Network error uploading selfie");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFileSelfieFallback = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelfieBlob(file);
-    await handleSelfieUpload(file);
-  };
-
-  // ── Step 4: Submit ───────────────────────────────────────────────────
-
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setError(null);
-
-    const resp = await fetchApi<{ submittedAt: string }>(`/verification/submit`, {
-      method: "POST",
-    });
-
-    if (resp.success && resp.data) {
-      setSubmittedAt(resp.data.submittedAt);
-      setStep(5);
-    } else {
-      setError(resp.error || "Failed to submit verification");
+  useEffect(() => {
+    if (currentStep === 3 && !selfieBlob && !cameraDenied) {
+      startCamera();
     }
-    setSubmitting(false);
+    return () => {
+      stopCamera();
+    };
+  }, [currentStep, cameraDenied, selfieBlob]); // eslint-disable-line
+
+  // --- Step 4 logic ---
+  const submitVerification = async () => {
+    setLoading(true);
+    setError(null);
+    const res = await fetchApi<any>("/verification/submit", { method: "POST" });
+    if (res.success && res.data) {
+      setSubmittedAt(res.data.submittedAt);
+      setCurrentStep(5);
+    } else {
+      setError(res.error || "Failed to submit verification.");
+    }
+    setLoading(false);
   };
 
-  // ── Render Steps ─────────────────────────────────────────────────────
+  // --- Render helpers ---
+  const steps = ["Details", "ID Upload", "Selfie", "Review", "Done"];
 
-  const renderStep1 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <UserIcon className="h-7 w-7 text-teal-600" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900">Personal Information</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Confirm your details before starting verification
-        </p>
-      </div>
+  return (
+    <div className="min-h-[calc(100vh-80px)] py-12 px-4 bg-slate-50">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-3xl font-bold text-slate-900 mb-8 text-center">
+          Identity Verification
+        </h1>
 
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
-        </div>
-      ) : prefill ? (
-        <>
-          <div className="space-y-3">
-            {[
-              { label: "Full Name", value: prefill.fullName },
-              { label: "Email", value: prefill.email },
-              { label: "Phone", value: prefill.phone || "Not provided" },
-            ].map((field) => (
-              <div key={field.label} className="p-3 bg-slate-50 rounded-xl">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  {field.label}
-                </p>
-                <p className="text-sm font-medium text-slate-800 mt-0.5">
-                  {field.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-xl">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Document Type
-            </p>
-            <div className="flex gap-3">
-              {[
-                { value: "drivers_license", label: "Driver's License" },
-                { value: "passport", label: "Passport" },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setDocumentType(opt.value)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all
-                    ${documentType === opt.value
-                      ? "border-teal-500 bg-teal-50 text-teal-700"
-                      : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+        {/* Progress Indicator */}
+        <div className="flex items-center justify-between mb-8 px-2 overflow-x-auto">
+          {steps.map((label, idx) => {
+            const stepNum = idx + 1;
+            const isCompleted = currentStep > stepNum;
+            const isCurrent = currentStep === stepNum;
+            return (
+              <div key={label} className="flex flex-col items-center flex-1 min-w-[80px]">
+                <div
+                  className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm z-10 mb-2 transition-colors ${
+                    isCompleted
+                      ? "bg-teal-500 text-white"
+                      : isCurrent
+                        ? "bg-teal-600 text-white ring-4 ring-teal-100"
+                        : "bg-slate-200 text-slate-400"
+                  }`}
                 >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={() => setStep(2)}
-            className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
-          >
-            Continue <ArrowRight size={16} />
-          </button>
-        </>
-      ) : null}
-    </div>
-  );
-
-  const renderStep2 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <FileText className="h-7 w-7 text-teal-600" />
+                  {isCompleted ? <Check className="h-4 w-4" /> : stepNum}
+                </div>
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wider ${
+                    isCurrent ? "text-teal-700" : "text-slate-400"
+                  }`}
+                >
+                  {label}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        <h2 className="text-xl font-bold text-slate-900">Upload ID Document</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Upload a clear photo of your {documentType === "passport" ? "passport" : "driver's license"}
-        </p>
-      </div>
 
-      {!ocrResult ? (
-        <>
-          <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer hover:border-teal-400 hover:bg-teal-50/30 transition-all">
-            <Upload className="h-10 w-10 text-slate-400 mb-2" />
-            <span className="text-sm font-semibold text-slate-600">
-              {idFile ? idFile.name : "Click to select file"}
-            </span>
-            <span className="text-xs text-slate-400 mt-1">
-              JPEG, PNG, or WebP · Max 5MB
-            </span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  if (f.size > 5 * 1024 * 1024) {
-                    setError("File too large. Maximum 5MB.");
-                    return;
-                  }
-                  setError(null);
-                  setIdFile(f);
-                }
-              }}
-            />
-          </label>
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
 
-          <button
-            disabled={!idFile || loading}
-            onClick={handleIdUpload}
-            className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" /> Processing...
-              </>
-            ) : (
-              <>
-                Scan Document <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
-            <p className="text-sm font-bold text-emerald-700 mb-3 flex items-center gap-2">
-              <CheckCircle2 size={16} /> Document Scanned Successfully
-            </p>
-            <div className="space-y-2 text-sm">
-              <p className="text-slate-700">
-                <span className="font-medium">Name:</span>{" "}
-                {ocrResult.extractedName || "—"}
-              </p>
-              <p className="text-slate-700">
-                <span className="font-medium">DOB:</span>{" "}
-                {ocrResult.extractedDob || "—"}
-              </p>
-              {ocrResult.ocrResult?.extracted_data?.id_number && (
-                <p className="text-slate-700">
-                  <span className="font-medium">ID Number:</span>{" "}
-                  {ocrResult.ocrResult.extracted_data.id_number}
-                </p>
+        <div className="glass-panel p-8 rounded-[2rem]">
+          {/* Step 1: Prefill & Doc Type */}
+          {currentStep === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+              <h2 className="text-xl font-bold text-slate-800 border-b border-slate-100 pb-2">
+                Personal Details
+              </h2>
+              {loading && !prefill ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-slate-700 font-medium cursor-not-allowed"
+                      value={prefill?.fullName || ""}
+                      readOnly
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-slate-700 font-medium cursor-not-allowed"
+                      value={prefill?.email || ""}
+                      readOnly
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-slate-700 font-medium cursor-not-allowed"
+                      value={prefill?.phone || "Not provided"}
+                      readOnly
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Date of Birth
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-slate-100 border-none rounded-xl text-slate-700 font-medium cursor-not-allowed"
+                      value={prefill?.dateOfBirth || "Not provided"}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              )}
+
+              <h2 className="text-xl font-bold text-slate-800 border-b border-slate-100 pb-2 mt-8">
+                Document Type
+              </h2>
+              <div className="flex gap-4">
+                <label
+                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${
+                    documentType === "passport"
+                      ? "border-teal-500 bg-teal-50 text-teal-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="docType"
+                    value="passport"
+                    checked={documentType === "passport"}
+                    onChange={() => setDocumentType("passport")}
+                    className="hidden"
+                  />
+                  <FileImage className="h-8 w-8 mb-2" />
+                  <span className="font-bold">Passport</span>
+                </label>
+                <label
+                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${
+                    documentType === "drivers_license"
+                      ? "border-teal-500 bg-teal-50 text-teal-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="docType"
+                    value="drivers_license"
+                    checked={documentType === "drivers_license"}
+                    onChange={() => setDocumentType("drivers_license")}
+                    className="hidden"
+                  />
+                  <FileImage className="h-8 w-8 mb-2" />
+                  <span className="font-bold">Driver License</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => setCurrentStep(2)}
+                  disabled={!documentType || loading}
+                  className="px-6 py-3 bg-slate-900 text-white rounded-full font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next Step <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: ID Upload */}
+          {currentStep === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              <h2 className="text-xl font-bold text-slate-800">
+                Upload {documentType === "passport" ? "Passport" : "Driver License"}
+              </h2>
+
+              {!ocrResult ? (
+                <>
+                  <label
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleIdDrop}
+                    className="border-2 border-dashed border-slate-300 rounded-3xl p-10 flex flex-col items-center justify-center text-center cursor-pointer hover:border-teal-400 hover:bg-slate-50 transition-all bg-white relative overflow-hidden group"
+                  >
+                    <input
+                      type="file"
+                      accept="image/jpeg, image/png, image/webp"
+                      className="hidden"
+                      onChange={handleIdChange}
+                    />
+                    {idPreview ? (
+                      <div className="absolute inset-0 z-0">
+                        <img
+                          src={idPreview}
+                          alt="ID Preview"
+                          className="w-full h-full object-contain opacity-40 group-hover:opacity-20 transition-opacity"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 z-10">
+                        <Upload className="h-8 w-8 text-slate-400" />
+                      </div>
+                    )}
+                    <span className="text-slate-700 font-bold mb-1 z-10">
+                      Click to browse or drag and drop
+                    </span>
+                    <span className="text-slate-500 text-sm z-10 break-all">
+                      {idFile ? idFile.name : "JPEG, PNG, or WEBP up to 5MB"}
+                    </span>
+                  </label>
+
+                  <div className="flex justify-between pt-4">
+                    <button
+                      onClick={() => setCurrentStep(1)}
+                      className="px-6 py-3 text-slate-500 font-bold hover:text-slate-800"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={uploadIdAndScan}
+                      disabled={!idFile || loading}
+                      className="px-8 py-3 bg-teal-600 text-white rounded-full font-bold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-lg shadow-teal-600/20"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" /> Scanning...
+                        </>
+                      ) : (
+                        "Upload and Scan"
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-3 text-teal-700 mb-4 pb-4 border-b border-slate-100">
+                    <Check className="h-6 w-6 bg-teal-100 rounded-full p-1" />
+                    <h3 className="font-bold text-lg">Scan Successful</h3>
+                  </div>
+                  <div className="space-y-3 mb-6">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Extracted Name</span>
+                      <p className="font-medium text-slate-900">{ocrResult.extractedName || "Not found"}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Date of Birth</span>
+                      <p className="font-medium text-slate-900">{ocrResult.extractedDOB || "Not found"}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Document Number</span>
+                      <p className="font-medium text-slate-900">{ocrResult.documentNumber || "Not found"}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => {
+                        setOcrResult(null);
+                        setIdFile(null);
+                        setIdPreview(null);
+                      }}
+                      className="flex-1 py-3 px-4 border border-slate-200 font-bold text-slate-700 rounded-xl hover:bg-slate-50 transition-colors tracking-wide"
+                    >
+                      Re-upload
+                    </button>
+                    <button
+                      onClick={() => setCurrentStep(3)}
+                      className="flex-1 py-3 px-4 bg-slate-900 font-bold text-white rounded-xl hover:bg-slate-800 transition-colors shadow-md tracking-wide"
+                    >
+                      This looks correct
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setOcrResult(null);
-                setIdFile(null);
-              }}
-              className="flex-1 py-3 border-2 border-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:border-slate-300 transition-colors"
-            >
-              <RotateCcw size={14} /> Re-upload
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
-            >
-              Confirm <ArrowRight size={16} />
-            </button>
-          </div>
-        </>
-      )}
+          {/* Step 3: Selfie Capture */}
+          {currentStep === 3 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              <h2 className="text-xl font-bold text-slate-800 text-center">
+                Take a Selfie
+              </h2>
+              <p className="text-center text-slate-500 mb-4">
+                We need to compare your face to your ID document.
+              </p>
 
-      <button
-        onClick={() => setStep(1)}
-        className="w-full text-sm text-slate-400 hover:text-slate-600 font-medium flex items-center justify-center gap-1"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
-    </div>
-  );
-
-  const renderStep3 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <ScanFace className="h-7 w-7 text-teal-600" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900">Take a Selfie</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          We'll match your face with your ID document
-        </p>
-      </div>
-
-      {!faceResult ? (
-        <>
-          {cameraError ? (
-            /* File upload fallback */
-            <div className="space-y-4">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-700">
-                Camera access denied. Please upload a selfie instead.
-              </div>
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer hover:border-teal-400 transition-all">
-                <Camera className="h-8 w-8 text-slate-400 mb-2" />
-                <span className="text-sm font-semibold text-slate-600">
-                  Upload Selfie
-                </span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={handleFileSelfieFallback}
-                />
-              </label>
-            </div>
-          ) : (
-            /* Camera viewfinder */
-            <div className="flex flex-col items-center">
-              <div className="relative w-64 h-64 rounded-full overflow-hidden border-4 border-teal-500 shadow-lg mx-auto">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                {!cameraActive && (
-                  <div className="absolute inset-0 bg-slate-100 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
+              {!faceMatchResult ? (
+                <>
+                  <div className="relative mx-auto w-64 h-64 md:w-80 md:h-80 rounded-full overflow-hidden bg-slate-900 border-4 border-slate-100 shadow-xl">
+                    {selfiePreview ? (
+                      <img
+                        src={selfiePreview}
+                        alt="Selfie preview"
+                        className="w-full h-full object-cover transform scale-x-[-1]"
+                      />
+                    ) : (
+                      <>
+                        <video
+                          ref={videoRef}
+                          className="w-full h-full object-cover transform scale-x-[-1]"
+                          playsInline
+                          muted
+                        />
+                        {cameraDenied && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-slate-800/90 text-white">
+                            <Camera className="h-10 w-10 text-slate-400 mb-2" />
+                            <p className="font-medium text-sm">Camera access denied.</p>
+                            <label className="mt-4 px-4 py-2 bg-slate-700 text-white text-sm font-bold border border-slate-600 rounded-lg cursor-pointer hover:bg-slate-600">
+                              Upload Photo Instead
+                              <input
+                                type="file"
+                                accept="image/jpeg, image/png, image/webp"
+                                className="hidden"
+                                onChange={handleSelfieFallbackChange}
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  <div className="flex justify-center gap-4 mt-8">
+                    {!selfiePreview ? (
+                      <button
+                        onClick={takePhoto}
+                        disabled={cameraDenied || !cameraStream}
+                        className="px-8 py-3 bg-teal-600 text-white rounded-full font-bold shadow-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Camera className="h-5 w-5" /> Take Photo
+                      </button>
+                    ) : (
+                      <button
+                        onClick={retakePhoto}
+                        disabled={loading}
+                        className="px-8 py-3 bg-slate-200 text-slate-800 rounded-full font-bold hover:bg-slate-300 disabled:opacity-50"
+                      >
+                        Retake
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between pt-6 border-t border-slate-100 mt-6">
+                    <button
+                      onClick={() => setCurrentStep(2)}
+                      className="px-6 py-3 text-slate-500 font-bold hover:text-slate-800"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={uploadSelfieAndMatch}
+                      disabled={!selfieBlob || loading}
+                      className="px-8 py-3 bg-slate-900 text-white rounded-full font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-lg"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" /> Verifying...
+                        </>
+                      ) : (
+                        "Verify Match"
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm text-center">
+                  <div className="flex justify-center mb-4">
+                    {faceMatchResult.matched ? (
+                      <div className="h-16 w-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+                        <Check className="h-8 w-8" />
+                      </div>
+                    ) : (
+                      <div className="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+                        <X className="h-8 w-8" />
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-xl text-slate-900 mb-2">
+                    {faceMatchResult.matched ? "Face Matched Successfully" : "Face Match Failed"}
+                  </h3>
+                  <p className="text-slate-500 mb-6">
+                    Similarity Score: <span className="font-bold text-slate-700">{faceMatchResult.similarity !== undefined ? faceMatchResult.similarity.toFixed(1) : 0}%</span>
+                  </p>
+                  
+                  <div className="flex gap-4 justify-center">
+                    {!faceMatchResult.matched && (
+                      <button
+                        onClick={() => {
+                          setFaceMatchResult(null);
+                          retakePhoto();
+                        }}
+                        className="py-3 px-6 border border-slate-200 font-bold text-slate-700 rounded-xl hover:bg-slate-50"
+                      >
+                        Try Again
+                      </button>
+                    )}
+                    {faceMatchResult.matched && (
+                      <button
+                        onClick={() => setCurrentStep(4)}
+                        className="py-3 px-8 bg-slate-900 font-bold text-white rounded-xl hover:bg-slate-800 shadow-md"
+                      >
+                        Continue
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Review and Submit */}
+          {currentStep === 4 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              <h2 className="text-xl font-bold text-slate-800">
+                Review & Submit
+              </h2>
+              
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                  <div>
+                    <h4 className="font-bold text-slate-900">ID Document Scan</h4>
+                    <p className="text-sm text-slate-500">Name and DOB extracted</p>
+                  </div>
+                  <Check className="h-6 w-6 text-green-500" />
+                </div>
+                
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                  <div>
+                    <h4 className="font-bold text-slate-900">Face Match</h4>
+                    <p className="text-sm text-slate-500">
+                      {faceMatchResult?.similarity?.toFixed(1) || 0}% Similarity
+                    </p>
+                  </div>
+                  {faceMatchResult?.matched ? (
+                    <Check className="h-6 w-6 text-green-500" />
+                  ) : (
+                    <X className="h-6 w-6 text-red-500" />
+                  )}
+                </div>
+
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl text-blue-800 text-sm">
+                  <p className="font-medium">What happens next?</p>
+                  <p className="mt-1 opacity-90">
+                    When you submit, we will run an automated background check (NSOPW) using your extracted details. Your application will then enter manual review.
+                  </p>
+                </div>
               </div>
 
+              <div className="flex justify-between pt-6">
+                <button
+                  onClick={() => setCurrentStep(3)}
+                  className="px-6 py-3 text-slate-500 font-bold hover:text-slate-800"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={submitVerification}
+                  disabled={loading}
+                  className="px-8 py-3 bg-teal-600 text-white rounded-full font-bold hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-teal-600/20 transition-all"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" /> Submitting...
+                    </>
+                  ) : (
+                    "Submit for Verification"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Confirmation */}
+          {currentStep === 5 && (
+            <div className="text-center py-12 animate-in zoom-in-95 duration-500">
+              <div className="h-20 w-20 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Check className="h-10 w-10" />
+              </div>
+              <h2 className="text-3xl font-bold text-slate-900 mb-4">
+                Verification Submitted
+              </h2>
+              <p className="text-slate-500 mb-8 max-w-md mx-auto text-lg">
+                Your identity verification is currently under review. You will be notified once the process is complete.
+              </p>
+              
+              {submittedAt && (
+                <p className="text-sm text-slate-400 mb-8 font-medium">
+                  Submitted: {new Date(submittedAt).toLocaleString()}
+                </p>
+              )}
+              
               <button
-                disabled={!cameraActive || loading}
-                onClick={capturePhoto}
-                className="mt-6 w-full max-w-xs py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors disabled:opacity-40"
+                onClick={() => onNavigate(`/profile/me`)}
+                className="px-8 py-4 bg-slate-900 text-white rounded-full font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20"
               >
-                <Camera size={16} /> Take Photo
+                Return to Profile
               </button>
             </div>
           )}
-
-          {selfieBlob && !faceResult && (
-            <div className="flex justify-center">
-              {loading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 size={16} className="animate-spin" />
-                  Matching face...
-                </div>
-              ) : (
-                <button
-                  onClick={() => handleSelfieUpload(selfieBlob)}
-                  className="py-3 px-6 bg-teal-600 text-white rounded-xl font-bold text-sm hover:bg-teal-700 transition-colors"
-                >
-                  Upload & Match
-                </button>
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div
-            className={`p-4 rounded-2xl border ${
-              faceResult.faceMatchResult?.is_match
-                ? "bg-emerald-50 border-emerald-200"
-                : "bg-red-50 border-red-200"
-            }`}
-          >
-            <p
-              className={`text-sm font-bold mb-2 flex items-center gap-2 ${
-                faceResult.faceMatchResult?.is_match
-                  ? "text-emerald-700"
-                  : "text-red-700"
-              }`}
-            >
-              {faceResult.faceMatchResult?.is_match ? (
-                <CheckCircle2 size={16} />
-              ) : (
-                <XCircle size={16} />
-              )}
-              {faceResult.faceMatchResult?.is_match
-                ? "Face Match Successful"
-                : "Face Match Failed"}
-            </p>
-            <p className="text-sm text-slate-600">
-              Similarity:{" "}
-              {faceResult.faceMatchResult?.similarity_score?.toFixed(1) ?? "—"}%
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setFaceResult(null);
-                setSelfieBlob(null);
-                setCameraError(false);
-              }}
-              className="flex-1 py-3 border-2 border-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-            >
-              <RotateCcw size={14} /> Retake
-            </button>
-            <button
-              onClick={() => setStep(4)}
-              className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors"
-            >
-              Continue <ArrowRight size={16} />
-            </button>
-          </div>
-        </>
-      )}
-
-      <button
-        onClick={() => {
-          stopCamera();
-          setStep(2);
-        }}
-        className="w-full text-sm text-slate-400 hover:text-slate-600 font-medium flex items-center justify-center gap-1"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
-    </div>
-  );
-
-  const renderStep4 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <Shield className="h-7 w-7 text-teal-600" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900">Review & Submit</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Review your verification details before submitting
-        </p>
-      </div>
-
-      {/* OCR Summary */}
-      <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <FileText size={12} /> Document OCR
-          <CheckCircle2 size={12} className="text-emerald-500 ml-auto" />
-        </p>
-        <p className="text-sm text-slate-700">
-          Name: <span className="font-medium">{ocrResult?.extractedName || "—"}</span>
-        </p>
-        <p className="text-sm text-slate-700">
-          DOB: <span className="font-medium">{ocrResult?.extractedDob || "—"}</span>
-        </p>
-      </div>
-
-      {/* Face Match Summary */}
-      <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <ScanFace size={12} /> Face Match
-          {faceResult?.faceMatchResult?.is_match ? (
-            <CheckCircle2 size={12} className="text-emerald-500 ml-auto" />
-          ) : (
-            <XCircle size={12} className="text-red-500 ml-auto" />
-          )}
-        </p>
-        <p className="text-sm text-slate-700">
-          Similarity:{" "}
-          <span className="font-medium">
-            {faceResult?.faceMatchResult?.similarity_score?.toFixed(1) ?? "—"}%
-          </span>
-        </p>
-      </div>
-
-      {/* NSOPW Note */}
-      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-        ⚠️ A background check (NSOPW) will run automatically when you submit.
-      </div>
-
-      <button
-        disabled={submitting}
-        onClick={handleSubmit}
-        className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors disabled:opacity-50"
-      >
-        {submitting ? (
-          <>
-            <Loader2 size={16} className="animate-spin" /> Submitting...
-          </>
-        ) : (
-          <>
-            <Send size={16} /> Submit for Verification
-          </>
-        )}
-      </button>
-
-      <button
-        onClick={() => setStep(3)}
-        className="w-full text-sm text-slate-400 hover:text-slate-600 font-medium flex items-center justify-center gap-1"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
-    </div>
-  );
-
-  const renderStep5 = () => (
-    <div className="text-center space-y-6 py-8">
-      <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
-        <PartyPopper className="h-10 w-10 text-emerald-600" />
-      </div>
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">
-          Verification Submitted!
-        </h2>
-        <p className="text-slate-500 text-sm max-w-sm mx-auto">
-          Your identity verification is now under review. You'll be notified
-          once it's complete.
-        </p>
-      </div>
-
-      {submittedAt && (
-        <p className="text-xs text-slate-400">
-          Submitted: {new Date(submittedAt).toLocaleString()}
-        </p>
-      )}
-
-      <button
-        onClick={() => onNavigate("/profile/me")}
-        className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors"
-      >
-        Back to Profile
-      </button>
-    </div>
-  );
-
-  // ── Main Render ──────────────────────────────────────────────────────
-
-  return (
-    <div className="min-h-[calc(100vh-140px)] py-12 px-4">
-      <div className="max-w-md mx-auto">
-        <ProgressBar current={step} />
-
-        <div className="glass-panel rounded-3xl p-6 sm:p-8">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-2">
-              <XCircle size={16} className="flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {step === 1 && renderStep1()}
-          {step === 2 && renderStep2()}
-          {step === 3 && renderStep3()}
-          {step === 4 && renderStep4()}
-          {step === 5 && renderStep5()}
         </div>
       </div>
     </div>
