@@ -178,9 +178,11 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
       {!loading && !error && providers.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {providers.map((provider) => (
-            <div
-              key={provider._id}
+          {providers
+            .filter((p) => p.verificationStatus === "verified")
+            .map((provider) => (
+              <div
+                key={provider._id}
               className="glass-panel rounded-2xl p-6 flex flex-col hover:shadow-lg hover:bg-white/90 transition-all duration-300"
             >
               {/* Avatar + name row */}
@@ -248,16 +250,20 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                 )}
               </div>
 
-              {/* Book button — disabled, coming soon */}
+              {/* Book button */}
               <div className="relative group/btn">
                 <button
-                  disabled
-                  className="w-full py-2.5 rounded-xl bg-teal-50 text-teal-400 font-semibold text-sm border border-teal-100 cursor-not-allowed"
+                  disabled={provider.verificationStatus !== "verified"}
+                  className={`w-full py-2.5 rounded-xl font-semibold text-sm border transition-colors ${
+                    provider.verificationStatus !== "verified"
+                      ? "bg-teal-50 text-teal-400 border-teal-100 cursor-not-allowed"
+                      : "bg-teal-600 text-white border-teal-600 hover:bg-teal-700"
+                  }`}
                 >
                   Book with Provider
                 </button>
                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  Coming Soon
+                  {provider.verificationStatus !== "verified" ? "This provider is pending verification" : "Coming Soon"}
                 </span>
               </div>
             </div>
