@@ -7,7 +7,7 @@ export const getProvider = async (req, res) => {
     const { data: provider, error } = await supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count,
+        id, business_name, description, rating_avg, rating_count, verification_status,
         user:users(full_name, email, avatar_url, role),
         provider_categories(category_id)
       `)
@@ -21,16 +21,17 @@ export const getProvider = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        id:                 provider.id,
-        business_name:      provider.business_name,
-        description:        provider.description,
-        rating_avg:         provider.rating_avg,
-        rating_count:       provider.rating_count,
-        service_categories: provider.provider_categories,
-        full_name:          provider.user?.full_name || provider.business_name,
-        email:              provider.user?.email,
-        avatar_url:         provider.user?.avatar_url,
-        role:               provider.user?.role || 'provider',
+        id:                    provider.id,
+        business_name:         provider.business_name,
+        description:           provider.description,
+        rating_avg:            provider.rating_avg,
+        rating_count:          provider.rating_count,
+        verification_status:   provider.verification_status || 'unverified',
+        service_categories:    provider.provider_categories,
+        full_name:             provider.user?.full_name || provider.business_name,
+        email:                 provider.user?.email,
+        avatar_url:            provider.user?.avatar_url,
+        role:                  provider.user?.role || 'provider',
       }
     });
 
@@ -45,7 +46,7 @@ export const listProviders = async (req, res) => {
     const { data: providers, error } = await supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count,
+        id, business_name, description, rating_avg, rating_count, verification_status,
         user:users(full_name, email, avatar_url)
       `)
       .eq('is_active', true);
@@ -53,14 +54,15 @@ export const listProviders = async (req, res) => {
     if (error) return res.status(400).json({ success: false, error: error.message });
 
     const list = providers.map(p => ({
-      id:           p.id,
-      business_name: p.business_name,
-      description:  p.description,
-      rating_avg:   p.rating_avg,
-      rating_count: p.rating_count,
-      full_name:    p.user?.full_name || p.business_name,
-      email:        p.user?.email,
-      avatar_url:   p.user?.avatar_url,
+      id:                  p.id,
+      business_name:       p.business_name,
+      description:         p.description,
+      rating_avg:          p.rating_avg,
+      rating_count:        p.rating_count,
+      verification_status: p.verification_status || 'unverified',
+      full_name:           p.user?.full_name || p.business_name,
+      email:               p.user?.email,
+      avatar_url:          p.user?.avatar_url,
     }));
 
     return res.json({
@@ -85,7 +87,7 @@ export const getProvidersByService = async (req, res) => {
       .select(`
         custom_price, custom_description,
         provider:providers(
-          id, business_name, rating_avg, rating_count, is_active,
+          id, business_name, rating_avg, rating_count, is_active, verification_status,
           user:users(full_name, avatar_url)
         )
       `)
@@ -98,14 +100,15 @@ export const getProvidersByService = async (req, res) => {
     const list = data
       .filter(row => row.provider?.is_active)
       .map(row => ({
-        id:                 row.provider.id,
-        business_name:      row.provider.business_name,
-        rating_avg:         row.provider.rating_avg,
-        rating_count:       row.provider.rating_count,
-        full_name:          row.provider.user?.full_name || null,
-        avatar_url:         row.provider.user?.avatar_url || null,
-        custom_price:       row.custom_price ?? null,
-        custom_description: row.custom_description ?? null,
+        id:                    row.provider.id,
+        business_name:         row.provider.business_name,
+        rating_avg:            row.provider.rating_avg,
+        rating_count:          row.provider.rating_count,
+        verification_status:   row.provider.verification_status || 'unverified',
+        full_name:             row.provider.user?.full_name || null,
+        avatar_url:            row.provider.user?.avatar_url || null,
+        custom_price:          row.custom_price ?? null,
+        custom_description:    row.custom_description ?? null,
       }));
 
     return res.json({ success: true, count: list.length, data: list });
@@ -123,7 +126,7 @@ export const searchProviders = async (req, res) => {
     let query = supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count, is_active,
+        id, business_name, description, rating_avg, rating_count, is_active, verification_status,
         user:users(full_name, email, avatar_url),
         provider_categories(category_id)
       `);
@@ -147,16 +150,17 @@ export const searchProviders = async (req, res) => {
     if (error) return res.status(400).json({ success: false, error: error.message });
 
     const list = providers.map(p => ({
-      id:                 p.id,
-      business_name:      p.business_name,
-      description:        p.description,
-      rating_avg:         p.rating_avg,
-      rating_count:       p.rating_count,
-      is_active:          p.is_active,
-      service_categories: p.provider_categories,
-      full_name:          p.user?.full_name,
-      email:              p.user?.email,
-      avatar_url:         p.user?.avatar_url,
+      id:                    p.id,
+      business_name:         p.business_name,
+      description:           p.description,
+      rating_avg:            p.rating_avg,
+      rating_count:          p.rating_count,
+      is_active:             p.is_active,
+      verification_status:   p.verification_status || 'unverified',
+      service_categories:    p.provider_categories,
+      full_name:             p.user?.full_name,
+      email:                 p.user?.email,
+      avatar_url:            p.user?.avatar_url,
     }));
 
     return res.json({

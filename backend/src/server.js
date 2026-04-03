@@ -13,6 +13,7 @@ import providerRoutes from './routes/providerRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import verificationRoutes from './routes/verificationRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
 
 dotenv.config();
@@ -50,6 +51,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/verification', verificationRoutes);
 // app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {

@@ -10,6 +10,11 @@ import {
   Star,
   Briefcase,
 } from "lucide-react";
+import {
+  VerificationBadge,
+  type VerificationStatusType,
+} from "../components/VerificationBadge";
+import { VerificationDetailsModal } from "../components/VerificationDetailsModal";
 
 interface ProfileProps {
   profileId: string;
@@ -31,6 +36,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,16 +274,26 @@ export const Profile: React.FC<ProfileProps> = ({
               <h1 className="text-3xl font-bold text-slate-900 mb-2">
                 {fullName}
               </h1>
-              <span
-                className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
-              >
-                {isProvider ? (
-                  <Briefcase className="h-4 w-4 mr-1.5" />
-                ) : (
-                  <Shield className="h-4 w-4 mr-1.5" />
-                )}
-                {getRoleLabel(role)}
-              </span>
+              <div className="flex items-center flex-wrap gap-2">
+                <span
+                  className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
+                >
+                  {isProvider ? (
+                    <Briefcase className="h-4 w-4 mr-1.5" />
+                  ) : (
+                    <Shield className="h-4 w-4 mr-1.5" />
+                  )}
+                  {getRoleLabel(role)}
+                </span>
+                <VerificationBadge
+                  status={
+                    ((data as BackendProvider).verificationStatus ||
+                      (data as BackendUser).verificationStatus ||
+                      "unverified") as VerificationStatusType
+                  }
+                  onClick={() => setShowVerificationModal(true)}
+                />
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -339,9 +355,28 @@ export const Profile: React.FC<ProfileProps> = ({
                   <p className="text-slate-500 text-sm font-mono">{data._id}</p>
                 </div>
               )}
+
+              {profileId === "me" &&
+                ((data as BackendProvider).verificationStatus ||
+                  (data as BackendUser).verificationStatus ||
+                  "unverified") === "unverified" && (
+                  <button
+                    onClick={() => onNavigate("/verify")}
+                    className="w-full py-3 bg-teal-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors"
+                  >
+                    <Shield className="h-4 w-4" />
+                    Verify Your Identity
+                  </button>
+                )}
             </div>
           </div>
         </div>
+
+        <VerificationDetailsModal
+          userId={data._id || profileId}
+          isOpen={showVerificationModal}
+          onClose={() => setShowVerificationModal(false)}
+        />
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
+import { VerifyPage } from "./pages/verify";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
@@ -85,7 +86,7 @@ const App = () => {
 
   // Protected paths require a logged-in session
   const isProtectedPath =
-    basePath === "/dashboard" || basePath.startsWith("/profile");
+    basePath === "/dashboard" || basePath.startsWith("/profile") || basePath === "/verify";
 
   // Redirect unauthenticated users away from protected pages
   useEffect(() => {
@@ -297,6 +298,8 @@ const App = () => {
         );
       case "/dashboard":
         return <ProviderDashboard user={user} onNavigate={navigate} />;
+      case "/verify":
+        return <VerifyPage userId={user?.id || ""} onNavigate={navigate} />;
       case "/faq":
         return <FAQ />;
       default:
