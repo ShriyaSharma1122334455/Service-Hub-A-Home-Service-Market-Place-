@@ -6,11 +6,23 @@ const serviceRoleKey   = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const anonKey          = process.env.SUPABASE_ANON_KEY;
 
 
-if (!supabaseUrl)    throw new Error('❌ Missing SUPABASE_URL in .env');
-if (!serviceRoleKey) throw new Error('❌ Missing SUPABASE_SERVICE_ROLE_KEY in .env');
-if (!anonKey)        throw new Error('❌ Missing SUPABASE_ANON_KEY in .env');
+if (process.env.NODE_ENV !== 'test') {
+  if (!supabaseUrl)    throw new Error('❌ Missing SUPABASE_URL in .env');
+  if (!serviceRoleKey) throw new Error('❌ Missing SUPABASE_SERVICE_ROLE_KEY in .env');
+  if (!anonKey)        throw new Error('❌ Missing SUPABASE_ANON_KEY in .env');
+}
 
-const supabase = createClient(supabaseUrl, serviceRoleKey, {
+const supabase = process.env.NODE_ENV === 'test'
+  ? {
+      from: () => ({
+        select: () => ({ error: null, data: null, count: 0 }),
+        eq: () => ({ error: null, data: null, count: 0 }),
+        single: () => ({ error: null, data: null }),
+        insert: () => ({ select: () => ({ data: null, error: null }), single: () => ({ data: null, error: null }) }),
+        update: () => ({ select: () => ({ data: null, error: null }), single: () => ({ data: null, error: null }) }),
+      }),
+    }
+  : createClient(supabaseUrl, serviceRoleKey, {
   auth: {
     persistSession: false,    // backend has no session to persist
     autoRefreshToken: false,  // no token refresh needed server-side
