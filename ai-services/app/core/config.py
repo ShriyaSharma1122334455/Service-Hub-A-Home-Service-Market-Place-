@@ -5,6 +5,8 @@ from typing import List
 class Settings(BaseSettings):
     # ── Service ───────────────────────────────────────────────────────────
     ENV: str = "development"
+    # NOTE: Port 8000 is taken by visual-damage-assessment (see docker-compose.yml).
+    # ai-services MUST use 8001 to avoid conflict.
     PORT: int = 8001
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",   # React frontend dev server

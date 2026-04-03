@@ -1,7 +1,21 @@
 """
 Face Matching Service
 =====================
-Compares a live selfie to the face on the uploaded ID document.
+Compares a live selfie to the face on the uploaded ID document using
+AWS Rekognition CompareFaces with a 90% similarity threshold.
+
+Returns:
+    matched:              bool
+    similarity:           float (0-100)
+    confidence:           "high" | "medium" | "low"  (based on 90/75 thresholds)
+    faceDetectedInId:     bool
+    faceDetectedInSelfie: bool
+    checkedAt:            ISO timestamp
+
+Error handling:
+    InvalidParameterException → no face detected
+    ImageTooLargeException    → compression retry via Pillow
+    ThrottlingException       → return pending status
 
 Sprint 1 research notes
 -----------------------
@@ -16,20 +30,30 @@ Decision: AWS Rekognition. Free 5 000 calls/month (12 months), no GPU needed,
 single API call with built-in confidence score. DeepFace is a good Sprint 5/6
 self-hosted stretch goal if AWS costs become a concern after free tier.
 
-Fallback: if Rekognition is unavailable → MANUAL_REVIEW (don't hard-block user).
+Fallback: if Rekognition is unavailable → pending status (don't hard-block user).
 """
 
+import io
 import logging
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
 
-import httpx
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import settings
-from app.models.schemas import FaceMatchResponse, VerificationStatus
 
 logger = logging.getLogger(__name__)
+
+# Similarity threshold for face match
+FACE_MATCH_THRESHOLD = 90.0
+
+# Confidence level thresholds
+CONFIDENCE_HIGH_THRESHOLD = 90.0
+CONFIDENCE_MEDIUM_THRESHOLD = 75.0
+
+# Max image size for Rekognition (5 MB)
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 # ── Client factory ────────────────────────────────────────────────────────
@@ -43,102 +67,230 @@ def _get_rekognition_client():
     )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+# ── Image compression ────────────────────────────────────────────────────
 
-async def _download_image(url: str) -> Optional[bytes]:
+def _compress_image(image_bytes: bytes, max_bytes: int = MAX_IMAGE_BYTES) -> bytes:
+    """
+    Compress image using Pillow if it exceeds max_bytes.
+    Reduces quality iteratively until under the limit.
+    """
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            return resp.content
-    except httpx.HTTPError as exc:
-        logger.error("Image download failed (%s): %s", url, exc)
-        return None
+        from PIL import Image
+
+        if len(image_bytes) <= max_bytes:
+            return image_bytes
+
+        img = Image.open(io.BytesIO(image_bytes))
+
+        # Convert RGBA to RGB if needed
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        # Try reducing quality
+        for quality in (85, 70, 55, 40):
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+            compressed = buffer.getvalue()
+            if len(compressed) <= max_bytes:
+                logger.info("Compressed image from %d to %d bytes (quality=%d)",
+                           len(image_bytes), len(compressed), quality)
+                return compressed
+
+        # Last resort: resize
+        ratio = (max_bytes / len(image_bytes)) ** 0.5
+        new_size = (int(img.width * ratio), int(img.height * ratio))
+        img = img.resize(new_size, Image.LANCZOS)
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=50, optimize=True)
+        compressed = buffer.getvalue()
+        logger.info("Resized image from %d to %d bytes", len(image_bytes), len(compressed))
+        return compressed
+
+    except ImportError:
+        logger.warning("Pillow not installed — cannot compress image")
+        return image_bytes
+    except Exception as exc:
+        logger.warning("Image compression failed: %s", exc)
+        return image_bytes
+
+
+# ── Confidence level helper ───────────────────────────────────────────────
+
+def _get_confidence_level(similarity: float) -> str:
+    """Return 'high', 'medium', or 'low' based on similarity score."""
+    if similarity >= CONFIDENCE_HIGH_THRESHOLD:
+        return "high"
+    elif similarity >= CONFIDENCE_MEDIUM_THRESHOLD:
+        return "medium"
+    else:
+        return "low"
 
 
 # ── Public API ────────────────────────────────────────────────────────────
 
 async def compare_faces(
-    id_image_url: str,
-    selfie_url: str,
-) -> FaceMatchResponse:
+    id_image_bytes: bytes,
+    selfie_bytes: bytes,
+) -> Dict[str, Any]:
     """
     Compare the face on the ID document with the live selfie.
-    Returns a FaceMatchResponse with similarity score and pass/fail.
-    """
-    threshold   = settings.FACE_MATCH_THRESHOLD
-    id_bytes    = await _download_image(id_image_url)
-    selfie_bytes = await _download_image(selfie_url)
 
-    # Can't proceed if either image failed to download
-    if not id_bytes or not selfie_bytes:
-        return FaceMatchResponse(
-            status=VerificationStatus.REJECTED,
-            similarity_score=0.0,
-            threshold_used=threshold,
-            is_match=False,
-            rejection_reason="Could not retrieve one or both images from Cloudinary.",
-        )
+    Accepts two raw image buffers directly (no URL download needed).
+    Returns a dict with: matched, similarity, confidence, faceDetectedInId,
+    faceDetectedInSelfie, checkedAt.
+    """
+    checked_at = datetime.now(timezone.utc).isoformat()
+
+    if not id_image_bytes or not selfie_bytes:
+        return {
+            "matched": False,
+            "similarity": 0.0,
+            "confidence": "low",
+            "faceDetectedInId": False,
+            "faceDetectedInSelfie": False,
+            "checkedAt": checked_at,
+            "status": "rejected",
+            "rejectionReason": "One or both images are empty.",
+        }
 
     # Call AWS Rekognition CompareFaces
     try:
-        client   = _get_rekognition_client()
+        client = _get_rekognition_client()
         response = client.compare_faces(
-            SourceImage={"Bytes": id_bytes},       # Reference: ID photo
-            TargetImage={"Bytes": selfie_bytes},   # Target: live selfie
-            SimilarityThreshold=0.0,               # Return all; we apply our own threshold
+            SourceImage={"Bytes": id_image_bytes},
+            TargetImage={"Bytes": selfie_bytes},
+            SimilarityThreshold=0.0,  # Return all matches; we apply our own threshold
         )
-    except (BotoCoreError, ClientError) as exc:
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code", "")
+
+        # No face detected in one of the images
+        if error_code == "InvalidParameterException":
+            error_msg = str(exc)
+            face_in_id = "source" not in error_msg.lower()
+            face_in_selfie = "target" not in error_msg.lower()
+            logger.warning("Rekognition InvalidParameterException: %s", error_code)
+            return {
+                "matched": False,
+                "similarity": 0.0,
+                "confidence": "low",
+                "faceDetectedInId": face_in_id,
+                "faceDetectedInSelfie": face_in_selfie,
+                "checkedAt": checked_at,
+                "status": "rejected",
+                "rejectionReason": "No face detected in one or both images. Please retake in good lighting.",
+            }
+
+        # Image too large — try compression and retry
+        if error_code == "ImageTooLargeException":
+            logger.warning("Rekognition ImageTooLargeException — attempting compression retry")
+            try:
+                compressed_id = _compress_image(id_image_bytes)
+                compressed_selfie = _compress_image(selfie_bytes)
+
+                response = client.compare_faces(
+                    SourceImage={"Bytes": compressed_id},
+                    TargetImage={"Bytes": compressed_selfie},
+                    SimilarityThreshold=0.0,
+                )
+            except (BotoCoreError, ClientError) as retry_exc:
+                logger.error("Rekognition retry after compression failed: %s", retry_exc)
+                return {
+                    "matched": False,
+                    "similarity": 0.0,
+                    "confidence": "low",
+                    "faceDetectedInId": True,
+                    "faceDetectedInSelfie": True,
+                    "checkedAt": checked_at,
+                    "status": "pending",
+                    "rejectionReason": "Image too large even after compression. Please upload smaller images.",
+                }
+
+        # Throttling — return pending
+        elif error_code == "ThrottlingException":
+            logger.warning("Rekognition ThrottlingException — returning pending status")
+            return {
+                "matched": False,
+                "similarity": 0.0,
+                "confidence": "low",
+                "faceDetectedInId": True,
+                "faceDetectedInSelfie": True,
+                "checkedAt": checked_at,
+                "status": "pending",
+                "rejectionReason": "Face matching service is temporarily rate-limited. Please try again shortly.",
+            }
+
+        else:
+            logger.error("Rekognition error: %s", exc)
+            return {
+                "matched": False,
+                "similarity": 0.0,
+                "confidence": "low",
+                "faceDetectedInId": True,
+                "faceDetectedInSelfie": True,
+                "checkedAt": checked_at,
+                "status": "pending",
+                "rejectionReason": "Face matching service temporarily unavailable.",
+            }
+
+    except (BotoCoreError, Exception) as exc:
         logger.error("Rekognition error: %s", exc)
-        return FaceMatchResponse(
-            status=VerificationStatus.MANUAL_REVIEW,
-            similarity_score=0.0,
-            threshold_used=threshold,
-            is_match=False,
-            rejection_reason="Face matching service temporarily unavailable. Manual review required.",
-        )
+        return {
+            "matched": False,
+            "similarity": 0.0,
+            "confidence": "low",
+            "faceDetectedInId": True,
+            "faceDetectedInSelfie": True,
+            "checkedAt": checked_at,
+            "status": "pending",
+            "rejectionReason": "Face matching service temporarily unavailable.",
+        }
 
     face_matches = response.get("FaceMatches", [])
-    unmatched    = response.get("UnmatchedFaces", [])
+    unmatched = response.get("UnmatchedFaces", [])
 
     # No face detected in selfie at all
     if not face_matches and not unmatched:
-        return FaceMatchResponse(
-            status=VerificationStatus.REJECTED,
-            similarity_score=0.0,
-            threshold_used=threshold,
-            is_match=False,
-            rejection_reason="No face detected in the selfie. Please retake in good lighting.",
-            face_detected_in_selfie=False,
-            face_detected_in_id=True,
-        )
+        return {
+            "matched": False,
+            "similarity": 0.0,
+            "confidence": "low",
+            "faceDetectedInId": True,
+            "faceDetectedInSelfie": False,
+            "checkedAt": checked_at,
+            "status": "rejected",
+            "rejectionReason": "No face detected in the selfie. Please retake in good lighting.",
+        }
 
     # Face found in selfie but doesn't match ID
     if not face_matches:
-        return FaceMatchResponse(
-            status=VerificationStatus.REJECTED,
-            similarity_score=0.0,
-            threshold_used=threshold,
-            is_match=False,
-            rejection_reason="Selfie does not match the face on the ID document.",
-            face_detected_in_selfie=True,
-            face_detected_in_id=True,
-        )
+        return {
+            "matched": False,
+            "similarity": 0.0,
+            "confidence": "low",
+            "faceDetectedInId": True,
+            "faceDetectedInSelfie": True,
+            "checkedAt": checked_at,
+            "status": "rejected",
+            "rejectionReason": "Selfie does not match the face on the ID document.",
+        }
 
     # Take the best (highest-similarity) match
-    best  = max(face_matches, key=lambda m: m["Similarity"])
+    best = max(face_matches, key=lambda m: m["Similarity"])
     score = round(best["Similarity"], 2)
-    match = score >= threshold
+    is_match = score >= FACE_MATCH_THRESHOLD
+    confidence_level = _get_confidence_level(score)
 
-    return FaceMatchResponse(
-        status=VerificationStatus.VERIFIED if match else VerificationStatus.REJECTED,
-        similarity_score=score,
-        threshold_used=threshold,
-        is_match=match,
-        rejection_reason=None if match else (
-            f"Face similarity ({score:.1f}%) is below the required threshold ({threshold:.0f}%). "
+    return {
+        "matched": is_match,
+        "similarity": score,
+        "confidence": confidence_level,
+        "faceDetectedInId": True,
+        "faceDetectedInSelfie": True,
+        "checkedAt": checked_at,
+        "status": "verified" if is_match else "rejected",
+        "rejectionReason": None if is_match else (
+            f"Face similarity ({score:.1f}%) is below the required threshold ({FACE_MATCH_THRESHOLD:.0f}%). "
             "Please ensure your selfie is clear, well-lit, and your full face is visible."
         ),
-        face_detected_in_selfie=True,
-        face_detected_in_id=True,
-    )
+    }
