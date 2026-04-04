@@ -120,6 +120,32 @@ export const searchProviders = async (req, res) => {
   try {
     const { category, minRating, isActive, search, page = 1, limit = 20 } = req.query;
 
+    // PostgREST does not apply .eq on embedded relation paths (e.g. provider_categories.*)
+    // to the junction join — filter is ignored and all providers are returned. Resolve
+    // provider ids from provider_categories first, then filter the root table with .in('id', …).
+    let categoryProviderIds = null;
+    if (category) {
+      const { data: junctionRows, error: junctionError } = await supabase
+        .from('provider_categories')
+        .select('provider_id')
+        .eq('category_id', category);
+
+      if (junctionError) {
+        return res.status(400).json({ success: false, error: junctionError.message });
+      }
+
+      categoryProviderIds = [...new Set((junctionRows || []).map((r) => r.provider_id))];
+      if (categoryProviderIds.length === 0) {
+        return res.json({
+          success: true,
+          count: 0,
+          total: 0,
+          page: Number(page),
+          data: { providers: [] },
+        });
+      }
+    }
+
     let query = supabase
       .from('providers')
       .select(`
@@ -128,14 +154,12 @@ export const searchProviders = async (req, res) => {
         provider_categories(category_id)
       `);
 
+    if (categoryProviderIds) query = query.in('id', categoryProviderIds);
+
     // Filters — replaces your Mongoose filter object
     if (minRating)          query = query.gte('rating_avg', Number(minRating));
     if (isActive !== undefined) query = query.eq('is_active', isActive === 'true');
     if (search)             query = query.ilike('business_name', `%${search}%`);
-    if (category) {
-      // Filter by category via junction table
-      query = query.eq('provider_categories.category_id', category);
-    }
 
     // Pagination
     const from = (Number(page) - 1) * Number(limit);
