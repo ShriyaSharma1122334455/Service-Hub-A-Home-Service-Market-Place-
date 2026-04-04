@@ -83,7 +83,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   }, [userId]);
 
   // --- Step 2 logic ---
-  const handleIdDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleIdDrop = (e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     validateAndSetId(file);

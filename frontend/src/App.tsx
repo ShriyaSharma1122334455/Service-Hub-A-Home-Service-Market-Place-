@@ -17,6 +17,7 @@ import { VerifyPage } from "./pages/verify";
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
 type StoredAuth = {
+  id?: string;
   email: string;
   role: UserRole;
   name: string;
@@ -50,7 +51,7 @@ const App = () => {
     const stored = loadStoredAuth();
     if (stored) {
       return {
-        id: "1",
+        id: stored.id || "1",
         name: stored.name,
         email: stored.email,
         role: stored.role,
@@ -113,11 +114,11 @@ const App = () => {
     email: string,
     role: UserRole,
     password?: string,
-  ) => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
-      if (!password) throw new Error("Password required");
+      if (!password) return { success: false, message: "Password required" };
       const { data, error } = await signIn(email, password);
-      if (error) throw error;
+      if (error) return { success: false, message: error.message };
       const accessToken = data?.session?.access_token;
       const supabaseUser = data?.user;
       const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
@@ -163,6 +164,7 @@ const App = () => {
       setUser(userData);
       setIsAuthenticated(true);
       saveAuth({
+        id: userData.id,
         email,
         role: userData.role,
         name: userData.name,
@@ -174,9 +176,10 @@ const App = () => {
       } else {
         navigate("/");
       }
-    } catch (err) {
+      return { success: true };
+    } catch (err: any) {
       console.error("Login failed", err);
-      // TODO: show UI error
+      return { success: false, message: err.message || "An unexpected error occurred during login." };
     }
   };
 

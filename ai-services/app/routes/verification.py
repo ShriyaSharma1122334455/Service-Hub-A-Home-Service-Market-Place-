@@ -42,7 +42,6 @@ def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
 
 @router.post(
     "/document",
-    response_model=DocumentVerifyResponse,
     summary="OCR ID extraction",
     description="Extracts data from an ID document using OCR. Validates expiration and extracted fields.",
 )
@@ -51,36 +50,35 @@ async def verify_document(
     _: None = Depends(verify_internal_key),
 ):
     """
-    Called from Express after the user uploads their ID to Cloudinary.
-    Runs Google Vision OCR and returns structured fields + verification status.
+    Called from Express after the user uploads their ID to Supabase Storage.
+    Downloads the image via signed URL, runs Google Vision OCR,
+    and returns structured fields + verification status.
     """
+    import httpx
+
     logger.info("OCR request — user=%s doc_type=%s", body.user_id, body.document_type)
 
-    status, extracted, confidence = await ocr_service.extract_id_data(body.image_url)
+    # 1. Download the image from the signed URL
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_resp = await client.get(str(body.image_url))
+            img_resp.raise_for_status()
+            image_bytes = img_resp.content
+    except Exception as exc:
+        logger.error("Failed to download ID image: %s", exc)
+        return {
+            "status": "manual_review",
+            "extractedName": None,
+            "extractedDOB": None,
+            "confidence": 0.0,
+            "error": f"Failed to download image: {str(exc)}",
+        }
 
-    is_expired = ocr_service.is_document_expired(extracted.expiration_date)
+    # 2. Call the OCR service with raw bytes
+    result = await ocr_service.extract_id_data(image_bytes, body.document_type)
 
-    if is_expired:
-        status           = VerificationStatus.REJECTED
-        rejection_reason = "The uploaded ID document has expired. Please upload a current document."
-    elif status == VerificationStatus.REJECTED:
-        rejection_reason = (
-            "Could not extract required fields (name, date of birth) from the document. "
-            "Please upload a clearer, well-lit photo."
-        )
-    elif status == VerificationStatus.MANUAL_REVIEW:
-        rejection_reason = "Document verification service temporarily unavailable."
-    else:
-        rejection_reason = None
-
-    return DocumentVerifyResponse(
-        status=status,
-        extracted_data=extracted if status == VerificationStatus.VERIFIED else None,
-        confidence_score=confidence,
-        rejection_reason=rejection_reason,
-        is_expired=is_expired,
-        document_authentic=confidence >= 0.7 if status == VerificationStatus.VERIFIED else None,
-    )
+    # 3. Return the dict directly — Node.js backend reads extractedName, extractedDOB, etc.
+    return result
 
 
 # ── POST /api/v1/verify/face ──────────────────────────────────────────────

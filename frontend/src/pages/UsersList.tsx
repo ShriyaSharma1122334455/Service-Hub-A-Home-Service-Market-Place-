@@ -87,15 +87,15 @@ export const UsersList: React.FC<UsersListProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {users.map((u) => (
             <button
-              key={u._id}
-              onClick={() => onNavigate(`/profile/${u._id}?type=user`)}
+              key={u.id}
+              onClick={() => onNavigate(`/profile/${u.id}?type=user`)}
               className="glass-panel rounded-[2rem] p-6 text-left hover:shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <div className="flex items-center gap-4 mb-4">
                 {u.avatarUrl ? (
                   <img
                     src={u.avatarUrl}
-                    alt={u.fullName}
+                    alt={u.full_name}
                     className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
                   />
                 ) : (
@@ -104,7 +104,7 @@ export const UsersList: React.FC<UsersListProps> = ({ onNavigate }) => {
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-900 truncate">{u.fullName || "Unknown"}</p>
+                  <p className="font-bold text-slate-900 truncate">{u.full_name || "Unknown"}</p>
                   <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                     {getRoleLabel(u.role)}
                   </span>

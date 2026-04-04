@@ -74,15 +74,15 @@ export const ProvidersList: React.FC<ProvidersListProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {providers.map((p) => (
             <button
-              key={p._id}
-              onClick={() => onNavigate(`/profile/${p._id}?type=provider`)}
+              key={p.id}
+              onClick={() => onNavigate(`/profile/${p.id}?type=provider`)}
               className="glass-panel rounded-[2rem] p-6 text-left hover:shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <div className="flex items-center gap-4 mb-4">
                 {p.avatarUrl ? (
                   <img
                     src={p.avatarUrl}
-                    alt={p.fullName}
+                    alt={p.full_name}
                     className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md"
                   />
                 ) : (
@@ -92,7 +92,7 @@ export const ProvidersList: React.FC<ProvidersListProps> = ({ onNavigate }) => {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-slate-900 truncate">
-                    {p.businessName || p.fullName || "Unknown"}
+                    {p.businessName || p.business_name || p.full_name || "Unknown"}
                   </p>
                   {(p.ratingAvg ?? p.rating) !== undefined && (
                     <div className="flex items-center gap-1 mt-1">

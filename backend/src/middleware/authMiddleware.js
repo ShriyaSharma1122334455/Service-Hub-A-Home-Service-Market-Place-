@@ -30,11 +30,11 @@ let _adminClient = null;
 
 function getAdminClient() {
   if (!_adminClient) {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) {
       throw new Error(
-        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in .env'
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or their VITE_ counterparts) must be set in .env'
       );
     }
     _adminClient = createClient(supabaseUrl, serviceKey, {

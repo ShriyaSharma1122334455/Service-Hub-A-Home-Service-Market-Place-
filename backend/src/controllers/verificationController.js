@@ -20,7 +20,7 @@ import {
   getSignedUrl,
 } from '../services/supabaseVerificationStorage.js';
 
-const AI_SERVICES_URL = process.env.AI_SERVICES_URL || 'http://localhost:8001';
+const AI_SERVICES_URL = process.env.AI_SERVICES_URL || 'http://localhost:8000';
 const AI_INTERNAL_KEY = process.env.AI_INTERNAL_API_KEY || 'change-me-in-production';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -52,12 +52,15 @@ const MAX_FILE_SIZE = 5242880;
 
 export const getPrefill = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) {
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
+    }
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('full_name, email, phone, date_of_birth')
-      .eq('id', userId)
+      .select('full_name, email, phone')
+      .eq('id', internalUser.id)
       .single();
 
     if (error || !user) {
@@ -71,7 +74,7 @@ export const getPrefill = async (req, res) => {
         fullName: user.full_name,
         email: user.email,
         phone: user.phone || null,
-        dateOfBirth: user.date_of_birth || null,
+        dateOfBirth: null,
       },
       error: null,
     });
@@ -121,19 +124,26 @@ export const uploadId = async (req, res) => {
       return res.status(500).json({ success: false, data: null, error: uploadResult.error });
     }
 
-    // Call AI OCR service at /ai/ocr/parse-id as multipart POST
+    // Generate a signed URL for AI service to download the private file
+    const idSignedResult = await getSignedUrl(uploadResult.path, 600);
+    if (!idSignedResult.success) {
+      return res.status(500).json({ success: false, data: null, error: 'Failed to generate signed URL for ID document' });
+    }
+
+    // Call AI OCR service at /api/v1/verify/document as JSON POST
     let ocrResult = null;
     try {
-      const formData = new FormData();
-      formData.append('document', new Blob([file.buffer], { type: file.mimetype }), `id-document.${ext}`);
-      formData.append('document_type', documentType);
-
-      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/ocr/parse-id`, {
+      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/document`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
-        body: formData,
+        body: JSON.stringify({
+          image_url: idSignedResult.signedUrl,
+          document_type: documentType,
+          user_id: internalUser.id
+        }),
       });
 
       if (aiResp.ok) {
@@ -152,60 +162,42 @@ export const uploadId = async (req, res) => {
     const extractedName = ocrResult?.extractedName || ocrResult?.extracted_data?.full_name || null;
     const extractedDob = ocrResult?.extractedDOB || ocrResult?.extracted_data?.date_of_birth || null;
 
-    // Upsert a row in public.verifications
-    const { data: verification, error: upsertError } = await supabase
+    // Save verification record — find existing or create new
+    const verificationPayload = {
+      document_type: documentType,
+      id_document_url: uploadResult.path,
+      ocr_result: ocrResult,
+      extracted_name: extractedName,
+      extracted_dob: extractedDob,
+      verification_status: 'pending',
+      updated_at: new Date().toISOString(),
+    };
+
+    // Check if a verification record already exists for this user
+    const { data: existing } = await supabase
       .from('verifications')
-      .upsert(
-        {
-          user_id: internalUser.id,
-          document_type: documentType,
-          id_document_url: uploadResult.path,
-          ocr_result: ocrResult,
-          extracted_name: extractedName,
-          extracted_dob: extractedDob,
-          verification_status: 'pending',
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
-      .select()
-      .single();
+      .select('id')
+      .eq('user_id', internalUser.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (upsertError) {
-      // Fallback: try find-then-update if upsert fails (no unique constraint)
-      console.error('Verification upsert error:', upsertError.message);
-
-      const { data: existing } = await supabase
+    if (existing) {
+      // Update the existing record
+      const { error: updateError } = await supabase
         .from('verifications')
-        .select('id')
-        .eq('user_id', internalUser.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (existing) {
-        await supabase
-          .from('verifications')
-          .update({
-            document_type: documentType,
-            id_document_url: uploadResult.path,
-            ocr_result: ocrResult,
-            extracted_name: extractedName,
-            extracted_dob: extractedDob,
-            verification_status: 'pending',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existing.id);
-      } else {
-        await supabase.from('verifications').insert({
-          user_id: internalUser.id,
-          document_type: documentType,
-          id_document_url: uploadResult.path,
-          ocr_result: ocrResult,
-          extracted_name: extractedName,
-          extracted_dob: extractedDob,
-          verification_status: 'pending',
-        });
+        .update(verificationPayload)
+        .eq('id', existing.id);
+      if (updateError) {
+        console.error('Verification update error:', updateError.message);
+      }
+    } else {
+      // Insert a new record
+      const { error: insertError } = await supabase
+        .from('verifications')
+        .insert({ user_id: internalUser.id, ...verificationPayload });
+      if (insertError) {
+        console.error('Verification insert error:', insertError.message);
       }
     }
 
@@ -221,7 +213,7 @@ export const uploadId = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadId error:', err);
-    return res.status(500).json({ success: false, data: null, error: 'Failed to process ID document' });
+    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to process ID document' });
   }
 };
 
@@ -263,13 +255,17 @@ export const uploadSelfie = async (req, res) => {
     }
 
     // Get existing verification record to find the ID document
-    const { data: verification } = await supabase
+    const { data: verification, error: lookupError } = await supabase
       .from('verifications')
       .select('id, id_document_url')
       .eq('user_id', internalUser.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error('Verification lookup error:', lookupError.message);
+    }
 
     if (!verification?.id_document_url) {
       return res.status(400).json({
@@ -285,34 +281,26 @@ export const uploadSelfie = async (req, res) => {
       return res.status(500).json({ success: false, data: null, error: 'Failed to generate signed URL for ID document' });
     }
 
-    let idImageBuffer = null;
-    try {
-      const idResp = await fetch(idSignedResult.signedUrl);
-      if (idResp.ok) {
-        const arrBuf = await idResp.arrayBuffer();
-        idImageBuffer = Buffer.from(arrBuf);
-      }
-    } catch (dlErr) {
-      console.error('Failed to download ID image for face match:', dlErr.message);
+    // Generate a signed URL for the newly uploaded selfie
+    const selfieSignedResult = await getSignedUrl(uploadResult.path, 600);
+    if (!selfieSignedResult.success) {
+      return res.status(500).json({ success: false, data: null, error: 'Failed to generate signed URL for selfie' });
     }
 
-    if (!idImageBuffer) {
-      return res.status(500).json({ success: false, data: null, error: 'Failed to retrieve ID document for face matching' });
-    }
-
-    // Call AI face match service at /ai/face/match as multipart POST
+    // Call AI face match service at /api/v1/verify/face as JSON POST
     let faceMatchResult = null;
     try {
-      const formData = new FormData();
-      formData.append('id_image', new Blob([idImageBuffer], { type: 'image/jpeg' }), 'id-document.jpg');
-      formData.append('selfie', new Blob([file.buffer], { type: file.mimetype }), `selfie.${ext}`);
-
-      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/face/match`, {
+      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/face`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
-        body: formData,
+        body: JSON.stringify({
+          id_image_url: idSignedResult.signedUrl,
+          selfie_url: selfieSignedResult.signedUrl,
+          user_id: internalUser.id
+        }),
       });
 
       if (aiResp.ok) {
@@ -347,7 +335,7 @@ export const uploadSelfie = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadSelfie error:', err);
-    return res.status(500).json({ success: false, data: null, error: 'Failed to process selfie' });
+    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to process selfie' });
   }
 };
 
@@ -367,7 +355,7 @@ export const submitVerification = async (req, res) => {
       .eq('user_id', internalUser.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (!verification) {
       return res.status(400).json({ success: false, data: null, error: 'No verification record found. Please start the verification process.' });
@@ -382,24 +370,21 @@ export const submitVerification = async (req, res) => {
       });
     }
 
-    // Parse firstName and lastName from the extracted_name field in the OCR result
-    const fullName = verification.extracted_name || internalUser.full_name;
-    const nameParts = fullName.trim().split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || nameParts[0] || '';
+    // Setup payload for passing to AI service
+    const fullName = verification.extracted_name || internalUser.full_name || 'Unknown User';
 
-    // Call AI NSOPW check at /ai/nsopw/check as JSON POST
+    // Call AI NSOPW check at /api/v1/verify/nsopw as JSON POST
     let nsopwResult = null;
     try {
-      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/nsopw/check`, {
+      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/nsopw`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
         body: JSON.stringify({
-          firstName,
-          lastName,
+          full_name: fullName,
+          user_id: internalUser.id,
           state: null,
         }),
       });
@@ -453,7 +438,7 @@ export const submitVerification = async (req, res) => {
     });
   } catch (err) {
     console.error('submitVerification error:', err);
-    return res.status(500).json({ success: false, data: null, error: 'Failed to submit verification' });
+    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to submit verification' });
   }
 };
 
@@ -461,15 +446,18 @@ export const submitVerification = async (req, res) => {
 
 export const getStatus = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) {
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
+    }
 
     const { data: verification, error } = await supabase
       .from('verifications')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', internalUser.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error || !verification) {
       // No verification record means unverified

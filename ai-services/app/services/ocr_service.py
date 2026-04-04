@@ -38,11 +38,25 @@ logger = logging.getLogger(__name__)
 # ── Client factory ────────────────────────────────────────────────────────
 
 def _build_vision_client() -> vision.ImageAnnotatorClient:
+    # Option 1: Raw JSON string (e.g. from Docker / CI secret)
     if settings.GOOGLE_CREDENTIALS_JSON:
         info = json.loads(settings.GOOGLE_CREDENTIALS_JSON)
         creds = service_account.Credentials.from_service_account_info(info)
         return vision.ImageAnnotatorClient(credentials=creds)
-    # Falls back to GOOGLE_APPLICATION_CREDENTIALS file path or ADC
+
+    # Option 2: Path to a service-account JSON file (from .env)
+    if settings.GOOGLE_APPLICATION_CREDENTIALS:
+        import os
+        cred_path = settings.GOOGLE_APPLICATION_CREDENTIALS
+        if os.path.isfile(cred_path):
+            creds = service_account.Credentials.from_service_account_file(cred_path)
+            logger.info("Loaded Vision credentials from file: %s", cred_path)
+            return vision.ImageAnnotatorClient(credentials=creds)
+        else:
+            logger.warning("GOOGLE_APPLICATION_CREDENTIALS path does not exist: %s", cred_path)
+
+    # Option 3: Falls back to Application Default Credentials (ADC)
+    logger.info("Using Application Default Credentials for Vision API")
     return vision.ImageAnnotatorClient()
 
 
@@ -277,7 +291,10 @@ def _mrz_date_to_iso(yymmdd: str, is_dob: bool = True) -> Optional[str]:
 # ── Driver License AAMVA Parsing ──────────────────────────────────────────
 
 def _parse_drivers_license(raw_text: str) -> Dict[str, Optional[str]]:
-    """Regex-based field extraction from AAMVA-standard US driver license text."""
+    """
+    Regex-based field extraction from US driver license OCR text.
+    Uses multiple fallback strategies since DL formats vary wildly by state.
+    """
     result = {
         "full_name": None,
         "date_of_birth": None,
@@ -287,52 +304,127 @@ def _parse_drivers_license(raw_text: str) -> Dict[str, Optional[str]]:
         "address": None,
     }
 
-    # Full name — AAMVA uses LN / FN labels
+    logger.info("RAW OCR TEXT for DL:\n%s", raw_text)
+
+    # ── Full name ─────────────────────────────────────────────────────────
+    # Strategy 1: Labeled fields (LN/FN, LAST NAME/FIRST NAME)
     name_match = re.search(
-        r"(?:LN|LAST\s*NAME)[:\s]+([A-Z]+)[,\s]+(?:FN|FIRST\s*NAME)[:\s]+([A-Z]+)",
+        r"(?:LN|LAST\s*NAME|SURNAME)[:\s/]+([A-Za-z\-']+)"
+        r"[\s,;]+(?:FN|FIRST\s*NAME|GIVEN\s*NAME)[:\s/]+([A-Za-z\-'\s]+)",
         raw_text, re.IGNORECASE,
     )
     if name_match:
-        result["full_name"] = f"{name_match.group(2)} {name_match.group(1)}".title()
-    else:
-        # Fallback: first all-caps two-word line
-        caps = re.findall(r"^[A-Z]{2,}\s+[A-Z]{2,}", raw_text, re.MULTILINE)
-        if caps:
-            result["full_name"] = caps[0].title()
+        result["full_name"] = f"{name_match.group(2).strip()} {name_match.group(1).strip()}".title()
 
-    # Date of birth
-    dob = re.search(
-        r"(?:DOB|DATE\s*OF\s*BIRTH|BIRTH\s*DATE)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
-        raw_text, re.IGNORECASE,
-    )
-    if dob:
-        result["date_of_birth"] = _normalise_date(dob.group(1))
+    # Strategy 2: "NAME" or "NM" label followed by text
+    if not result["full_name"]:
+        name2 = re.search(
+            r"(?:^|\n)\s*(?:NAME|NM|FULL\s*NAME)[:\s]+([A-Za-z\-'\s,]+)",
+            raw_text, re.IGNORECASE | re.MULTILINE,
+        )
+        if name2:
+            raw_name = name2.group(1).strip().rstrip(",")
+            # Handle "LASTNAME, FIRSTNAME" format
+            if "," in raw_name:
+                parts = raw_name.split(",", 1)
+                result["full_name"] = f"{parts[1].strip()} {parts[0].strip()}".title()
+            else:
+                result["full_name"] = raw_name.title()
 
-    # Expiration date
-    exp = re.search(
-        r"(?:EXP|EXPIRES?|EXPIRATION)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
-        raw_text, re.IGNORECASE,
-    )
-    if exp:
-        result["expiry_date"] = _normalise_date(exp.group(1))
+    # Strategy 3: Look for two consecutive all-caps words (common on DLs)
+    if not result["full_name"]:
+        caps_lines = re.findall(r"^([A-Z][A-Z\-']+(?:\s+[A-Z][A-Z\-']+){1,3})\s*$", raw_text, re.MULTILINE)
+        # Filter out common non-name lines
+        skip_words = {"DRIVER", "LICENSE", "IDENTIFICATION", "CARD", "STATE", "DEPARTMENT",
+                      "MOTOR", "VEHICLES", "CLASS", "REAL", "EXPIRES", "ISSUED", "NONE"}
+        for line in caps_lines:
+            words = line.split()
+            if len(words) >= 2 and not any(w.upper() in skip_words for w in words):
+                result["full_name"] = line.title()
+                break
 
-    # Street address
+    # Strategy 4: Find any line with 2-4 capitalized words that looks like a name
+    if not result["full_name"]:
+        name_lines = re.findall(r"^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*$", raw_text, re.MULTILINE)
+        if name_lines:
+            result["full_name"] = name_lines[0].strip()
+
+    # ── Date of Birth ─────────────────────────────────────────────────────
+    # Strategy 1: Labeled DOB
+    dob_patterns = [
+        r"(?:DOB|DATE\s*OF\s*BIRTH|BIRTH\s*DATE|BD|BORN)[:\s/]+(\d{1,2}[\\/\-\.]\d{1,2}[\\/\-\.]\d{2,4})",
+        r"(?:DOB|DATE\s*OF\s*BIRTH|BIRTH\s*DATE|BD|BORN)[:\s/]+(\d{4}[\\/\-\.]\d{1,2}[\\/\-\.]\d{1,2})",
+        r"(?:DOB|DATE\s*OF\s*BIRTH|BD)[:\s/]+(\d{8})",  # MMDDYYYY compressed
+    ]
+    for pattern in dob_patterns:
+        dob = re.search(pattern, raw_text, re.IGNORECASE)
+        if dob:
+            raw_dob = dob.group(1)
+            if len(raw_dob) == 8 and raw_dob.isdigit():
+                # Compressed MMDDYYYY
+                raw_dob = f"{raw_dob[:2]}/{raw_dob[2:4]}/{raw_dob[4:]}"
+            result["date_of_birth"] = _normalise_date(raw_dob)
+            break
+
+    # Strategy 2: Find any date-like string near DOB context
+    if not result["date_of_birth"]:
+        # Look for any date within 50 chars of "DOB" or "BIRTH"
+        dob_context = re.search(r"(?:DOB|BIRTH).{0,50}", raw_text, re.IGNORECASE | re.DOTALL)
+        if dob_context:
+            date_in_context = re.search(r"(\d{1,2}[\\/\-\.]\d{1,2}[\\/\-\.]\d{2,4})", dob_context.group(0))
+            if date_in_context:
+                result["date_of_birth"] = _normalise_date(date_in_context.group(1))
+
+    # ── Expiration date ───────────────────────────────────────────────────
+    exp_patterns = [
+        r"(?:EXP|EXPIRES?|EXPIRATION|EXPIRY)[:\s/]+(\d{1,2}[\\/\-\.]\d{1,2}[\\/\-\.]\d{2,4})",
+        r"(?:EXP|EXPIRES?|EXPIRATION|EXPIRY)[:\s/]+(\d{4}[\\/\-\.]\d{1,2}[\\/\-\.]\d{1,2})",
+    ]
+    for pattern in exp_patterns:
+        exp = re.search(pattern, raw_text, re.IGNORECASE)
+        if exp:
+            result["expiry_date"] = _normalise_date(exp.group(1))
+            break
+
+    # ── Street address ────────────────────────────────────────────────────
     addr = re.search(
-        r"\d{1,5}\s+[A-Z][A-Z\s]+(?:ST|AVE|RD|BLVD|DR|LN|WAY|CT)[.,\s]",
+        r"\d{1,5}\s+[A-Za-z][A-Za-z\s]+(?:ST|AVE|RD|BLVD|DR|LN|WAY|CT|PL|CIR|TERR?|PKWY)[.,\s]",
         raw_text, re.IGNORECASE,
     )
     if addr:
         result["address"] = addr.group(0).strip()
 
-    # License / DL number
-    id_num = re.search(r"\b(?:DL|ID|LIC)[:\s#]*([A-Z0-9]{6,15})\b", raw_text, re.IGNORECASE)
-    if id_num:
-        result["document_number"] = id_num.group(1).upper()
+    # ── License / DL number ───────────────────────────────────────────────
+    dl_patterns = [
+        r"(?:DL|DLN|ID|LIC|LICENSE|LICENCE)\s*(?:NO|NUMBER|NUM|#)?[:\s#]*([A-Z0-9]{4,15})",
+        r"(?:^|\n)\s*(?:NO|NUM|NUMBER)[:\s]+([A-Z0-9]{6,15})",
+        r"\b([A-Z]\d{7,14})\b",  # Common format: letter + digits
+    ]
+    for pattern in dl_patterns:
+        id_num = re.search(pattern, raw_text, re.IGNORECASE)
+        if id_num:
+            val = id_num.group(1).upper()
+            # Skip too-short values or things that look like dates
+            if len(val) >= 5 and not re.match(r"^\d{1,2}\d{1,2}\d{2,4}$", val):
+                result["document_number"] = val
+                break
 
-    # Issuing state
-    state = re.search(r"(?:STATE|ISS)[:\s]+([A-Z]{2})\b", raw_text, re.IGNORECASE)
-    if state:
+    # ── Issuing state ─────────────────────────────────────────────────────
+    US_STATES = {
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
+        "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
+        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN",
+        "TX","UT","VT","VA","WA","WV","WI","WY","DC",
+    }
+    state = re.search(r"(?:STATE|ISS|ISSUING)[:\s]+([A-Z]{2})\b", raw_text, re.IGNORECASE)
+    if state and state.group(1).upper() in US_STATES:
         result["issuing_state"] = state.group(1).upper()
+    else:
+        # Look for standalone state abbreviation near "STATE" context or at top of doc
+        for st in US_STATES:
+            if re.search(rf"\b{st}\b", raw_text[:200]):
+                result["issuing_state"] = st
+                break
 
     return result
 
