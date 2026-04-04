@@ -137,15 +137,21 @@ export const updateService = async (req, res) => {
 
 export const deleteService = async (req, res) => {
   try {
-    const { error } = await supabase
+    // .select() makes PostgREST return deleted rows; plain .delete() succeeds with 0 rows.
+    const { data, error } = await supabase
       .from('services')
       .delete()
-      .eq('id', req.params.id);
+      .eq('id', req.params.id)
+      .select('id');
 
-    if (error) return res.status(404).json({ success: false, error: 'Service not found' });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    if (!data?.length) {
+      return res.status(404).json({ success: false, error: 'Service not found' });
+    }
 
     res.json({ success: true, message: 'Service deleted' });
-
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to delete service' });
   }
