@@ -100,7 +100,7 @@ export const listBookings = async (req, res) => {
         .single();
 
       if (!provider) {
-        return res.status(404).json({ success: false, error: 'Provider profile not found' });
+        return res.status(404).json({ success: false, error: 'Provider profile not found. Complete your provider profile setup first' });
       }
       query = query.eq('provider_id', provider.id);
     } else {
