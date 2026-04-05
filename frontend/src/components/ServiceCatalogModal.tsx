@@ -2,13 +2,28 @@ import React, { useState, useEffect, useCallback } from "react";
 import { X, Clock, DollarSign, ChevronRight } from "lucide-react";
 import type { User, Provider } from "../../types";
 
-interface BackendService {
-  _id: string;
+/** Normalized from Supabase (`id`, `base_price`, …) for UI use */
+interface ServiceRow {
+  id: string;
   name: string;
   description: string;
   basePrice: number;
   durationMinutes: number;
   subCategory?: string;
+}
+
+function normalizeService(raw: Record<string, unknown>): ServiceRow {
+  const sub =
+    (raw.sub_category as string | null | undefined) ??
+    (raw.subCategory as string | undefined);
+  return {
+    id: String(raw.id ?? raw._id ?? ""),
+    name: String(raw.name ?? ""),
+    description: String(raw.description ?? ""),
+    basePrice: Number(raw.base_price ?? raw.basePrice ?? 0),
+    durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    subCategory: sub || undefined,
+  };
 }
 
 interface ServiceCatalogModalProps {
@@ -51,7 +66,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   user,
   onNavigate,
 }) => {
-  const [services, setServices] = useState<BackendService[]>([]);
+  const [services, setServices] = useState<ServiceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -63,8 +78,8 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
     fetch(`${API_BASE}/api/services?category=${categoryId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          setServices(data.data);
+        if (data.success && Array.isArray(data.data)) {
+          setServices(data.data.map((row: Record<string, unknown>) => normalizeService(row)));
         } else {
           setError(true);
         }
@@ -90,7 +105,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   );
 
   // Group services by subCategory
-  const grouped = services.reduce<Record<string, BackendService[]>>(
+  const grouped = services.reduce<Record<string, ServiceRow[]>>(
     (acc, svc) => {
       const key = svc.subCategory || "General";
       (acc[key] ??= []).push(svc);
@@ -181,7 +196,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
               <div className="space-y-3">
                 {svcs.map((service) => (
                   <div
-                    key={service._id}
+                    key={service.id}
                     className="group flex gap-4 p-5 rounded-2xl bg-white/60 hover:bg-white/90 border border-white/60 hover:border-teal-100 transition-all duration-300 hover:shadow-md"
                   >
                     {/* Left — icon */}
@@ -201,7 +216,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                           <button
                             onClick={() => {
                               onClose();
-                              onNavigate(`/book/${service._id}`);
+                              onNavigate(`/book/${service.id}`);
                             }}
                             className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-teal-600 text-white hover:bg-teal-700 transition-colors"
                           >
