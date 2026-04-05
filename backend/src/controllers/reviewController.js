@@ -44,17 +44,7 @@ export const createReview = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Can only review completed bookings' });
     }
 
-    // Check review doesn't already exist — booking_id is UNIQUE in reviews table
-    const { data: existing } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('booking_id', booking_id)
-      .single();
-
-    if (existing) {
-      return res.status(400).json({ success: false, error: 'You have already reviewed this booking' });
-    }
-
+    // INSERT directly and let the UNIQUE constraint on booking_id catch duplicates atomically
     const { data: review, error } = await supabase
       .from('reviews')
       .insert({
@@ -67,7 +57,12 @@ export const createReview = async (req, res) => {
       .select()
       .single();
 
-    if (error) return res.status(400).json({ success: false, error: error.message });
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(400).json({ success: false, error: 'You have already reviewed this booking' });
+      }
+      return res.status(400).json({ success: false, error: error.message });
+    }
 
     // Update provider rating average
     await updateProviderRating(booking.provider_id);
