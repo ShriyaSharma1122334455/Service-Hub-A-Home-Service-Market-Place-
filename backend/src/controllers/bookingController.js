@@ -199,6 +199,41 @@ export const acceptBooking = async (req, res) => {
 
 export const rejectBooking = async (req, res) => {
   try {
+    // Resolve the requesting provider's internal id
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', internalUser.id)
+      .single();
+
+    if (!provider) {
+      return res.status(404).json({ success: false, error: 'Provider profile not found. Complete your provider profile setup first' });
+    }
+
+    // Fetch booking and verify ownership + status before updating
+    const { data: existing } = await supabase
+      .from('bookings')
+      .select('id, provider_id, status')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+
+    if (existing.provider_id !== provider.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized to reject this booking' });
+    }
+
+    if (existing.status !== 'pending' && existing.status !== 'confirmed') {
+      return res.status(400).json({ success: false, error: `Cannot reject a booking with status '${existing.status}'` });
+    }
+
     const { data: booking, error } = await supabase
       .from('bookings')
       .update({
@@ -210,7 +245,7 @@ export const rejectBooking = async (req, res) => {
       .single();
 
     if (error || !booking) {
-      return res.status(404).json({ success: false, error: 'Booking not found' });
+      return res.status(400).json({ success: false, error: error?.message || 'Failed to update booking' });
     }
 
     res.json({ success: true, data: booking });
