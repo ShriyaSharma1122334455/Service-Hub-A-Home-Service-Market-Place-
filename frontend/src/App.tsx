@@ -342,7 +342,7 @@ useEffect(() => {
       case "/dashboard":
         return <ProviderDashboard user={user} onNavigate={navigate} />;
       case "/faq":
-        return <FAQ />;
+        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
