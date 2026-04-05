@@ -67,15 +67,19 @@ export const createService = async (req, res) => {
       return res.status(400).json({ success: false, error: 'category_id, name, base_price and duration_minutes are required' });
     }
 
-    const user = await getInternalUser(req.user.id, 'id');
-    if (!user) return profileNotFoundResponse(res);
+    // req.user.id is Supabase Auth UUID; providers.user_id is public.users.id (integer FK).
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
 
-    const { data: providerProfile } = await supabase
+    const { data: providerProfile, error: providerError } = await supabase
       .from('providers')
       .select('id')
-      .eq('user_id', user.id)
-      .single();
+      .eq('user_id', internalUser.id)
+      .maybeSingle();
 
+    if (providerError) {
+      return res.status(400).json({ success: false, error: providerError.message });
+    }
     if (!providerProfile) {
       return res.status(403).json({ success: false, error: 'Provider profile not found' });
     }
