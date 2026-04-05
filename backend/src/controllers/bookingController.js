@@ -43,7 +43,7 @@ export const createBooking = async (req, res) => {
         scheduled_at,
         notes:            notes || null,
         total_price:      service?.base_price || 0,
-        status:           'confirmed',
+        status:           'pending',
         payment_status:   'pending',
         address_street:   address_street || null,
         address_city:     address_city   || null,
