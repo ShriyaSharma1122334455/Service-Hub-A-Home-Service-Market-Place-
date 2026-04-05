@@ -358,15 +358,20 @@ export const Profile: React.FC<ProfileProps> = ({
               )}
 
               {profileId === "me" &&
-                ((data as BackendProvider).verificationStatus ||
-                  (data as BackendUser).verificationStatus ||
-                  "unverified") === "unverified" && (
+                ["unverified", "pending"].includes(
+                  ((data as BackendProvider).verificationStatus ||
+                    (data as BackendUser).verificationStatus ||
+                    "unverified") as string
+                ) && (
                   <button
                     onClick={() => onNavigate("/verify")}
                     className="w-full py-3 bg-teal-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors"
                   >
                     <Shield className="h-4 w-4" />
-                    Verify Your Identity
+                    {((data as BackendProvider).verificationStatus ||
+                      (data as BackendUser).verificationStatus) === "pending"
+                      ? "Complete Verification"
+                      : "Verify Your Identity"}
                   </button>
                 )}
             </div>

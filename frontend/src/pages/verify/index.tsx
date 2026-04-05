@@ -52,6 +52,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
 
   // Step 5: Confirmation
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [finalStatus, setFinalStatus] = useState<string | null>(null);
 
   // --- Step 1 logic ---
   useEffect(() => {
@@ -150,7 +151,11 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        videoRef.current.play().catch((e) => {
+          if (e.name !== "AbortError") {
+            console.error("Camera play error:", e);
+          }
+        });
       }
     } catch (err) {
       console.error("Camera access denied or failed", err);
@@ -255,6 +260,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
     const res = await fetchApi<any>("/verification/submit", { method: "POST" });
     if (res.success && res.data) {
       setSubmittedAt(res.data.submittedAt);
+      setFinalStatus(res.data.status);
       setCurrentStep(5);
     } else {
       setError(res.error || "Failed to submit verification.");
@@ -623,7 +629,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
               ) : (
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm text-center">
                   <div className="flex justify-center mb-4">
-                    {faceMatchResult.matched ? (
+                    {faceMatchResult.is_match ? (
                       <div className="h-16 w-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
                         <Check className="h-8 w-8" />
                       </div>
@@ -634,14 +640,14 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                     )}
                   </div>
                   <h3 className="font-bold text-xl text-slate-900 mb-2">
-                    {faceMatchResult.matched ? "Face Matched Successfully" : "Face Match Failed"}
+                    {faceMatchResult.is_match ? "Face Matched Successfully" : "Face Match Failed"}
                   </h3>
                   <p className="text-slate-500 mb-6">
-                    Similarity Score: <span className="font-bold text-slate-700">{faceMatchResult.similarity !== undefined ? faceMatchResult.similarity.toFixed(1) : 0}%</span>
+                    Similarity Score: <span className="font-bold text-slate-700">{faceMatchResult.similarity_score !== undefined ? faceMatchResult.similarity_score.toFixed(1) : 0}%</span>
                   </p>
                   
                   <div className="flex gap-4 justify-center">
-                    {!faceMatchResult.matched && (
+                    {!faceMatchResult.is_match && (
                       <button
                         onClick={() => {
                           setFaceMatchResult(null);
@@ -652,7 +658,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                         Try Again
                       </button>
                     )}
-                    {faceMatchResult.matched && (
+                    {faceMatchResult.is_match && (
                       <button
                         onClick={() => setCurrentStep(4)}
                         className="py-3 px-8 bg-slate-900 font-bold text-white rounded-xl hover:bg-slate-800 shadow-md"
@@ -686,10 +692,10 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                   <div>
                     <h4 className="font-bold text-slate-900">Face Match</h4>
                     <p className="text-sm text-slate-500">
-                      {faceMatchResult?.similarity?.toFixed(1) || 0}% Similarity
+                      {faceMatchResult?.similarity_score?.toFixed(1) || 0}% Similarity
                     </p>
                   </div>
-                  {faceMatchResult?.matched ? (
+                  {faceMatchResult?.is_match ? (
                     <Check className="h-6 w-6 text-green-500" />
                   ) : (
                     <X className="h-6 w-6 text-red-500" />
@@ -731,14 +737,22 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
           {/* Step 5: Confirmation */}
           {currentStep === 5 && (
             <div className="text-center py-12 animate-in zoom-in-95 duration-500">
-              <div className="h-20 w-20 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Check className="h-10 w-10" />
+              <div className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
+                  finalStatus === 'verified' ? 'bg-emerald-100 text-emerald-600' :
+                  finalStatus === 'failed' ? 'bg-red-100 text-red-600' :
+                  'bg-teal-100 text-teal-600'
+              }`}>
+                {finalStatus === 'failed' ? <X className="h-10 w-10" /> : <Check className="h-10 w-10" />}
               </div>
               <h2 className="text-3xl font-bold text-slate-900 mb-4">
-                Verification Submitted
+                {finalStatus === 'verified' ? 'Verification Complete!' :
+                 finalStatus === 'failed' ? 'Verification Failed' :
+                 'Verification Submitted'}
               </h2>
               <p className="text-slate-500 mb-8 max-w-md mx-auto text-lg">
-                Your identity verification is currently under review. You will be notified once the process is complete.
+                {finalStatus === 'verified' ? 'Your identity verification has been automatically approved.' :
+                 finalStatus === 'failed' ? 'Your verification failed to meet the automated criteria.' :
+                 'Your identity verification is currently under manual review. You will be notified once the process is complete.'}
               </p>
               
               {submittedAt && (

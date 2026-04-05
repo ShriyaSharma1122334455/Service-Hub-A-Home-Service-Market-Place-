@@ -321,6 +321,7 @@ export const uploadSelfie = async (req, res) => {
       .update({
         selfie_url: uploadResult.path,
         face_match_result: faceMatchResult,
+        face_match_score: faceMatchResult?.similarity_score || 0.0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', verification.id);
@@ -401,36 +402,55 @@ export const submitVerification = async (req, res) => {
       nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [], selfDeclarationRequired: true };
     }
 
-    // Update verification record: save nsopw_result, set status to pending, set submitted_at to now
+    // Determine overall verification status automatically
+    let finalStatus = 'pending';
+    
+    // Evaluate if everything passed perfectly
+    const ocrPassed = verification.ocr_result?.status === 'verified';
+    const facePassed = verification.face_match_result?.is_match === true || verification.face_match_score >= 90;
+    const nsopwPassed = nsopwResult?.is_clear === true && nsopwResult?.status === 'verified';
+    
+    // Evaluate if there are any hard rejections
+    const ocrFailed = verification.ocr_result?.status === 'rejected';
+    const faceFailed = verification.face_match_result?.status === 'rejected';
+    const nsopwFailed = nsopwResult?.status === 'rejected';
+
+    if (ocrFailed || faceFailed || nsopwFailed) {
+      finalStatus = 'failed';
+    } else if (ocrPassed && facePassed && nsopwPassed) {
+      finalStatus = 'verified';
+    }
+
+    // Update verification record: save nsopw_result, set status, set submitted_at to now
     const now = new Date().toISOString();
     await supabase
       .from('verifications')
       .update({
         nsopw_result: nsopwResult,
-        verification_status: 'pending',
+        verification_status: finalStatus,
         submitted_at: now,
         updated_at: now,
       })
       .eq('id', verification.id);
 
-    // Also update the user's verification_status to pending
+    // Also update the user's verification_status
     await supabase
       .from('users')
-      .update({ verification_status: 'pending' })
+      .update({ verification_status: finalStatus })
       .eq('id', internalUser.id);
 
     // If provider, update provider table too
     if (internalUser.role === 'provider') {
       await supabase
         .from('providers')
-        .update({ verification_status: 'pending' })
+        .update({ verification_status: finalStatus })
         .eq('user_id', internalUser.id);
     }
 
     return res.json({
       success: true,
       data: {
-        status: 'pending',
+        status: finalStatus,
         submittedAt: now,
         nsopwResult,
       },

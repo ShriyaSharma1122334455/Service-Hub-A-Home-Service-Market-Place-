@@ -98,10 +98,42 @@ async def verify_face(
     Uses AWS Rekognition. Threshold: 80% (configurable via FACE_MATCH_THRESHOLD).
     """
     logger.info("Face match request — user=%s", body.user_id)
-    return await face_service.compare_faces(
-        id_image_url=body.id_image_url,
-        selfie_url=body.selfie_url,
+    import httpx
+
+    # Download ID Image
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            id_resp = await client.get(str(body.id_image_url))
+            id_resp.raise_for_status()
+            id_bytes = id_resp.content
+    except Exception as exc:
+        logger.error("Failed to download ID image for face match: %s", exc)
+        return {"status": "rejected", "similarity_score": 0.0, "threshold_used": 90.0, "is_match": False, "face_detected_in_id": False, "face_detected_in_selfie": False, "rejection_reason": "Failed to download ID image"}
+
+    # Download Selfie Image
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            selfie_resp = await client.get(str(body.selfie_url))
+            selfie_resp.raise_for_status()
+            selfie_bytes = selfie_resp.content
+    except Exception as exc:
+        logger.error("Failed to download Selfie image for face match: %s", exc)
+        return {"status": "rejected", "similarity_score": 0.0, "threshold_used": 90.0, "is_match": False, "face_detected_in_id": True, "face_detected_in_selfie": False, "rejection_reason": "Failed to download selfie image"}
+
+    res = await face_service.compare_faces(
+        id_image_bytes=id_bytes,
+        selfie_bytes=selfie_bytes,
     )
+    
+    return {
+        "status": res.get("status", "rejected"),
+        "similarity_score": res.get("similarity", 0.0),
+        "threshold_used": 90.0,
+        "is_match": res.get("matched", False),
+        "rejection_reason": res.get("rejectionReason"),
+        "face_detected_in_selfie": res.get("faceDetectedInSelfie", False),
+        "face_detected_in_id": res.get("faceDetectedInId", False)
+    }
 
 
 # ── POST /api/v1/verify/nsopw ─────────────────────────────────────────────
@@ -122,7 +154,29 @@ async def check_nsopw(
     Providers only — not called for customers.
     """
     logger.info("NSOPW check — user=%s name='%s'", body.user_id, body.full_name)
-    return await nsopw_service.check_nsopw(
-        full_name=body.full_name,
+    
+    # Split full_name into first_name and last_name
+    name_parts = body.full_name.strip().split()
+    first_name = name_parts[0] if name_parts else ""
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+
+    res = await nsopw_service.check_nsopw(
+        first_name=first_name,
+        last_name=last_name,
         state=body.state,
     )
+    
+    status_map = {
+        "pass": "verified",
+        "fail": "rejected",
+        "pending": "manual_review"
+    }
+    
+    return {
+        "status": status_map.get(res.get("nsopwStatus", "pending"), "manual_review"),
+        "is_clear": not res.get("matchFound", True) and res.get("nsopwStatus") == "pass",
+        "records_found": len(res.get("matchDetails", [])),
+        "rejection_reason": res.get("reason"),
+        "used_fallback": res.get("selfDeclarationRequired", False),
+        "self_declaration_required": res.get("selfDeclarationRequired", False)
+    }
