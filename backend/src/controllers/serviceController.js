@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 export const listServices = async (req, res) => {
   try {
@@ -66,19 +67,8 @@ export const createService = async (req, res) => {
       return res.status(400).json({ success: false, error: 'category_id, name, base_price and duration_minutes are required' });
     }
 
-    // Get provider id from user
-    const { data: provider } = await supabase
-      .from('providers')
-      .select('id')
-      .eq('user_id', req.user.id)  // req.user.id is supabase_id here — need internal user first
-      .single();
-
-    // Actually need internal user id first
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('supabase_id', req.user.id)
-      .single();
+    const user = await getInternalUser(req.user.id, 'id');
+    if (!user) return profileNotFoundResponse(res);
 
     const { data: providerProfile } = await supabase
       .from('providers')
