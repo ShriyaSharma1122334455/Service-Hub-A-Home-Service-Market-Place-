@@ -6,29 +6,30 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
-import mongoose from 'mongoose';
 import app from '../server.js'; 
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { createClient } from '@supabase/supabase-js';
 
-let mongod;
+// ─── Supabase admin client (service role — bypasses RLS for test cleanup) ─────
+ 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY  // service role key, NOT anon key
+);
 
-// ─── Test database - connection to remote MongoDB ────────────────────────────────────────────────────────────
-// beforeAll(async () => {
-//   if (mongoose.connection.readyState === 0) { // 0 = disconnected
-//     const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/service_hub_test';
-//     await mongoose.connect(uri);
-//   }
-// });
+// Track created test user for cleanup
+let createdUserId = null;
 
 // ─── Test database - in-memory MongoDB (faster, isolated) ───────────────────────────────────────────────────
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-}, 30000);
+  
+});
 
 afterAll(async () => {
-  await mongoose.connection.close();
+  // Clean up the test user created during the auth tests
+  if (createdUserId) {
+    await supabase.auth.admin.deleteUser(createdUserId);
+  }
 });
 
 // ─── 1. Health check ──────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ describe('Providers – /api/providers', () => {
   });
 
   it('GET /:id returns 404 for non-existent provider', async () => {
-    const fakeId = new mongoose.Types.ObjectId();
+    const fakeId = '00000000-0000-0000-0000-000000000000';
     const res = await request(app).get(`/api/providers/${fakeId}`);
     expect(res.statusCode).toBe(404);
   });
