@@ -112,7 +112,7 @@ const App = () => {
     email: string,
     role: UserRole,
     password?: string,
-  ) => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) throw new Error("Password required");
       const { data, error } = await signIn(email, password);
@@ -173,8 +173,10 @@ const App = () => {
       } else {
         navigate("/");
       }
+      return { success: true };
     } catch (err) {
       console.error("Login failed", err);
+      return { success: false, message: (err as Error).message };
       // TODO: show UI error
     }
   };

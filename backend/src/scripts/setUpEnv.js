@@ -127,7 +127,7 @@ function installPythonDeps(folder, label, PYTHON_CMD) {
     });
     console.log(`✅ ${label} Python dependencies installed`);
   } catch (err) {
-    console.error(`❌ Failed installing Python deps for ${label}`);
+    console.error(`❌ Failed installing Python deps for ${label}`, err);
     hasError = true;
   }
 }
