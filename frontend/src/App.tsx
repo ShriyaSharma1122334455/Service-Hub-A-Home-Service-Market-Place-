@@ -12,6 +12,7 @@ import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
+import { supabase } from "./lib/supabase";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
 
@@ -62,7 +63,7 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => !!loadStoredAuth(),
   );
-  const authRestored = true;
+  const [authRestored, setAuthRestored] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const [basePath, search] = currentPath.split("?");
@@ -72,6 +73,35 @@ const App = () => {
     profileTypeParam === "user" || profileTypeParam === "provider"
       ? profileTypeParam
       : null;
+
+  // Validate Supabase session on every app init / page reload.
+// Prevents stale localStorage from showing user as logged in
+// after the Supabase access token has expired.
+useEffect(() => {
+  const validateSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      // No active session — clear any stale localStorage and reset state
+      clearAuth();
+      setUser(null);
+      setIsAuthenticated(false);
+    } else {
+      // Session is valid — refresh the stored token in case it was rotated
+      const stored = loadStoredAuth();
+      if (stored) {
+        saveAuth({ ...stored, accessToken: session.access_token });
+      }
+    }
+
+    // Only mark auth as restored AFTER the check completes.
+    // This prevents the protected-path redirect from firing
+    // before we know whether the session is actually valid.
+    setAuthRestored(true);
+  };
+
+  validateSession();
+}, []); // runs once on mount — no dependencies needed
 
   useEffect(() => {
     const handleHashChange = () => {
