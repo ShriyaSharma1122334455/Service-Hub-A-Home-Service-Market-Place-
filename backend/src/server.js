@@ -14,6 +14,7 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
+import testRoutes from './routes/testRoutes.js';
 
 dotenv.config();
 
@@ -43,13 +44,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRoutes);
-// app.use('/api/test', testRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/users', profileRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/complaints', complaintRoutes);
+// Mount test routes in development only — never in production
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', testRoutes);
+}
 // app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
