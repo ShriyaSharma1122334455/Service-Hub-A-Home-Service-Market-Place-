@@ -157,3 +157,4 @@ jobs:
       - name: Run tests
         run: pytest
         working-directory: visual-damage-assessment-service
+        
