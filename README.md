@@ -149,7 +149,7 @@ useEffect(() => {
 | Step | Endpoint | What happens |
 |------|----------|-------------|
 | 1. ID OCR | `POST /api/v1/verify/document` | Google Cloud Vision reads text from the uploaded ID photo |
-| 2. Face match | `POST /api/v1/verify/face` | AWS Rekognition compares a selfie to the ID photo (80 % threshold) |
+| 2. Face match | `POST /api/v1/verify/face` | AWS Rekognition compares a selfie to the ID photo (80% threshold) |
 | 3. Background | `POST /api/v1/verify/nsopw` | Checks provider's name against the NSOPW sex-offender registry |
 
 **Example — face match logic** (from [`ai-services/app/services/face_service.py`](ai-services/app/services/face_service.py)):
@@ -162,7 +162,7 @@ response = client.compare_faces(
 )
 best  = max(face_matches, key=lambda m: m["Similarity"])
 score = round(best["Similarity"], 2)
-match = score >= settings.FACE_MATCH_THRESHOLD   # default: 80 %
+match = score >= settings.FACE_MATCH_THRESHOLD   # default: 80%
 ```
 
 **Security:** Every route requires an `X-Internal-Key` header. Only the Express backend knows this key, so the browser can never call the AI service directly.
