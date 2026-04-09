@@ -1,5 +1,5 @@
 import express from 'express';
-import { createBooking, listBookings, getBooking, acceptBooking, rejectBooking }
+import { createBooking, listBookings, getBooking, acceptBooking, rejectBooking, completeBooking }
   from '../controllers/bookingController.js';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
  
@@ -11,7 +11,8 @@ router.use(authenticate);
 router.get('/',          listBookings);
 router.get('/:id',       getBooking);
 router.post('/',         requireRole('customer'), createBooking);
-router.put('/:id/accept', requireRole('provider'), acceptBooking);
-router.put('/:id/reject', requireRole('provider'), rejectBooking);
+router.put('/:id/accept',    requireRole('provider'), acceptBooking);
+router.put('/:id/reject',    requireRole('provider'), rejectBooking);
+router.put('/:id/complete',  requireRole('provider'), completeBooking);
  
 export default router;

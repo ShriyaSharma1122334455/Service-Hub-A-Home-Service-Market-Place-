@@ -55,6 +55,7 @@ export const getService = async (req, res) => {
     res.json({ success: true, data: service });
 
   } catch (err) {
+    console.error('Error fetching service:', err)
     res.status(500).json({ success: false, error: 'Failed to fetch service' });
   }
 };
@@ -125,6 +126,7 @@ export const updateService = async (req, res) => {
     res.json({ success: true, data: service });
 
   } catch (err) {
+    console.error('updateService error:', err)
     res.status(400).json({ success: false, error: 'Failed to update service' });
   }
 };
@@ -147,6 +149,7 @@ export const deleteService = async (req, res) => {
 
     res.json({ success: true, message: 'Service deleted' });
   } catch (err) {
+    console.error('deleteService error:', err);
     res.status(500).json({ success: false, error: 'Failed to delete service' });
   }
 };

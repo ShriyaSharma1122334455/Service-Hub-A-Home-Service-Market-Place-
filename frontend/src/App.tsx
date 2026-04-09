@@ -112,7 +112,7 @@ const App = () => {
     email: string,
     role: UserRole,
     password?: string,
-  ) => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) {
         return { success: false, message: "Password required" };

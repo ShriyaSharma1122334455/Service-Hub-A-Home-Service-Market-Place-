@@ -52,7 +52,7 @@ export const Profile: React.FC<ProfileProps> = ({
           setLoading(false);
           return;
         }
-        const meResponse = await profileService.getMe(email);
+        const meResponse = await profileService.getMe();
         if (cancelled) return;
         if (meResponse.success && meResponse.data) {
           const d = meResponse.data;
@@ -67,11 +67,12 @@ export const Profile: React.FC<ProfileProps> = ({
           setProfile({
             type,
             data: {
-              _id: "me",
-              fullName:
+              id: "me",
+              supabase_id: "",
+              full_name:
                 (currentUser as { name?: string }).name || email.split("@")[0],
               email,
-              avatarUrl: (currentUser as { avatar?: string }).avatar,
+              avatar_url: (currentUser as { avatar?: string }).avatar,
               role,
             } as BackendUser & BackendProvider,
           });
@@ -211,7 +212,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const isProvider = profile.type === "provider";
   const data = profile.data;
   const fullName =
-    (data as BackendProvider).businessName || data.fullName || "Unknown";
+    (data as BackendProvider).business_name || data.full_name || "Unknown";
   const avatarUrl = data.avatarUrl;
   const role = data.role || (isProvider ? "provider" : "customer");
   const email = data.email;
@@ -219,7 +220,7 @@ export const Profile: React.FC<ProfileProps> = ({
     data.bio ||
     (isProvider ? (data as BackendProvider).description : undefined);
   const rating = isProvider
-    ? ((data as BackendProvider).ratingAvg ?? (data as BackendProvider).rating)
+    ? ((data as BackendProvider).rating_avg ?? (data as BackendProvider).rating)
     : (data as BackendUser).provider?.rating;
   const serviceCategory = (data as BackendProvider).serviceCategory;
 
@@ -336,7 +337,7 @@ export const Profile: React.FC<ProfileProps> = ({
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
                     ID
                   </p>
-                  <p className="text-slate-500 text-sm font-mono">{data._id}</p>
+                  <p className="text-slate-500 text-sm font-mono">{data.id}</p>
                 </div>
               )}
             </div>
