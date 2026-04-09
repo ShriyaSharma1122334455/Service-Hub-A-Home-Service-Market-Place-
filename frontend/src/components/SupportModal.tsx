@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, MessageSquare, Loader2 } from "lucide-react";
+import fetchApi from "../lib/api";
 
 type UserRole = "customer" | "provider";
 type Priority = "LOW" | "MEDIUM" | "HIGH";
@@ -64,9 +65,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:3000/api/complaints", {
+      const result = await fetchApi("/complaints", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
           subject,
@@ -75,16 +75,15 @@ export const SupportModal: React.FC<SupportModalProps> = ({
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to submit. Please try again.");
+      if (!result.success) {
+        setError(result.error || "Failed to submit. Please try again.");
+      } else {
+        setSubmitted(true);
       }
-
-      setSubmitted(true);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Something went wrong";
-      console.error(message);
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }

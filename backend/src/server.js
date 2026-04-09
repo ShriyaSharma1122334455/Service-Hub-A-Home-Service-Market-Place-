@@ -64,7 +64,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -100,7 +100,9 @@ if (process.env.NODE_ENV !== 'test') {
 
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Rejection:', err);
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1);
+  }
 });
 
 export default app;

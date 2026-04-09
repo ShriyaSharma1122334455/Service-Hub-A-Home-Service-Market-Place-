@@ -1,6 +1,6 @@
 import express from 'express';
 import { createComplaint, listComplaints, getComplaint } from '../controllers/complaintController.js';
-import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
