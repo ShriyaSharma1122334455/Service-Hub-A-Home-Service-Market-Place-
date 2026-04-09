@@ -2,7 +2,10 @@
 max-line-length = 120
 # E501 — long lines (system prompt strings and doc strings can't easily be wrapped)
 # E305 — expected 2 blank lines after function def (not a blocking issue)
-# F401 — unused imports in sample/test scripts
-extend-ignore = E501, E305, F401
-# Exclude example/sample scripts from linting
-exclude = sample_groq_test.py, conftest.py
+extend-ignore = E501, E305
+# Ignore unused imports only in sample/example and integration test scripts
+per-file-ignores =
+    sample_groq_test.py: F401, E302, W292
+    test_api.py: F401
+# Exclude config files from linting
+exclude = conftest.py

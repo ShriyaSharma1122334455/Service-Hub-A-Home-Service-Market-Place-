@@ -134,7 +134,7 @@ describe('Providers – /api/providers', () => {
 
   it('GET /:id returns an error status for an invalid ID format', async () => {
     const res = await request(app).get('/api/providers/not-an-id');
-    expect([400, 404, 422, 500]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(400);
   });
 });
 

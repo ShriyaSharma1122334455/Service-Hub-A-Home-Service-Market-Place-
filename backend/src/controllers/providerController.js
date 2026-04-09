@@ -1,8 +1,15 @@
 import supabase from '../config/supabase.js';
 
+// UUID v4 pattern — Supabase / Postgres primary keys are UUID v4
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const getProvider = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!UUID_RE.test(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid provider ID format' });
+    }
 
     const { data: provider, error } = await supabase
       .from('providers')
