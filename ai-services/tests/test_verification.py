@@ -5,7 +5,6 @@ All tests here work WITHOUT live API credentials.
 Run with:  pytest -v   (from ai-services/verification/)
 """
 
-import pytest
 from app.services.ocr_service import _parse_id_text, _normalise_date, is_document_expired
 from app.services.nsopw_service import _fallback_response
 from app.models.schemas import VerificationStatus

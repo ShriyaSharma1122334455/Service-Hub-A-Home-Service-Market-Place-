@@ -49,5 +49,11 @@ async def root():
         "service": "ServiceHub Verification Service",
         "version": "1.0.0",
         "status": "online",
-        "api_v1_docs": "/docs"
+        "api_v1_docs": "/docs",
+        "endpoints": {
+            "verify_document": "/api/v1/verify/document",
+            "verify_face": "/api/v1/verify/face",
+            "nsopw_check": "/api/v1/verify/nsopw",
+            "health": "/health/",
+        },
     }

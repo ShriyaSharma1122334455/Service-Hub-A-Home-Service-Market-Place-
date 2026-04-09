@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 120
+# E221 — multiple spaces before operator (team uses alignment style for readability)
+# E272 — multiple spaces before keyword (same alignment style)
+# F541 — f-string without placeholders (false positives in string concat)
+extend-ignore = E221, E272, F541

@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 120
+# E501 — long lines (system prompt strings and doc strings can't easily be wrapped)
+# E305 — expected 2 blank lines after function def (not a blocking issue)
+# F401 — unused imports in sample/test scripts
+extend-ignore = E501, E305, F401
+# Exclude example/sample scripts from linting
+exclude = sample_groq_test.py, conftest.py

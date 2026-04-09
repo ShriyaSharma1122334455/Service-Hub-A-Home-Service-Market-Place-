@@ -103,4 +103,23 @@ export const login = async (req, res) => {
   }
 };
 
-export default { register, login };
+export const getMe = async (req, res) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, full_name, email, role, avatar_url, created_at')
+      .eq('supabase_id', req.user.id)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    return res.json({ success: true, data: { ...user, email: req.user.email } });
+  } catch (err) {
+    console.error('GetMe error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch user' });
+  }
+};
+
+export default { register, login, getMe };
