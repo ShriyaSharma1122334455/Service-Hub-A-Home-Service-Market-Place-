@@ -5,6 +5,8 @@
  * yopmail test accounts used to verify PR #26 (service catalog) and
  * PR #28 (chatbot / booking flow).
  *
+ * All IDs are resolved dynamically from the live DB — no hardcoded UUIDs.
+ *
  * Run: node src/scripts/seedDeepTestData.js
  */
 
@@ -17,78 +19,119 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ─── Known IDs (from live DB) ─────────────────────────────────────────────────
+// ─── Test account emails ───────────────────────────────────────────────────────
+// These yopmail accounts must already exist in Supabase Auth before running.
 
-const CATEGORY = {
-  cleaning:    'a2466b0f-366c-415e-9c16-d4f2815e3dbe',
-  electrical:  '5ef50120-2f25-4c8a-84cb-b1f48bade443',
-  pest:        '53af8970-d5e9-475c-8cca-aa85087d93e7',
-  plumbing:    '7bb1c72d-481f-4ed1-8400-ba811c8c9286',
+const TEST_EMAILS = {
+  deep_user1:      'deep_user1@yopmail.com',
+  deep_user2:      'deep_user2@yopmail.com',
+  deep_plumber:    'deep_plumber@yopmail.com',
+  deep_cleaner:    'deep_cleaner@yopmail.com',
+  deep_electrical: 'deep_electrical@yopmail.com',
+  deep_pest:       'deep_pest@yopmail.com',
 };
 
-// public.users IDs for the yopmail accounts
-const USER = {
-  deep_user1:      'f6adda34-62a5-4824-a736-eabba5eea460',
-  deep_user2:      '8661cae4-a416-4979-8163-6fff5b983867',
-  deep_plumber:    '03a1ac86-d8c0-4f75-ad0d-2df38e8a5254',
-  deep_cleaner:    'edc45e78-0cc2-4578-8019-77cf8f10831d',
-  deep_electrical: '1a55a6db-ebad-4af6-855f-7b1bd2f62521',
-  deep_pest:       '2d11a8e6-d9f4-4877-b0e6-feb31b639bf0',
-};
+// ─── Step 0: Resolve IDs from the live DB ─────────────────────────────────────
+
+async function resolveIds() {
+  console.log('\n🔍 Step 0 — Resolving IDs from DB...');
+
+  // Resolve user IDs by email
+  const emailList = Object.values(TEST_EMAILS);
+  const { data: users, error: usersErr } = await supabase
+    .from('users')
+    .select('id, email')
+    .in('email', emailList);
+
+  if (usersErr || !users?.length) {
+    console.error('❌ Failed to fetch users:', usersErr?.message);
+    console.error('   Ensure the yopmail test accounts are registered before running this script.');
+    process.exit(1);
+  }
+
+  const USER = {};
+  for (const [key, email] of Object.entries(TEST_EMAILS)) {
+    const found = users.find(u => u.email === email);
+    if (!found) {
+      console.error(`❌ User not found for email: ${email}. Register this account first.`);
+      process.exit(1);
+    }
+    USER[key] = found.id;
+    console.log(`  ✅ ${key} → ${found.id}`);
+  }
+
+  // Resolve category IDs by slug
+  const { data: categories, error: catErr } = await supabase
+    .from('categories')
+    .select('id, slug');
+
+  if (catErr || !categories?.length) {
+    console.error('❌ Failed to fetch categories:', catErr?.message);
+    process.exit(1);
+  }
+
+  const CATEGORY = {};
+  for (const cat of categories) {
+    CATEGORY[cat.slug] = cat.id;
+    console.log(`  ✅ category "${cat.slug}" → ${cat.id}`);
+  }
+
+  return { USER, CATEGORY };
+}
 
 // ─── Step 1: Insert provider profiles ─────────────────────────────────────────
 
-async function seedProviders() {
+async function seedProviders(USER) {
   console.log('\n📋 Step 1 — Seeding provider profiles...');
 
   const providers = [
     {
-      user_id:          USER.deep_plumber,
-      business_name:    'Deep Plumber Services',
-      description:      'Certified plumber with 8+ years experience. Specialises in leak detection, drain cleaning, and full pipe installations.',
-      rating_avg:       0,
-      rating_count:     0,
-      is_active:        true,
-      id_verified:      false,
-      face_matched:     false,
-      nsopw_checked:    false,
-      self_declared:    false,
+      user_id:       USER.deep_plumber,
+      business_name: 'Deep Plumber Services',
+      description:   'Certified plumber with 8+ years experience. Specialises in leak detection, drain cleaning, and full pipe installations.',
+      rating_avg:    0,
+      rating_count:  0,
+      is_active:     true,
+      id_verified:   false,
+      face_matched:  false,
+      nsopw_checked: false,
+      self_declared: false,
     },
     {
-      user_id:          USER.deep_cleaner,
-      business_name:    'Deep Clean Pro',
-      description:      'Professional home cleaning service. Regular, deep-clean, and move-in/out packages available. Fully insured.',
-      rating_avg:       0,
-      rating_count:     0,
-      is_active:        true,
-      id_verified:      false,
-      face_matched:     false,
-      nsopw_checked:    false,
-      self_declared:    false,
+      user_id:       USER.deep_cleaner,
+      business_name: 'Deep Clean Pro',
+      description:   'Professional home cleaning service. Regular, deep-clean, and move-in/out packages available. Fully insured.',
+      rating_avg:    0,
+      rating_count:  0,
+      is_active:     true,
+      id_verified:   false,
+      face_matched:  false,
+      nsopw_checked: false,
+      self_declared: false,
     },
     {
-      user_id:          USER.deep_electrical,
-      business_name:    'Deep Electrical Solutions',
-      description:      'Licensed electrician for residential and light commercial work. Outlets, panels, fans, and wiring repairs.',
-      rating_avg:       0,
-      rating_count:     0,
-      is_active:        true,
-      id_verified:      false,
-      face_matched:     false,
-      nsopw_checked:    false,
-      self_declared:    false,
+      user_id:       USER.deep_electrical,
+      business_name: 'Deep Electrical Solutions',
+      description:   'Licensed electrician for residential and light commercial work. Outlets, panels, fans, and wiring repairs.',
+      rating_avg:    0,
+      rating_count:  0,
+      is_active:     true,
+      id_verified:   false,
+      face_matched:  false,
+      nsopw_checked: false,
+      self_declared: false,
     },
     {
-      user_id:          USER.deep_pest,
-      business_name:    'Deep Pest Control',
-      description:      'Safe and effective pest control for insects, rodents, and prevention. Eco-friendly treatments available.',
-      rating_avg:       0,
-      rating_count:     0,
-      is_active:        true,
-      id_verified:      false,
-      face_matched:     false,
-      nsopw_checked:    false,
-      self_declared:    false,
+      user_id:       USER.deep_pest,
+      business_name: 'Deep Pest Control',
+      description:   'Safe and effective pest control for insects, rodents, and prevention. Eco-friendly treatments available.',
+      rating_avg:    0,
+      rating_count:  0,
+      is_active:     true,
+      id_verified:   false,
+      face_matched:  false,
+      nsopw_checked: false,
+      self_declared: false,
     },
   ];
 
@@ -103,26 +146,25 @@ async function seedProviders() {
   }
 
   data.forEach(p => console.log(`  ✅ ${p.business_name} → provider.id: ${p.id}`));
-  return data; // [ { id, user_id, business_name } ]
+  return data;
 }
 
 // ─── Step 2: Link providers to their categories ───────────────────────────────
 
-async function seedProviderCategories(providerRows) {
+async function seedProviderCategories(providerRows, CATEGORY) {
   console.log('\n🔗 Step 2 — Linking providers to categories...');
 
-  // Map business_name → category_id
-  const categoryMap = {
-    'Deep Plumber Services':       CATEGORY.plumbing,
-    'Deep Clean Pro':              CATEGORY.cleaning,
-    'Deep Electrical Solutions':   CATEGORY.electrical,
-    'Deep Pest Control':           CATEGORY.pest,
+  const pestCatId = CATEGORY['pest-control'] ?? CATEGORY.pest;
+  const categoryByName = {
+    'Deep Plumber Services':     CATEGORY.plumbing,
+    'Deep Clean Pro':            CATEGORY.cleaning,
+    'Deep Electrical Solutions': CATEGORY.electrical,
+    'Deep Pest Control':         pestCatId,
   };
 
-  const rows = providerRows.map(p => ({
-    provider_id: p.id,
-    category_id: categoryMap[p.business_name],
-  }));
+  const rows = providerRows
+    .map(p => ({ provider_id: p.id, category_id: categoryByName[p.business_name] }))
+    .filter(r => r.category_id);
 
   const { error } = await supabase
     .from('provider_categories')
@@ -133,7 +175,7 @@ async function seedProviderCategories(providerRows) {
     return;
   }
 
-  rows.forEach(r => console.log(`  ✅ provider ${r.provider_id.slice(0,8)} → category ${r.category_id.slice(0,8)}`));
+  rows.forEach(r => console.log(`  ✅ provider ${r.provider_id.slice(0, 8)} → category ${r.category_id.slice(0, 8)}`));
 }
 
 // ─── Step 3: Fetch service IDs per category ───────────────────────────────────
@@ -153,9 +195,9 @@ async function getServiceIds() {
   return map;
 }
 
-// ─── Step 4: Seed sample bookings ────────────────────────────────────────────
+// ─── Step 4: Seed sample bookings ─────────────────────────────────────────────
 
-async function seedBookings(providerRows, serviceMap) {
+async function seedBookings(providerRows, serviceMap, USER, CATEGORY) {
   console.log('\n📅 Step 4 — Seeding sample bookings...');
 
   const plumber  = providerRows.find(p => p.business_name === 'Deep Plumber Services');
@@ -163,25 +205,31 @@ async function seedBookings(providerRows, serviceMap) {
   const electric = providerRows.find(p => p.business_name === 'Deep Electrical Solutions');
   const pest     = providerRows.find(p => p.business_name === 'Deep Pest Control');
 
-  const plumbingService  = serviceMap[CATEGORY.plumbing]?.[0];
-  const cleaningService  = serviceMap[CATEGORY.cleaning]?.[0];
+  const pestCatId = CATEGORY['pest-control'] ?? CATEGORY.pest;
+
+  const plumbingService   = serviceMap[CATEGORY.plumbing]?.[0];
+  const cleaningService   = serviceMap[CATEGORY.cleaning]?.[0];
   const electricalService = serviceMap[CATEGORY.electrical]?.[0];
-  const pestService      = serviceMap[CATEGORY.pest]?.[0];
+  const pestService       = serviceMap[pestCatId]?.[0];
+
+  if (!plumbingService || !cleaningService || !electricalService || !pestService) {
+    console.warn('⚠️  One or more services not found in DB — skipping bookings that depend on them.');
+  }
 
   const now = new Date();
-  const daysAgo  = d => new Date(now - d * 86400000).toISOString();
+  const daysAgo   = d => new Date(now - d * 86400000).toISOString();
   const daysAhead = d => new Date(now.getTime() + d * 86400000).toISOString();
 
   const bookings = [
     // ── deep_user1 bookings ──
-    {
+    plumbingService && {
       customer_id:    USER.deep_user1,
       provider_id:    plumber.id,
       service_id:     plumbingService.id,
       status:         'completed',
       scheduled_at:   daysAgo(10),
       completed_at:   daysAgo(10),
-      total_price:    plumbingService ? 79 : 79,
+      total_price:    79,
       payment_status: 'paid',
       notes:          'Kitchen sink leaking under the cabinet',
       address_street: '100 Broad St',
@@ -189,7 +237,7 @@ async function seedBookings(providerRows, serviceMap) {
       address_state:  'NJ',
       address_zip:    '07102',
     },
-    {
+    cleaningService && {
       customer_id:    USER.deep_user1,
       provider_id:    cleaner.id,
       service_id:     cleaningService.id,
@@ -204,7 +252,7 @@ async function seedBookings(providerRows, serviceMap) {
       address_state:  'NJ',
       address_zip:    '07102',
     },
-    {
+    pestService && {
       customer_id:    USER.deep_user1,
       provider_id:    pest.id,
       service_id:     pestService.id,
@@ -220,7 +268,7 @@ async function seedBookings(providerRows, serviceMap) {
       address_zip:    '07102',
     },
     // ── deep_user2 bookings ──
-    {
+    electricalService && {
       customer_id:    USER.deep_user2,
       provider_id:    electric.id,
       service_id:     electricalService.id,
@@ -235,7 +283,7 @@ async function seedBookings(providerRows, serviceMap) {
       address_state:  'NJ',
       address_zip:    '07104',
     },
-    {
+    plumbingService && {
       customer_id:    USER.deep_user2,
       provider_id:    plumber.id,
       service_id:     plumbingService.id,
@@ -250,7 +298,12 @@ async function seedBookings(providerRows, serviceMap) {
       address_state:  'NJ',
       address_zip:    '07104',
     },
-  ];
+  ].filter(Boolean);
+
+  if (!bookings.length) {
+    console.warn('  ⚠️  No bookings to insert.');
+    return;
+  }
 
   const { data, error } = await supabase
     .from('bookings')
@@ -264,7 +317,7 @@ async function seedBookings(providerRows, serviceMap) {
 
   data.forEach(b => {
     const who = b.customer_id === USER.deep_user1 ? 'deep_user1' : 'deep_user2';
-    console.log(`  ✅ [${who}] booking ${b.id.slice(0,8)} — ${b.status} $${b.total_price}`);
+    console.log(`  ✅ [${who}] booking ${b.id.slice(0, 8)} — ${b.status} $${b.total_price}`);
   });
 }
 
@@ -274,21 +327,24 @@ async function main() {
   console.log('🌱 Starting Deep test data seed...');
   console.log(`   Supabase: ${process.env.SUPABASE_URL}`);
 
-  // 1. Providers
-  const providerRows = await seedProviders();
+  // 0. Resolve all IDs from DB (no hardcoded UUIDs)
+  const { USER, CATEGORY } = await resolveIds();
+
+  // 1. Provider profiles
+  const providerRows = await seedProviders(USER);
   if (!providerRows) { console.error('Aborting — provider insert failed'); process.exit(1); }
 
   // 2. Provider → Category links
-  await seedProviderCategories(providerRows);
+  await seedProviderCategories(providerRows, CATEGORY);
 
-  // 3. Fetch service IDs
+  // 3. Fetch service IDs from backend
   console.log('\n🔍 Step 3 — Fetching service IDs...');
   const serviceMap = await getServiceIds();
   const total = Object.values(serviceMap).flat().length;
   console.log(`  ✅ Found ${total} services across ${Object.keys(serviceMap).length} categories`);
 
-  // 4. Bookings
-  await seedBookings(providerRows, serviceMap);
+  // 4. Sample bookings
+  await seedBookings(providerRows, serviceMap, USER, CATEGORY);
 
   console.log('\n🎉 Seed complete!\n');
   process.exit(0);
