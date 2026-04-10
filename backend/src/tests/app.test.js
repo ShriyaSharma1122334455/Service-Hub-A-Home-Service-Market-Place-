@@ -49,7 +49,6 @@ describe('Auth – /api/auth', () => {
     password: 'Password123!',
     role: 'customer',
   };
-  let token = '';
 
   it('POST /register rejects missing fields', async () => {
     const res = await request(app).post('/api/auth/register').send({ email: testUser.email });
