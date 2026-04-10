@@ -11,14 +11,6 @@ interface LoginProps {
   onRegisterClick: () => void;
 }
 
-const isDev = import.meta.env.DEV;
-const USER_CREDENTIALS = isDev
-  ? { email: "user@test.com", password: "userpass" }
-  : null;
-const PROVIDER_CREDENTIALS = isDev
-  ? { email: "provider@test.com", password: "providerpass" }
-  : null;
-
 export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
   const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
   const [notification, setNotification] = useState<{
@@ -26,19 +18,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
     type: "error";
   } | null>(null);
 
-  const [email, setEmail] = useState<string>(() => {
-    if (role === UserRole.PROVIDER && PROVIDER_CREDENTIALS) {
-      return PROVIDER_CREDENTIALS.email;
-    }
-    return USER_CREDENTIALS?.email ?? "";
-  });
-
-  const [password, setPassword] = useState<string>(() => {
-    if (role === UserRole.PROVIDER && PROVIDER_CREDENTIALS) {
-      return PROVIDER_CREDENTIALS.password;
-    }
-    return USER_CREDENTIALS?.password ?? "";
-  });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     if (notification) {

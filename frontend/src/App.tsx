@@ -12,8 +12,12 @@ import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
+import { supabase } from "./lib/supabase";
+import { toUserRole } from "./lib/roleUtils";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
+const MIGRATION_VERSION     = "supabase-v1";
+const MIGRATION_VERSION_KEY = "servicehub-migration-version";
 
 type StoredAuth = {
   email: string;
@@ -44,15 +48,20 @@ const clearAuth = () => {
 };
 
 const App = () => {
+  const storedVersion = localStorage.getItem(MIGRATION_VERSION_KEY);
+  if (storedVersion !== MIGRATION_VERSION) {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.setItem(MIGRATION_VERSION_KEY, MIGRATION_VERSION);
+  }
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
       return {
-        id: "1",
+        id: "",
         name: stored.name,
         email: stored.email,
-        role: stored.role,
+        role: toUserRole(stored.role),
         avatar: stored.avatar,
       } as User;
     }
@@ -62,7 +71,7 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => !!loadStoredAuth(),
   );
-  const authRestored = true;
+  const [authRestored, setAuthRestored] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const [basePath, search] = currentPath.split("?");
@@ -72,6 +81,35 @@ const App = () => {
     profileTypeParam === "user" || profileTypeParam === "provider"
       ? profileTypeParam
       : null;
+
+  // Validate Supabase session on every app init / page reload.
+// Prevents stale localStorage from showing user as logged in
+// after the Supabase access token has expired.
+useEffect(() => {
+  const validateSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      // No active session — clear any stale localStorage and reset state
+      clearAuth();
+      setUser(null);
+      setIsAuthenticated(false);
+    } else {
+      // Session is valid — refresh the stored token in case it was rotated
+      const stored = loadStoredAuth();
+      if (stored) {
+        saveAuth({ ...stored, accessToken: session.access_token });
+      }
+    }
+
+    // Only mark auth as restored AFTER the check completes.
+    // This prevents the protected-path redirect from firing
+    // before we know whether the session is actually valid.
+    setAuthRestored(true);
+  };
+
+  validateSession();
+}, []); // runs once on mount — no dependencies needed
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -109,6 +147,14 @@ const App = () => {
   };
 
   const handleLogin = async (
+  email: string,
+  role: UserRole,
+  password?: string,
+): Promise<{ success: boolean; message?: string }> => {
+  try {
+    if (!password) throw new Error("Password required");
+    const { data, error } = await signIn(email, password);
+    if (error) throw error;
     email: string,
     role: UserRole,
     password?: string,
@@ -151,35 +197,66 @@ const App = () => {
         }
       }
 
-      const normalizeRole = (r?: string, fallback?: UserRole) => {
-        if (!r) return fallback || UserRole.CUSTOMER;
-        return (
-          (String(r).toUpperCase() as UserRole) || fallback || UserRole.CUSTOMER
-        );
-      };
+    const accessToken = data?.session?.access_token;
+    const supabaseUser = data?.user;
 
-      const userData = {
-        id: profile?.id || "1",
-        name: profile?.full_name || name,
-        email,
-        role: normalizeRole(profile?.role, role),
-        avatar: profile?.avatar_url || avatar,
-      } as User;
+    if (!accessToken) {
+      return { success: false, message: "Login failed — no session returned" };
+    }
 
-      setUser(userData);
-      setIsAuthenticated(true);
-      saveAuth({
-        email,
-        role: userData.role,
-        name: userData.name,
-        avatar: userData.avatar,
-        accessToken,
-      });
-      if (userData.role === UserRole.PROVIDER) {
-        navigate("/dashboard");
-      } else {
-        navigate("/");
+    const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+    let profile = null;
+    if (accessToken) {
+      try {
+        const resp = await fetch(`${API_BASE}/api/users/me`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) {
+          console.error("Profile fetch failed", resp.status);
+        } else {
+          const json = await resp.json();
+          if (json?.success) profile = json.data;
+        }
+      } catch (fetchErr) {
+        console.error("Profile fetch error:", fetchErr);
       }
+    }
+
+    const userData = {
+      id: profile?.id || supabaseUser?.id || "",
+      name: profile?.full_name || name,
+      email,
+      role: toUserRole(profile?.role, role),
+      avatar: profile?.avatar_url || avatar,
+    } as User;
+
+    setUser(userData);
+    setIsAuthenticated(true);
+    saveAuth({
+      email,
+      role: userData.role,
+      name: userData.name,
+      avatar: userData.avatar,
+      accessToken,
+    });
+
+    if (userData.role === UserRole.PROVIDER) {
+      navigate("/dashboard");
+    } else {
+      navigate("/");
+    }
+
+    return { success: true };
+
+  } catch (err) {
+    console.error("Login failed", err);
+    const message =
+      err instanceof Error ? err.message : "Login failed. Please try again.";
+    return { success: false, message };
+  }
+};
 
       return { success: true };
     } catch (err) {
