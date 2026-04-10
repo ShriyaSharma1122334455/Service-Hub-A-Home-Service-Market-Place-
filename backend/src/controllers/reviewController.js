@@ -1,14 +1,5 @@
 import supabase from '../config/supabase.js';
-
-const getInternalUser = async (supabaseId) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, role')
-    .eq('supabase_id', supabaseId)
-    .single();
-  if (error) return null;
-  return data;
-};
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 // POST /api/reviews
 export const createReview = async (req, res) => {
@@ -24,9 +15,7 @@ export const createReview = async (req, res) => {
     }
 
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     // Verify the booking exists, is completed, and belongs to this user
     const { data: booking } = await supabase

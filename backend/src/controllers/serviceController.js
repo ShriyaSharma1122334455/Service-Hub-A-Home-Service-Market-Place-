@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 export const listServices = async (req, res) => {
   try {
@@ -67,26 +68,19 @@ export const createService = async (req, res) => {
       return res.status(400).json({ success: false, error: 'category_id, name, base_price and duration_minutes are required' });
     }
 
-    // Get provider id from user
-    // const { data: provider } = await supabase
-    //   .from('providers')
-    //   .select('id')
-    //   .eq('user_id', req.user.id)  // req.user.id is supabase_id here — need internal user first
-    //   .single();
+    // req.user.id is Supabase Auth UUID; providers.user_id is public.users.id (integer FK).
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
 
-    // Actually need internal user id first
-    const { data: user } = await supabase
-      .from('users')
-      .select('id')
-      .eq('supabase_id', req.user.id)
-      .single();
-
-    const { data: providerProfile } = await supabase
+    const { data: providerProfile, error: providerError } = await supabase
       .from('providers')
       .select('id')
-      .eq('user_id', user.id)
-      .single();
+      .eq('user_id', internalUser.id)
+      .maybeSingle();
 
+    if (providerError) {
+      return res.status(400).json({ success: false, error: providerError.message });
+    }
     if (!providerProfile) {
       return res.status(403).json({ success: false, error: 'Provider profile not found' });
     }
@@ -139,15 +133,21 @@ export const updateService = async (req, res) => {
 
 export const deleteService = async (req, res) => {
   try {
-    const { error } = await supabase
+    // .select() makes PostgREST return deleted rows; plain .delete() succeeds with 0 rows.
+    const { data, error } = await supabase
       .from('services')
       .delete()
-      .eq('id', req.params.id);
+      .eq('id', req.params.id)
+      .select('id');
 
-    if (error) return res.status(404).json({ success: false, error: 'Service not found' });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    if (!data?.length) {
+      return res.status(404).json({ success: false, error: 'Service not found' });
+    }
 
     res.json({ success: true, message: 'Service deleted' });
-
   } catch (err) {
     console.error('deleteService error:', err);
     res.status(500).json({ success: false, error: 'Failed to delete service' });

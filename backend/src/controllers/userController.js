@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { PROFILE_NOT_FOUND_MESSAGE } from '../utils/internalUser.js';
 
 export const getMe = async (req, res) => {
   try {
@@ -31,7 +32,7 @@ export const getMe = async (req, res) => {
       .single();
 
     if (error || !user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, error: PROFILE_NOT_FOUND_MESSAGE });
     }
 
     // provider is the first element of the joined array (or null if no row yet)

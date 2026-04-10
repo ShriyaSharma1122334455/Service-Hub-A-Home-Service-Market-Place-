@@ -2,24 +2,54 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, Star, DollarSign, Clock } from "lucide-react";
 
 interface ServiceDetail {
-  _id: string;
+  id: string;
   name: string;
   basePrice: number;
   durationMinutes: number;
   description: string;
-  subCategory?: string;
-  categoryId?: { name: string; slug: string };
+  categorySlug: string;
 }
 
 interface ProviderCard {
-  _id: string;
+  id: string;
   businessName: string;
   ratingAvg: number;
   ratingCount: number;
-  fullName?: string;
-  avatarUrl?: string;
+  fullName?: string | null;
+  avatarUrl?: string | null;
   customPrice?: number | null;
   customDescription?: string | null;
+}
+
+function normalizeServiceDetail(raw: Record<string, unknown>): ServiceDetail | null {
+  const id = raw.id ?? raw._id;
+  if (id == null) return null;
+  const category = raw.category as { slug?: string } | null | undefined;
+  const legacyCat = raw.categoryId as { slug?: string } | null | undefined;
+  return {
+    id: String(id),
+    name: String(raw.name ?? ""),
+    description: String(raw.description ?? ""),
+    basePrice: Number(raw.base_price ?? raw.basePrice ?? 0),
+    durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    categorySlug: category?.slug ?? legacyCat?.slug ?? "",
+  };
+}
+
+function normalizeProviderCard(raw: Record<string, unknown>): ProviderCard {
+  return {
+    id: String(raw.id ?? raw._id ?? ""),
+    businessName: String(raw.business_name ?? raw.businessName ?? ""),
+    ratingAvg: Number(raw.rating_avg ?? raw.ratingAvg ?? 0),
+    ratingCount: Number(raw.rating_count ?? raw.ratingCount ?? 0),
+    fullName: (raw.full_name ?? raw.fullName) as string | null | undefined,
+    avatarUrl: (raw.avatar_url ?? raw.avatarUrl) as string | null | undefined,
+    customPrice: (raw.custom_price ?? raw.customPrice) as number | null | undefined,
+    customDescription: (raw.custom_description ?? raw.customDescription) as
+      | string
+      | null
+      | undefined,
+  };
 }
 
 interface ServiceProvidersProps {
@@ -88,9 +118,23 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
           fetch(`${API_BASE}/api/services/${serviceId}`, { signal }).then((r) => r.json()),
           fetch(`${API_BASE}/api/providers/by-service/${serviceId}`, { signal }).then((r) => r.json()),
         ]);
-        if (svcData.success) setService(svcData.data);
-        if (provData.success) setProviders(provData.data);
-        if (!svcData.success) setError(true);
+        if (svcData.success && svcData.data) {
+          const svc = normalizeServiceDetail(svcData.data as Record<string, unknown>);
+          setService(svc);
+          if (!svc) setError(true);
+        } else {
+          setService(null);
+          setError(true);
+        }
+        if (provData.success && Array.isArray(provData.data)) {
+          setProviders(
+            provData.data.map((row: Record<string, unknown>) =>
+              normalizeProviderCard(row),
+            ),
+          );
+        } else {
+          setProviders([]);
+        }
       } catch {
         if (!signal.aborted) setError(true);
       } finally {
@@ -102,7 +146,7 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
     return () => controller.abort();
   }, [serviceId, API_BASE]);
 
-  const categorySlug = service?.categoryId?.slug ?? "";
+  const categorySlug = service?.categorySlug ?? "";
   const categoryIcon = CATEGORY_ICONS[categorySlug] ?? "🔧";
 
   return (
@@ -175,7 +219,7 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {providers.map((provider) => (
             <div
-              key={provider._id}
+              key={provider.id}
               className="glass-panel rounded-2xl p-6 flex flex-col hover:shadow-lg hover:bg-white/90 transition-all duration-300"
             >
               {/* Avatar + name row */}

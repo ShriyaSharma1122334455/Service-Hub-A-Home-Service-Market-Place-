@@ -1,15 +1,5 @@
 import supabase from '../config/supabase.js';
-
-// helper — gets internal public.users id from supabase auth id
-const getInternalUser = async (supabaseId) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, role')
-    .eq('supabase_id', supabaseId)
-    .single();
-  if (error) return null;
-  return data;
-};
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 export const createBooking = async (req, res) => {
   try {
@@ -22,9 +12,7 @@ export const createBooking = async (req, res) => {
 
     // Get internal customer id
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     // Get service price
     const { data: service } = await supabase
@@ -77,9 +65,7 @@ export const listBookings = async (req, res) => {
   try {
     // Get internal user first
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     let query = supabase
       .from('bookings')

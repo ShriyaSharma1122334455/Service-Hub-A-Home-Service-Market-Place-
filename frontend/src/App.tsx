@@ -155,6 +155,47 @@ useEffect(() => {
     if (!password) throw new Error("Password required");
     const { data, error } = await signIn(email, password);
     if (error) throw error;
+    email: string,
+    role: UserRole,
+    password?: string,
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      if (!password) {
+        return { success: false, message: "Password required" };
+      }
+      const { data, error } = await signIn(email, password);
+      if (error) {
+        return {
+          success: false,
+          message: error.message || "Invalid credentials",
+        };
+      }
+      const accessToken = data?.session?.access_token;
+      const supabaseUser = data?.user;
+      const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
+      const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+      // Sync Supabase user → MongoDB on every login (idempotent upsert).
+      // This covers: first-time login, email-confirmation-delayed signups, and role updates.
+
+      // fetch full profile from backend
+      let profile = null;
+      if (accessToken) {
+        try {
+          const resp = await fetch(`${API_BASE}/api/users/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            console.error("Profile fetch failed", resp.status, text);
+          } else {
+            const json = await resp.json();
+            if (json?.success) profile = json.data;
+          }
+        } catch (fetchErr) {
+          console.error("Profile fetch error:", fetchErr);
+        }
+      }
 
     const accessToken = data?.session?.access_token;
     const supabaseUser = data?.user;
@@ -216,6 +257,15 @@ useEffect(() => {
     return { success: false, message };
   }
 };
+
+      return { success: true };
+    } catch (err) {
+      console.error("Login failed", err);
+      const message =
+        err instanceof Error ? err.message : "Login failed. Please try again.";
+      return { success: false, message };
+      }
+  };
 
   const handleLogout = () => {
     setIsAuthenticated(false);

@@ -1,15 +1,5 @@
 import supabase from '../config/supabase.js';
-
-// Helper — gets internal user id from supabase auth id
-const getInternalUser = async (supabaseId) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, role')
-    .eq('supabase_id', supabaseId)
-    .single();
-  if (error) return null;
-  return data;
-};
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 // POST /api/complaints
 export const createComplaint = async (req, res) => {
@@ -21,9 +11,7 @@ export const createComplaint = async (req, res) => {
     }
 
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     const { data: complaint, error } = await supabase
       .from('complaints')
@@ -52,9 +40,7 @@ export const createComplaint = async (req, res) => {
 export const listComplaints = async (req, res) => {
   try {
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     const { data: complaints, error } = await supabase
       .from('complaints')
@@ -79,9 +65,7 @@ export const listComplaints = async (req, res) => {
 export const getComplaint = async (req, res) => {
   try {
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     const { data: complaint, error } = await supabase
       .from('complaints')
