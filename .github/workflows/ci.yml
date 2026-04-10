@@ -37,12 +37,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Supabase CLI
-        run: npm install -g supabase
-
-      - name: Start Supabase
-        run: supabase start
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -131,10 +125,12 @@ jobs:
 
   # ─────────────────────────────────────────
   # 4. Visual Damage Assessment Service
+  # Skipped automatically when the service directory does not exist
   # ─────────────────────────────────────────
   visual-damage-assessment-service:
     name: Visual Damage Assessment CI
     runs-on: ubuntu-latest
+    if: ${{ hashFiles('visual-damage-assessment-service/requirements.txt') != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -157,4 +153,3 @@ jobs:
       - name: Run tests
         run: pytest
         working-directory: visual-damage-assessment-service
-        
