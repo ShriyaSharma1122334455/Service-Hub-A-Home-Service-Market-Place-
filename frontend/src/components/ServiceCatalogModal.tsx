@@ -20,9 +20,9 @@ function normalizeService(raw: Record<string, unknown>): ServiceRow {
     id: String(raw.id ?? raw._id ?? ""),
     name: String(raw.name ?? ""),
     description: String(raw.description ?? ""),
-    basePrice: Number(raw.base_price ?? raw.basePrice ?? 0),
-    durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
-    subCategory: sub || undefined,
+    base_price: Number(raw.base_price ?? raw.basePrice ?? 0),
+    duration_minutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    sub_category: sub || undefined,
   };
 }
 
