@@ -1,0 +1,16 @@
+[flake8]
+max-line-length = 120
+extend-ignore =
+    # E221/E272: multiple spaces for alignment — intentional code style
+    E221,
+    E272,
+    # W291/W293: trailing whitespace in tests
+    W291,
+    W293,
+    # W292: no newline at end of file
+    W292,
+    # F401: imported but unused — common in test/init files
+    F401
+per-file-ignores =
+    # E302: test functions don't need 2 blank lines between them
+    tests/*: E302

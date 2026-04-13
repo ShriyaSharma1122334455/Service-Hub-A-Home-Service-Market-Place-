@@ -110,7 +110,7 @@ def _parse_id_text(raw_text: str) -> ExtractedIDData:
 
     # Full name — AAMVA uses LN / FN labels
     name_match = re.search(
-        r"(?:LN|LAST\s*NAME)[:\s]+([A-Z]+)[\s,]+(?:FN|FIRST\s*NAME[:\s]+)?([A-Z]+)",
+        r"(?:LN|LAST\s*NAME)[:\s]+([A-Z]+)[\s,\n]+(?:FN|FIRST\s*NAME)[:\s]+([A-Z]+)",
         raw_text, re.IGNORECASE,
     )
     if name_match:

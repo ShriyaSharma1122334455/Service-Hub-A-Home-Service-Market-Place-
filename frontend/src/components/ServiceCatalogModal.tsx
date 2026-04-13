@@ -7,9 +7,9 @@ interface ServiceRow {
   id: string;
   name: string;
   description: string;
-  basePrice: number;
-  durationMinutes: number;
-  subCategory?: string;
+  base_price: number;
+  duration_minutes: number;
+  sub_category?: string;
 }
 
 function normalizeService(raw: Record<string, unknown>): ServiceRow {
@@ -20,9 +20,9 @@ function normalizeService(raw: Record<string, unknown>): ServiceRow {
     id: String(raw.id ?? raw._id ?? ""),
     name: String(raw.name ?? ""),
     description: String(raw.description ?? ""),
-    basePrice: Number(raw.base_price ?? raw.basePrice ?? 0),
-    durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
-    subCategory: sub || undefined,
+    base_price: Number(raw.base_price ?? raw.basePrice ?? 0),
+    duration_minutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    sub_category: sub || undefined,
   };
 }
 
@@ -107,7 +107,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   // Group services by subCategory
   const grouped = services.reduce<Record<string, ServiceRow[]>>(
     (acc, svc) => {
-      const key = svc.subCategory || "General";
+      const key = svc.sub_category || "General";
       (acc[key] ??= []).push(svc);
       return acc;
     },
@@ -245,11 +245,11 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                       <div className="flex flex-wrap items-center gap-2 mt-3">
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
                           <DollarSign size={11} />
-                          From ${service.basePrice}
+                          From ${service.base_price}
                         </span>
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full">
                           <Clock size={11} />
-                          {formatDuration(service.durationMinutes)}
+                          {formatDuration(service.duration_minutes)}
                         </span>
                       </div>
                     </div>
