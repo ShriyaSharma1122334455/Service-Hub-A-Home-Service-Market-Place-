@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { ArrowLeft, Star, DollarSign, Clock } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { ArrowLeft, Star, DollarSign, Clock, X, Loader2 } from "lucide-react";
+import type { User } from "../../types";
+import fetchApi from "../lib/api";
+import { readDamagePrefill, clearDamagePrefill } from "../lib/damagePrefill";
 
 interface ServiceDetail {
   id: string;
@@ -55,7 +58,19 @@ function normalizeProviderCard(raw: Record<string, unknown>): ProviderCard {
 interface ServiceProvidersProps {
   serviceId: string;
   onNavigate: (path: string) => void;
+  user?: User | null;
 }
+
+function defaultScheduledLocalValue(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(10, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Only the top matches are listed; the API may return more. */
+const MAX_PROVIDERS_SHOWN = 6;
 
 const CATEGORY_ICONS: Record<string, string> = {
   cleaning: "✨",
@@ -96,13 +111,40 @@ const ProviderSkeleton: React.FC = () => (
 export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   serviceId,
   onNavigate,
+  user = null,
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);
+  const [totalProviderCount, setTotalProviderCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingProvider, setBookingProvider] = useState<ProviderCard | null>(
+    null,
+  );
+  const [scheduledLocal, setScheduledLocal] = useState(() =>
+    defaultScheduledLocalValue(),
+  );
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+
+  const isCustomer =
+    !!user && String(user.role).toLowerCase() === "customer";
+
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
+  const applyPrefill = useCallback(() => {
+    const p = readDamagePrefill();
+    if (!p?.job_description) return;
+    if (p.service_id && p.service_id !== serviceId) return;
+    setBookingNotes(p.job_description);
+  }, [serviceId]);
+
+  useEffect(() => {
+    applyPrefill();
+  }, [applyPrefill]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,13 +169,18 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
           setError(true);
         }
         if (provData.success && Array.isArray(provData.data)) {
-          setProviders(
-            provData.data.map((row: Record<string, unknown>) =>
-              normalizeProviderCard(row),
-            ),
+          const all = provData.data.map((row: Record<string, unknown>) =>
+            normalizeProviderCard(row),
           );
+          setTotalProviderCount(all.length);
+          const ranked = [...all].sort((a, b) => {
+            if (b.ratingAvg !== a.ratingAvg) return b.ratingAvg - a.ratingAvg;
+            return b.ratingCount - a.ratingCount;
+          });
+          setProviders(ranked.slice(0, MAX_PROVIDERS_SHOWN));
         } else {
           setProviders([]);
+          setTotalProviderCount(0);
         }
       } catch {
         if (!signal.aborted) setError(true);
@@ -148,6 +195,52 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
   const categorySlug = service?.categorySlug ?? "";
   const categoryIcon = CATEGORY_ICONS[categorySlug] ?? "🔧";
+
+  const openBooking = (provider: ProviderCard) => {
+    if (!isCustomer) {
+      onNavigate("/login");
+      return;
+    }
+    setBookingProvider(provider);
+    setScheduledLocal(defaultScheduledLocalValue());
+    applyPrefill();
+    setBookingError(null);
+    setBookingOpen(true);
+  };
+
+  const closeBooking = () => {
+    setBookingOpen(false);
+    setBookingProvider(null);
+    setBookingError(null);
+  };
+
+  const submitBooking = async () => {
+    if (!bookingProvider || !service) return;
+    const iso = new Date(scheduledLocal).toISOString();
+    if (Number.isNaN(new Date(scheduledLocal).getTime())) {
+      setBookingError("Choose a valid date and time.");
+      return;
+    }
+    setBookingSubmitting(true);
+    setBookingError(null);
+    const res = await fetchApi<unknown>("/bookings", {
+      method: "POST",
+      body: JSON.stringify({
+        provider_id: bookingProvider.id,
+        service_id: serviceId,
+        scheduled_at: iso,
+        notes: bookingNotes.trim() || undefined,
+      }),
+    });
+    setBookingSubmitting(false);
+    if (!res.success) {
+      setBookingError(res.error || "Could not create booking.");
+      return;
+    }
+    clearDamagePrefill();
+    closeBooking();
+    alert("Booking request submitted. You can track it from your profile.");
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -185,8 +278,21 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
               </h1>
             </div>
             <p className="text-slate-500 font-medium">
-              {providers.length} provider{providers.length !== 1 ? "s" : ""} available
-              {service && (
+              {totalProviderCount > 0 ? (
+                <>
+                  Showing {providers.length} of {totalProviderCount} provider
+                  {totalProviderCount !== 1 ? "s" : ""}
+                  {totalProviderCount > MAX_PROVIDERS_SHOWN && (
+                    <span className="text-slate-400">
+                      {" "}
+                      (top-rated matches)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>No providers available</>
+              )}
+              {service && totalProviderCount > 0 && (
                 <span className="ml-2 text-slate-400">
                   · From ${service.basePrice} · {formatDuration(service.durationMinutes)}
                 </span>
@@ -278,20 +384,98 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                 )}
               </div>
 
-              {/* Book button — disabled, coming soon */}
-              <div className="relative group/btn">
-                <button
-                  disabled
-                  className="w-full py-2.5 rounded-xl bg-teal-50 text-teal-400 font-semibold text-sm border border-teal-100 cursor-not-allowed"
-                >
-                  Book with Provider
-                </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  Coming Soon
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={() => openBooking(provider)}
+                className={`w-full py-2.5 rounded-xl font-semibold text-sm border transition-colors ${
+                  isCustomer
+                    ? "bg-teal-600 text-white border-teal-600 hover:bg-teal-700"
+                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                }`}
+              >
+                {isCustomer ? "Book with provider" : "Sign in to book"}
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {bookingOpen && bookingProvider && service && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-modal-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200 p-6 relative max-h-[90vh] overflow-y-auto">
+            <button
+              type="button"
+              onClick={closeBooking}
+              className="absolute top-4 right-4 p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2
+              id="booking-modal-title"
+              className="text-lg font-bold text-slate-900 pr-10"
+            >
+              Request booking
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {bookingProvider.businessName} · {service.name}
+            </p>
+
+            <label className="block mt-6 text-sm font-semibold text-slate-800">
+              Preferred date &amp; time
+              <input
+                type="datetime-local"
+                value={scheduledLocal}
+                onChange={(e) => setScheduledLocal(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              />
+            </label>
+
+            <label className="block mt-4 text-sm font-semibold text-slate-800">
+              Job details (from your assessment or edit below)
+              <textarea
+                value={bookingNotes}
+                onChange={(e) => setBookingNotes(e.target.value)}
+                rows={6}
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400"
+                placeholder="Describe the work needed…"
+              />
+            </label>
+
+            {bookingError && (
+              <p className="mt-3 text-sm text-red-600">{bookingError}</p>
+            )}
+
+            <div className="mt-6 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={closeBooking}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitBooking}
+                disabled={bookingSubmitting}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 text-white font-semibold text-sm hover:bg-teal-700 disabled:opacity-50"
+              >
+                {bookingSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  "Submit request"
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

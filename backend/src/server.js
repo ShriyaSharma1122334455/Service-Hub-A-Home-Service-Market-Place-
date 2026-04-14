@@ -6,6 +6,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import  { checkSupabaseConnection } from './config/supabase.js';
+import { validateVdaServiceConfig } from './config/vdaServiceConfig.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
@@ -15,6 +16,7 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
 import testRoutes from './routes/testRoutes.js';
+import assessmentRoutes from './routes/assessmentRoutes.js';
 
 dotenv.config();
 
@@ -22,6 +24,7 @@ const app = express();
 
 if (process.env.NODE_ENV !== 'test') {
   checkSupabaseConnection();
+  validateVdaServiceConfig();
 }
 
 // Rate limiting
@@ -49,6 +52,7 @@ app.use('/api/users', profileRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/assessments', assessmentRoutes);
 app.use('/api/complaints', complaintRoutes);
 // Mount test routes in development only — never in production
 if (process.env.NODE_ENV !== 'production') {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronDown, Send, MessageCircle } from "lucide-react";
+import { Camera, ChevronDown, Send, MessageCircle } from "lucide-react";
 import type { User, Provider } from "../../types";
 import { UserRole } from "../../types";
 
@@ -686,9 +686,14 @@ function MessageBubble({
 
 interface ChatbotProps {
   user: User | Provider | null;
+  /** Opens the visual damage assessment flow (hash route). */
+  onOpenVisualDamage: () => void;
 }
 
-export const Chatbot: React.FC<ChatbotProps> = ({ user }) => {
+export const Chatbot: React.FC<ChatbotProps> = ({
+  user,
+  onOpenVisualDamage,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -769,6 +774,9 @@ export const Chatbot: React.FC<ChatbotProps> = ({ user }) => {
       ? { label: "Provider", cls: "bg-teal-100 text-teal-700" }
       : { label: "Customer", cls: "bg-sky-100 text-sky-700" }
     : null;
+
+  const showVisualDamageEntry =
+    user != null && String(user.role).toLowerCase() === "customer";
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
@@ -852,6 +860,18 @@ export const Chatbot: React.FC<ChatbotProps> = ({ user }) => {
             </button>
           </div>
         </div>
+      )}
+
+      {showVisualDamageEntry && (
+        <button
+          type="button"
+          onClick={onOpenVisualDamage}
+          aria-label="Open visual damage assessment"
+          title="Visual damage assessment"
+          className="mb-3 w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/35 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform duration-200 ring-2 ring-white/80"
+        >
+          <Camera className="w-6 h-6 text-white" aria-hidden />
+        </button>
       )}
 
       {/* FAB button */}

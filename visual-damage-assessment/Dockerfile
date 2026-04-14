@@ -44,8 +44,7 @@ CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000
 FROM base AS production
 
 # Copy only the application files needed to run — no tests, no dev files
-COPY main.py .
-COPY . .
+COPY main.py groq_vision.py ./
 
 # Create non-root user for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser

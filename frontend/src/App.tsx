@@ -9,6 +9,7 @@ import { Register } from "./pages/Register";
 import { Profile } from "./pages/Profile";
 import { ProviderDashboard } from "./pages/ProviderDashboard";
 import { FAQ } from "./pages/FAQ";
+import { VisualDamageAssessment } from "./pages/VisualDamageAssessment";
 import { ServiceProviders } from "./pages/ServiceProviders";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
@@ -132,6 +133,19 @@ useEffect(() => {
       window.location.hash = "/login";
     }
   }, [isProtectedPath, isAuthenticated, authRestored]);
+
+  // Visual damage assessment: customers only (not guests or providers)
+  useEffect(() => {
+    if (!authRestored) return;
+    if (basePath !== "/visual-damage") return;
+    if (!isAuthenticated) {
+      window.location.hash = "/login";
+      return;
+    }
+    if (user && String(user.role).toLowerCase() === "provider") {
+      window.location.hash = "/dashboard";
+    }
+  }, [authRestored, basePath, isAuthenticated, user]);
 
   // Redirect providers away from /dashboard if not authenticated
   // (handled by isProtectedPath guard above)
@@ -323,7 +337,11 @@ useEffect(() => {
 
     if (bookServiceId) {
       return (
-        <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} />
+        <ServiceProviders
+          serviceId={bookServiceId}
+          onNavigate={navigate}
+          user={user}
+        />
       );
     }
 
@@ -348,6 +366,20 @@ useEffect(() => {
         return <ProviderDashboard user={user} onNavigate={navigate} />;
       case "/faq":
         return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
+      case "/visual-damage": {
+        const isCustomerUser =
+          isAuthenticated &&
+          user &&
+          String(user.role).toLowerCase() === "customer";
+        if (!isCustomerUser) {
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] px-4 text-center text-slate-500 text-sm">
+              Redirecting…
+            </div>
+          );
+        }
+        return <VisualDamageAssessment onNavigate={navigate} />;
+      }
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -384,7 +416,10 @@ useEffect(() => {
         }
       />
 
-      <Chatbot user={user} />
+      <Chatbot
+        user={user}
+        onOpenVisualDamage={() => navigate("/visual-damage")}
+      />
     </div>
   );
 };
