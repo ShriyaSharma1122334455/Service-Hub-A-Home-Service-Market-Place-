@@ -152,7 +152,7 @@ export const searchProviders = async (req, res) => {
         id, business_name, description, rating_avg, rating_count, is_active,
         user:users(full_name, email, avatar_url),
         provider_categories(category_id)
-      `);
+      `, { count: 'exact' });
 
     if (categoryProviderIds) query = query.in('id', categoryProviderIds);
 
