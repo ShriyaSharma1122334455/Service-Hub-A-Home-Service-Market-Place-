@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Star, DollarSign, Clock } from "lucide-react";
+import { ArrowLeft, Star, DollarSign, Clock, ExternalLink } from "lucide-react";
 
 interface ServiceDetail {
   id: string;
@@ -55,6 +55,7 @@ function normalizeProviderCard(raw: Record<string, unknown>): ProviderCard {
 interface ServiceProvidersProps {
   serviceId: string;
   onNavigate: (path: string) => void;
+  user?: { role?: string } | null;
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -96,6 +97,7 @@ const ProviderSkeleton: React.FC = () => (
 export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   serviceId,
   onNavigate,
+  user,
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);
@@ -278,17 +280,26 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                 )}
               </div>
 
-              {/* Book button — disabled, coming soon */}
-              <div className="relative group/btn">
+              {/* Action buttons */}
+              <div className="flex gap-2 mt-auto">
                 <button
-                  disabled
-                  className="w-full py-2.5 rounded-xl bg-teal-50 text-teal-400 font-semibold text-sm border border-teal-100 cursor-not-allowed"
+                  onClick={() => onNavigate(`/profile/${provider.id}?type=provider`)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-50 text-slate-600 font-semibold text-sm border border-slate-100 hover:bg-slate-100 transition-colors"
                 >
-                  Book with Provider
+                  <ExternalLink size={13} />
+                  View Profile
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  Coming Soon
-                </span>
+                <div className="relative group/btn flex-1">
+                  <button
+                    disabled
+                    className="w-full py-2.5 rounded-xl bg-teal-50 text-teal-400 font-semibold text-sm border border-teal-100 cursor-not-allowed"
+                  >
+                    Book
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
+                    Coming Soon
+                  </span>
+                </div>
               </div>
             </div>
           ))}
