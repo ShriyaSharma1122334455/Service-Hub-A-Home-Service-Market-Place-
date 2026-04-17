@@ -97,7 +97,7 @@ const ProviderSkeleton: React.FC = () => (
 export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   serviceId,
   onNavigate,
-  user,
+  user: _user, // reserved for role-based Book button once booking UI ships
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);

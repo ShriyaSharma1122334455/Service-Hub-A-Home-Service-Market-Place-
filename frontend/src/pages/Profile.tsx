@@ -151,15 +151,21 @@ export const Profile: React.FC<ProfileProps> = ({
     const providerId = profile.data.id;
     if (!providerId) return;
 
-    setReviewsLoading(true);
-    fetchApi<{ count: number; data: Review[] }>(`/reviews/${providerId}`)
-      .then((res) => {
-        if (res.success && res.data) {
+    let cancelled = false;
+    const loadReviews = async () => {
+      setReviewsLoading(true);
+      try {
+        const res = await fetchApi<{ count: number; data: Review[] }>(`/reviews/${providerId}`);
+        if (!cancelled && res.success && res.data) {
           const payload = res.data as unknown as { count: number; data: Review[] };
           setReviews(Array.isArray(payload.data) ? payload.data : []);
         }
-      })
-      .finally(() => setReviewsLoading(false));
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+    loadReviews();
+    return () => { cancelled = true; };
   }, [profile]);
 
   const getRoleLabel = (role: string) => {
