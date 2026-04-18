@@ -192,8 +192,6 @@ function checkPython() {
   }
 }
 
-
-
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -253,4 +251,18 @@ Next steps:
 `);
 }
 
-main();
+main();function checkPython() {
+  try {
+    execSync("python --version", { stdio: "ignore" });
+    return "python";
+  } catch {
+    try {
+      execSync("python3 --version", { stdio: "ignore" });
+      return "python3";
+    } catch {
+      console.error("❌ Python is not installed");
+      hasError = true;
+      return null;
+    }
+  }
+}
