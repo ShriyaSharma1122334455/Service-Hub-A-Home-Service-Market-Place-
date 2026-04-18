@@ -21,8 +21,23 @@ const INVISIBLE_CHAR_RE = /[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
 // Printable ASCII (0x20-0x7e) plus tab / LF / CR.
 const NON_ASCII_PRINTABLE_RE = /[^\t\n\r\x20-\x7e]/g;
 
-// Control characters (NUL-US and DEL) minus \t \n \r.
-const CONTROL_CHAR_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
+/**
+ * Control characters (NUL–US and DEL) minus tab / LF / CR.
+ * Implemented without a regex so eslint `no-control-regex` does not fire.
+ * @param {string} s
+ * @returns {string}
+ */
+function stripDisallowedControlChars(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    if (c === 0x7f || (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d)) {
+      continue;
+    }
+    out += s[i];
+  }
+  return out;
+}
 
 // Between multi-token phrases we tolerate any run of non-word characters so
 // attackers can't slip past with punctuation (e.g. "ignore---previous").
@@ -114,7 +129,7 @@ export function sanitizeAssessmentText(input, maxLength = 2000) {
 
   let sanitized = input.normalize('NFKC');
   sanitized = sanitized.replace(INVISIBLE_CHAR_RE, '');
-  sanitized = sanitized.replace(CONTROL_CHAR_RE, '');
+  sanitized = stripDisallowedControlChars(sanitized);
 
   // Remove the most dangerous role-impersonation markers; keep the rest of
   // the English prose intact so the catalog ranker still has useful context.

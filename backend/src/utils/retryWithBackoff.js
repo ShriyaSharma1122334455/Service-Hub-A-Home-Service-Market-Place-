@@ -28,6 +28,8 @@ export async function retryWithBackoff(fn, options = {}) {
 
   let lastError;
 
+  /* Sequential retries: each attempt must finish (or fail) before the next. */
+  /* eslint-disable no-await-in-loop -- backoff requires sequential awaits */
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
@@ -55,6 +57,7 @@ export async function retryWithBackoff(fn, options = {}) {
       await sleep(delayMs);
     }
   }
+  /* eslint-enable no-await-in-loop */
 
   // Should never reach here, but just in case
   throw lastError;
@@ -168,7 +171,7 @@ function sleep(ms) {
  * @param {Object} retryOptions - Retry configuration
  * @returns {Promise<Response>} Fetch response
  */
-export async function retryFetch(url, options = {}, retryOptions = {}) {
+export function retryFetch(url, options = {}, retryOptions = {}) {
   return retryWithBackoff(
     async () => {
       const response = await fetch(url, options);

@@ -151,16 +151,18 @@ const seedServices = async () => {
       console.log('   Run seedUsers.js + seedProviders.js first, then re-run this script.');
     } else {
       console.log(`\n🔗 Linking services to ${providers.length} provider(s)...`);
-      for (const provider of providers) {
-        const providerCategoryIds = provider.serviceCategories.map((c) => c.toString());
-        const relevant = inserted.filter((svc) =>
-          providerCategoryIds.includes(svc.categoryId.toString())
-        );
-        await Provider.findByIdAndUpdate(provider._id, {
-          servicesOffered: relevant.map((svc) => ({ serviceId: svc._id })),
-        });
-        console.log(`   - ${provider.businessName}: linked ${relevant.length} service(s)`);
-      }
+      await Promise.all(
+        providers.map(async (provider) => {
+          const providerCategoryIds = provider.serviceCategories.map((c) => c.toString());
+          const relevant = inserted.filter((svc) =>
+            providerCategoryIds.includes(svc.categoryId.toString())
+          );
+          await Provider.findByIdAndUpdate(provider._id, {
+            servicesOffered: relevant.map((svc) => ({ serviceId: svc._id })),
+          });
+          console.log(`   - ${provider.businessName}: linked ${relevant.length} service(s)`);
+        }),
+      );
     }
 
     console.log('\n🎉 Service seeding completed successfully!');

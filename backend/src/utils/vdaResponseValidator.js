@@ -21,9 +21,22 @@ const MAX_LENGTHS = {
 
 const REQUIRED_FIELDS = ['assessment', 'recommendation', 'estimated_cost_usd', 'confidence_score'];
 
-// Control chars (NUL-US, DEL) minus \t \n \r. Any of these in a free-text
-// field is a strong signal of adversarial output and we reject outright.
-const CONTROL_CHAR_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+/**
+ * True if the string contains a control char (NUL–US, DEL) other than
+ * tab / LF / CR. Implemented without a regex so eslint `no-control-regex`
+ * does not fire.
+ * @param {string} s
+ * @returns {boolean}
+ */
+function hasDisallowedControlChar(s) {
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    if (c === 0x7f || (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Free-text fields that may legitimately contain end-user content and
 // therefore MUST be HTML-escaped before being returned to the browser or
@@ -93,7 +106,7 @@ export function validateVdaResponse(vdaResponse) {
       continue;
     }
 
-    if (CONTROL_CHAR_RE.test(value)) {
+    if (hasDisallowedControlChar(value)) {
       errors.push(`Field '${field}' contains disallowed control characters`);
       continue;
     }
