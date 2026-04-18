@@ -10,6 +10,8 @@ import { Profile } from "./pages/Profile";
 import { ProviderDashboard } from "./pages/ProviderDashboard";
 import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
+import { BookingConfirmation } from "./pages/BookingConfirmation";
+import { ProviderBookings } from "./pages/ProviderBookings";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
 import { supabase } from "./lib/supabase";
@@ -83,33 +85,33 @@ const App = () => {
       : null;
 
   // Validate Supabase session on every app init / page reload.
-// Prevents stale localStorage from showing user as logged in
-// after the Supabase access token has expired.
-useEffect(() => {
-  const validateSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+  // Prevents stale localStorage from showing user as logged in
+  // after the Supabase access token has expired.
+  useEffect(() => {
+    const validateSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-    if (!session) {
-      // No active session — clear any stale localStorage and reset state
-      clearAuth();
-      setUser(null);
-      setIsAuthenticated(false);
-    } else {
-      // Session is valid — refresh the stored token in case it was rotated
-      const stored = loadStoredAuth();
-      if (stored) {
-        saveAuth({ ...stored, accessToken: session.access_token });
+      if (!session) {
+        // No active session — clear any stale localStorage and reset state
+        clearAuth();
+        setUser(null);
+        setIsAuthenticated(false);
+      } else {
+        // Session is valid — refresh the stored token in case it was rotated
+        const stored = loadStoredAuth();
+        if (stored) {
+          saveAuth({ ...stored, accessToken: session.access_token });
+        }
       }
-    }
 
-    // Only mark auth as restored AFTER the check completes.
-    // This prevents the protected-path redirect from firing
-    // before we know whether the session is actually valid.
-    setAuthRestored(true);
-  };
+      // Only mark auth as restored AFTER the check completes.
+      // This prevents the protected-path redirect from firing
+      // before we know whether the session is actually valid.
+      setAuthRestored(true);
+    };
 
-  validateSession();
-}, []); // runs once on mount — no dependencies needed
+    validateSession();
+  }, []); // runs once on mount — no dependencies needed
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -123,7 +125,10 @@ useEffect(() => {
 
   // Protected paths require a logged-in session
   const isProtectedPath =
-    basePath === "/dashboard" || basePath.startsWith("/profile");
+    basePath === "/dashboard" ||
+    basePath.startsWith("/profile") ||
+    basePath === "/my-bookings" ||
+    basePath.startsWith("/booking-confirmation");
 
   // Redirect unauthenticated users away from protected pages
   useEffect(() => {
@@ -133,17 +138,23 @@ useEffect(() => {
     }
   }, [isProtectedPath, isAuthenticated, authRestored]);
 
-  // Redirect providers away from /dashboard if not authenticated
-  // (handled by isProtectedPath guard above)
-
   const profileIdMatch = basePath.match(/^\/profile\/(.+)$/);
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
 
   const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
   const bookServiceId = bookServiceMatch ? bookServiceMatch[1] : null;
 
+  const bookingConfirmationMatch = basePath.match(/^\/booking-confirmation\/(.+)$/);
+  const bookingConfirmationId = bookingConfirmationMatch ? bookingConfirmationMatch[1] : null;
+
   const navigate = (path: string) => {
     window.location.hash = path;
+  };
+
+  /** Read the current access token from localStorage */
+  const getToken = (): string => {
+    const stored = loadStoredAuth();
+    return stored?.accessToken ?? "";
   };
 
   const handleLogin = async (
@@ -230,34 +241,6 @@ useEffect(() => {
     navigate("/");
   };
 
-  // const handleRegister = async (
-  //   email: string,
-  //   role: UserRole,
-  //   password?: string,
-  //   name?: string,
-  //   phone?: string,
-  // ) => {
-  //   try {
-  //     if (!password) throw new Error("Password required");
-  //     // ensure role stored in Supabase as lowercase (backend expects lowercase)
-  //     const roleLower = String(role).toLowerCase();
-  //     const { error: signupError } = await signUpWithRole(
-  //       email,
-  //       password,
-  //       roleLower,
-  //       name,
-  //       phone,
-  //     );
-  //     if (signupError) throw signupError;
-
-  //     // complete login flow
-  //     await handleLogin(email, role, password);
-  //   } catch (err) {
-  //     console.error("Register failed", err);
-  //     // TODO: show UI error
-  //   }
-  // };
-
   const handleRegister = async (
     email: string,
     role: UserRole,
@@ -318,7 +301,22 @@ useEffect(() => {
 
     if (bookServiceId) {
       return (
-        <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} user={user} />
+        <ServiceProviders
+          serviceId={bookServiceId}
+          onNavigate={navigate}
+          user={user}
+          token={getToken()}
+        />
+      );
+    }
+
+    if (bookingConfirmationId) {
+      return (
+        <BookingConfirmation
+          bookingId={bookingConfirmationId}
+          token={getToken()}
+          onNavigate={navigate}
+        />
       );
     }
 
@@ -343,6 +341,13 @@ useEffect(() => {
         return <ProviderDashboard user={user} onNavigate={navigate} />;
       case "/faq":
         return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
+      case "/my-bookings":
+        return (
+          <ProviderBookings
+            token={getToken()}
+            onNavigate={navigate}
+          />
+        );
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
