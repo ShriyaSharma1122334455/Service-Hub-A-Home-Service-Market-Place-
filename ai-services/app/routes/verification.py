@@ -3,9 +3,9 @@ Verification Routes
 ====================
 Matches the API contract from the project proposal Section 8.10:
 
-  POST /ai/verify/document  →  OCR ID extraction
-  POST /ai/verify/face      →  Face matching (selfie vs ID)
-  POST /ai/verify/nsopw     →  NSOPW background check (providers only)
+  POST /ai/verify/document     →  OCR ID extraction
+  POST /ai/verify/face         →  Face matching (selfie vs ID)
+  POST /ai/verify/nsopw/check  →  NSOPW background check (providers only)
 
 Called by the Express backend after Cloudinary uploads complete.
 """
@@ -14,18 +14,27 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.models.schemas import (
     DocumentVerifyRequest, DocumentVerifyResponse,
     FaceMatchRequest,      FaceMatchResponse,
-    NSopwCheckRequest,     NSopwCheckResponse,
     VerificationStatus,
 )
 from app.services import ocr_service, face_service, nsopw_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ── NSOPW request model ──────────────────────────────────────────────────
+
+class NsopwRequest(BaseModel):
+    firstName: str = Field(..., min_length=1, description="Provider's first name")
+    lastName: str = Field(..., min_length=1, description="Provider's last name")
+    state: Optional[str] = Field(None, description="Two-letter state code, e.g. NJ")
 
 
 # ── Internal API key guard ────────────────────────────────────────────────
@@ -136,47 +145,34 @@ async def verify_face(
     }
 
 
-# ── POST /api/v1/verify/nsopw ─────────────────────────────────────────────
+# ── POST /nsopw/check ─────────────────────────────────────────────────────
 
 @router.post(
-    "/nsopw",
-    response_model=NSopwCheckResponse,
+    "/nsopw/check",
     summary="NSOPW background check (providers only)",
-    description="Performs an NSOPW background check based on the provider's full name and state.",
+    description="Performs an NSOPW background check based on the provider's first name, last name, and optional state.",
 )
 async def check_nsopw(
-    body: NSopwCheckRequest,
-    _: None = Depends(verify_internal_key),
+    body: NsopwRequest,
+    x_internal_key: Optional[str] = Header(None),
 ):
     """
     Searches NSOPW for the provider's name.
-    Falls back to requiring self-declaration if the site is unavailable.
+    Falls back to pending if the site is unavailable.
     Providers only — not called for customers.
+    PII is never logged.
     """
-    logger.info("NSOPW check — user=%s name='%s'", body.user_id, body.full_name)
-    
-    # Split full_name into first_name and last_name
-    name_parts = body.full_name.strip().split()
-    first_name = name_parts[0] if name_parts else ""
-    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+    # ── Internal API key guard ────────────────────────────────────────────
+    expected_key = getattr(settings, "INTERNAL_API_KEY", None)
+    if not x_internal_key or x_internal_key != expected_key:
+        return JSONResponse(status_code=403, content={"detail": "unauthorized"})
 
-    res = await nsopw_service.check_nsopw(
-        first_name=first_name,
-        last_name=last_name,
+    logger.info("NSOPW check request received (PII redacted)")
+
+    result = await nsopw_service.check_nsopw(
+        first_name=body.firstName,
+        last_name=body.lastName,
         state=body.state,
     )
-    
-    status_map = {
-        "pass": "verified",
-        "fail": "rejected",
-        "pending": "manual_review"
-    }
-    
-    return {
-        "status": status_map.get(res.get("nsopwStatus", "pending"), "manual_review"),
-        "is_clear": not res.get("matchFound", True) and res.get("nsopwStatus") == "pass",
-        "records_found": len(res.get("matchDetails", [])),
-        "rejection_reason": res.get("reason"),
-        "used_fallback": res.get("selfDeclarationRequired", False),
-        "self_declaration_required": res.get("selfDeclarationRequired", False)
-    }
+
+    return JSONResponse(content=result)

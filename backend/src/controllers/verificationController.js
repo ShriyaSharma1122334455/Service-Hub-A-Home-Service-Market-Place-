@@ -344,121 +344,255 @@ export const uploadSelfie = async (req, res) => {
 
 export const submitVerification = async (req, res) => {
   try {
+    // ── Step 1: Resolve the authenticated user ───────────────────────────
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) {
       return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
-    // Fetch the latest verification record
+    const userId = internalUser.id;
+
+    // ── Step 2: Query the verification record ────────────────────────────
     const { data: verification } = await supabase
       .from('verifications')
-      .select('*')
-      .eq('user_id', internalUser.id)
+      .select('id, id_document_url, selfie_url, ocr_result')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (!verification) {
-      return res.status(400).json({ success: false, data: null, error: 'No verification record found. Please start the verification process.' });
-    }
-
-    // Confirm both id_document_url and selfie_url are saved
-    if (!verification.id_document_url || !verification.selfie_url) {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'You must complete the ID upload and selfie steps first.',
+        error: 'No verification record found, please complete the ID upload step first.',
       });
     }
 
-    // Setup payload for passing to AI service
-    const fullName = verification.extracted_name || internalUser.full_name || 'Unknown User';
+    if (!verification.id_document_url) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'ID document has not been uploaded yet.',
+      });
+    }
 
-    // Call AI NSOPW check at /api/v1/verify/nsopw as JSON POST
+    if (!verification.selfie_url) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Selfie has not been uploaded yet.',
+      });
+    }
+
+    // ── Step 3: Parse firstName / lastName from ocr_result ───────────────
+    const ocrResult = verification.ocr_result || {};
+    const extractedName = ocrResult.extractedName || null;
+
+    let firstName = '';
+    let lastName = '';
+
+    if (extractedName && typeof extractedName === 'string') {
+      const spaceIndex = extractedName.indexOf(' ');
+      if (spaceIndex !== -1) {
+        firstName = extractedName.substring(0, spaceIndex);
+        lastName = extractedName.substring(spaceIndex + 1);
+      } else {
+        firstName = '';
+        lastName = extractedName;
+      }
+    }
+
+    // ── Step 4: Parse state from ocr_result ──────────────────────────────
+    let state = null;
+
+    // Try issuingState first — must be exactly two uppercase letters
+    const issuingState = ocrResult.issuingState || null;
+    if (issuingState && typeof issuingState === 'string' && /^[A-Z]{2}$/.test(issuingState)) {
+      state = issuingState;
+    }
+
+    // Fallback: try to extract state from address field
+    if (!state && ocrResult.address && typeof ocrResult.address === 'string') {
+      const stateMatch = ocrResult.address.match(/,\s([A-Z]{2})(?:\s\d{5})?/);
+      if (stateMatch) {
+        state = stateMatch[1];
+      }
+    }
+
+    // ── Step 4b: Extract ZIP code from OCR address for NSOPW search ─────
+    let zipCode = null;
+    const ocrAddress = ocrResult.address || ocrResult.extracted_data?.address || '';
+    if (typeof ocrAddress === 'string') {
+      const zipMatch = ocrAddress.match(/\b(\d{5})(?:-\d{4})?\b/);
+      if (zipMatch) {
+        zipCode = zipMatch[1];
+      }
+    }
+
+    // ── Step 5: Call AI NSOPW check at /ai/nsopw/check ───────────────────
     let nsopwResult = null;
+
     try {
-      const aiResp = await fetch(`${AI_SERVICES_URL}/api/v1/verify/nsopw`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const aiResp = await fetch(`${AI_SERVICES_URL}/ai/nsopw/check`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-internal-key': AI_INTERNAL_KEY,
         },
         body: JSON.stringify({
-          full_name: fullName,
-          user_id: internalUser.id,
-          state: null,
+          firstName,
+          lastName,
+          state,
+          zipCode,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (aiResp.ok) {
         nsopwResult = await aiResp.json();
       } else {
-        const errText = await aiResp.text();
-        console.error('AI NSOPW error:', aiResp.status, errText);
-        nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [], error: 'NSOPW check returned an error' };
+        console.error('NSOPW service returned HTTP', aiResp.status);
+        nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [] };
       }
     } catch (aiErr) {
-      console.error('AI NSOPW unreachable:', aiErr.message);
-      nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [], selfDeclarationRequired: true };
+      console.error('NSOPW service request failed:', aiErr.name);
+      nsopwResult = { nsopwStatus: 'pending', matchFound: false, matchDetails: [] };
     }
 
-    // Determine overall verification status automatically
-    let finalStatus = 'pending';
-    
-    // Evaluate if everything passed perfectly
-    const ocrPassed = verification.ocr_result?.status === 'verified';
-    const facePassed = verification.face_match_result?.is_match === true || verification.face_match_score >= 90;
-    const nsopwPassed = nsopwResult?.is_clear === true && nsopwResult?.status === 'verified';
-    
-    // Evaluate if there are any hard rejections
-    const ocrFailed = verification.ocr_result?.status === 'rejected';
-    const faceFailed = verification.face_match_result?.status === 'rejected';
-    const nsopwFailed = nsopwResult?.status === 'rejected';
-
-    if (ocrFailed || faceFailed || nsopwFailed) {
-      finalStatus = 'failed';
-    } else if (ocrPassed && facePassed && nsopwPassed) {
-      finalStatus = 'verified';
-    }
-
-    // Update verification record: save nsopw_result, set status, set submitted_at to now
+    // ── Step 6: Read nsopwStatus and update DB accordingly ───────────────
+    const nsopwStatus = nsopwResult?.nsopwStatus || 'pending';
     const now = new Date().toISOString();
+
+    if (nsopwStatus === 'fail') {
+      // ── FAIL: potential match found — flag for review ────────────────
+      await supabase
+        .from('verifications')
+        .update({
+          nsopw_result: nsopwResult,
+          verification_status: 'failed',
+          submitted_at: now,
+          updated_at: now,
+        })
+        .eq('id', verification.id);
+
+      await supabase
+        .from('users')
+        .update({ verification_status: 'failed' })
+        .eq('id', userId);
+
+      const { data: providerRow } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (providerRow) {
+        await supabase
+          .from('providers')
+          .update({ verification_status: 'failed' })
+          .eq('user_id', userId);
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: 'failed',
+          message: 'Background check found a potential match. This account has been flagged for review.',
+        },
+        error: null,
+      });
+    }
+
+    if (nsopwStatus === 'pass') {
+      // ── PASS: no records found — set to pending for final review ─────
+      await supabase
+        .from('verifications')
+        .update({
+          nsopw_result: nsopwResult,
+          verification_status: 'pending',
+          submitted_at: now,
+          updated_at: now,
+        })
+        .eq('id', verification.id);
+
+      await supabase
+        .from('users')
+        .update({ verification_status: 'pending' })
+        .eq('id', userId);
+
+      const { data: providerRow } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (providerRow) {
+        await supabase
+          .from('providers')
+          .update({ verification_status: 'pending' })
+          .eq('user_id', userId);
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          status: 'pending',
+          message: 'Verification submitted successfully and is under review.',
+        },
+        error: null,
+      });
+    }
+
+    // ── PENDING: NSOPW check could not be completed ─────────────────────
     await supabase
       .from('verifications')
       .update({
         nsopw_result: nsopwResult,
-        verification_status: finalStatus,
+        verification_status: 'pending',
         submitted_at: now,
         updated_at: now,
       })
       .eq('id', verification.id);
 
-    // Also update the user's verification_status
     await supabase
       .from('users')
-      .update({ verification_status: finalStatus })
-      .eq('id', internalUser.id);
+      .update({ verification_status: 'pending' })
+      .eq('id', userId);
 
-    // If provider, update provider table too
-    if (internalUser.role === 'provider') {
+    const { data: providerRow } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (providerRow) {
       await supabase
         .from('providers')
-        .update({ verification_status: finalStatus })
-        .eq('user_id', internalUser.id);
+        .update({ verification_status: 'pending' })
+        .eq('user_id', userId);
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       data: {
-        status: finalStatus,
-        submittedAt: now,
-        nsopwResult,
+        status: 'pending',
+        note: 'NSOPW check could not be completed at this time and will be retried.',
       },
       error: null,
     });
   } catch (err) {
-    console.error('submitVerification error:', err);
-    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to submit verification' });
+    console.error('submitVerification error:', err.message);
+    return res.status(500).json({
+      success: false,
+      data: null,
+      error: 'Internal server error during verification submission.',
+    });
   }
 };
 

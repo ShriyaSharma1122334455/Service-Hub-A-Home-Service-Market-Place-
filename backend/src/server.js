@@ -71,6 +71,14 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Prefixed health check — used by tests and external monitors
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',

@@ -26,6 +26,7 @@ class NsopwCheckBody(BaseModel):
     firstName: str = Field(..., min_length=1, description="Provider's first name")
     lastName: str = Field(..., min_length=1, description="Provider's last name")
     state: Optional[str] = Field(None, description="Two-letter state code, e.g. NJ")
+    zipCode: Optional[str] = Field(None, description="Five-digit ZIP code from ID document")
 
 
 # ── Internal API key guard ────────────────────────────────────────────────
@@ -50,9 +51,10 @@ async def check_nsopw(
     _: None = Depends(verify_internal_key),
 ):
     """
-    Accepts firstName, lastName, and optional state.
-    Scrapes nsopw.gov, runs fuzzy name matching, returns pass/fail/pending.
-    PII is never logged.
+    Accepts firstName, lastName, optional state, and optional zipCode.
+    Primary: Playwright browser automation with ZIP code search.
+    Fallback: httpx scraping with first/last name.
+    Returns pass/fail/pending. PII is never logged.
     """
     logger.info("NSOPW check request received (PII redacted)")
 
@@ -60,5 +62,6 @@ async def check_nsopw(
         first_name=body.firstName,
         last_name=body.lastName,
         state=body.state,
+        zip_code=body.zipCode,
     )
     return result
