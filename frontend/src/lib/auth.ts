@@ -7,7 +7,7 @@ export const signUpWithRole = async (
   fullName?: string,
   phone?: string
 ) => {
-    // store role in user_metadata (lowercase expected by backend)
+  // store role in user_metadata (lowercase expected by backend)
   return supabase.auth.signUp({
     email,
     password,
@@ -20,10 +20,10 @@ export const signUpWithRole = async (
   });
 }
 
- export const signIn = async (
+export const signIn = async (
   email: string,
   password: string
- ) => {
+) => {
   return supabase.auth.signInWithPassword({
     email,
     password,
