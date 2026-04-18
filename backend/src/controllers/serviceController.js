@@ -7,7 +7,7 @@ export const listServices = async (req, res) => {
 
     let query = supabase
       .from('services')
-      .select(`*, category:categories(name, slug)`)
+      .select(`*, category:categories(name, slug), provider:providers(id, business_name, rating_avg, rating_count)`, { count: 'exact' })
       .eq('is_active', true)
       .order('name', { ascending: true });
 

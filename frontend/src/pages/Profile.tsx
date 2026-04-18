@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { profileService } from "../services/profile";
 import type { BackendUser, BackendProvider } from "../services/profile";
+import fetchApi from "../lib/api";
 import {
   User as UserIcon,
   Mail,
@@ -9,7 +10,16 @@ import {
   Loader2,
   Star,
   Briefcase,
+  MessageSquare,
 } from "lucide-react";
+
+interface Review {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  reviewer: { full_name: string; avatar_url: string | null } | null;
+}
 
 interface ProfileProps {
   profileId: string;
@@ -31,6 +41,8 @@ export const Profile: React.FC<ProfileProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +144,29 @@ export const Profile: React.FC<ProfileProps> = ({
       cancelled = true;
     };
   }, [profileId, initialType, currentUser, currentUser?.email]);
+
+  // Fetch reviews when a provider profile loads
+  useEffect(() => {
+    if (!profile || profile.type !== "provider") return;
+    const providerId = profile.data.id;
+    if (!providerId) return;
+
+    let cancelled = false;
+    const loadReviews = async () => {
+      setReviewsLoading(true);
+      try {
+        const res = await fetchApi<{ count: number; data: Review[] }>(`/reviews/${providerId}`);
+        if (!cancelled && res.success && res.data) {
+          const payload = res.data as unknown as { count: number; data: Review[] };
+          setReviews(Array.isArray(payload.data) ? payload.data : []);
+        }
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+    loadReviews();
+    return () => { cancelled = true; };
+  }, [profile]);
 
   const getRoleLabel = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -338,6 +373,89 @@ export const Profile: React.FC<ProfileProps> = ({
                     ID
                   </p>
                   <p className="text-slate-500 text-sm font-mono">{data.id}</p>
+                </div>
+              )}
+
+              {/* Reviews section — provider profiles only */}
+              {isProvider && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <MessageSquare className="h-5 w-5 text-slate-400" />
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+                      Reviews
+                      {reviews.length > 0 && (
+                        <span className="ml-2 normal-case font-semibold text-slate-500">
+                          ({reviews.length})
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+
+                  {reviewsLoading && (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="h-6 w-6 text-teal-500 animate-spin" />
+                    </div>
+                  )}
+
+                  {!reviewsLoading && reviews.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50 rounded-2xl">
+                      <Star className="h-8 w-8 text-slate-200 mb-2" />
+                      <p className="text-slate-500 font-medium text-sm">No reviews yet</p>
+                      <p className="text-slate-400 text-xs mt-1">Reviews appear here after completed bookings.</p>
+                    </div>
+                  )}
+
+                  {!reviewsLoading && reviews.length > 0 && (
+                    <div className="space-y-3">
+                      {reviews.map((review) => (
+                        <div key={review.id} className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              {review.reviewer?.avatar_url ? (
+                                <img
+                                  src={review.reviewer.avatar_url}
+                                  alt={review.reviewer.full_name}
+                                  className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="h-4 w-4 text-slate-400" />
+                                </div>
+                              )}
+                              <span className="text-sm font-semibold text-slate-700">
+                                {review.reviewer?.full_name ?? "Anonymous"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={13}
+                                  className={
+                                    i < review.rating
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "text-slate-200 fill-slate-200"
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          {review.comment && (
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              {review.comment}
+                            </p>
+                          )}
+                          <p className="text-xs text-slate-400">
+                            {new Date(review.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

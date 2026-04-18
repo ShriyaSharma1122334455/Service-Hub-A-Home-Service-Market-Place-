@@ -13,6 +13,7 @@ import providerRoutes from './routes/providerRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import chatbotRoutes from './routes/chatbotRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
 import testRoutes from './routes/testRoutes.js';
@@ -51,6 +52,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/api/complaints', complaintRoutes);
 // Mount test routes in development only — never in production
 if (process.env.NODE_ENV !== 'production') {
