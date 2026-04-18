@@ -4,14 +4,15 @@ uvicorn==0.41.0
 uvloop==0.22.1          # uvicorn performance backend (Linux/macOS)
 watchfiles==1.1.1       # hot-reload support (development)
 
-# AI / vision
-groq==1.0.0
+# AI / vision (Google AI Studio / Gemini API — Gemma 4 multimodal)
+google-genai==1.73.1
 Pillow==12.1.1
 
 # Config & utilities
 python-dotenv==1.2.1
 python-multipart==0.0.22  # multipart/form-data parsing for UploadFile
 python-magic==0.4.27      # MIME type validation via magic bytes
+slowapi==0.1.9            # FastAPI-compatible rate limiting
 
 # HTTP client (used by test_api.py and docker healthcheck)
 requests==2.32.5

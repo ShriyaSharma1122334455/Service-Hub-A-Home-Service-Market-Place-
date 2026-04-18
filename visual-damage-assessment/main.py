@@ -1,25 +1,58 @@
 """
-FastAPI server for visual damage assessment using Groq API.
+FastAPI server for visual damage assessment using Google AI Studio (Gemini API / Gemma 4).
 """
+import asyncio
+import hashlib
 import logging
 import os
 import secrets
 from typing import Optional
 
+import httpx
 import magic
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from google.genai import errors as genai_errors
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
-from groq_vision import DEFAULT_VISION_MODEL, assess_image
+from gemini_vision import DEFAULT_VISION_MODEL, ImageValidationError, assess_image
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import-time probe: python-magic is a ctypes wrapper around the native
+# libmagic library. `import magic` succeeds even when libmagic is missing,
+# and the failure only surfaces on the first call. Probe once at startup
+# with a known PNG header so a misconfigured image (no libmagic installed)
+# fails loudly at boot instead of silently bypassing our anti-spoofing check.
+try:
+    _probe = magic.from_buffer(b"\x89PNG\r\n\x1a\n", mime=True)
+    if _probe != "image/png":
+        logger.warning(
+            "libmagic probe returned unexpected MIME '%s'; anti-spoofing may be degraded",
+            _probe,
+        )
+except Exception as exc:  # pragma: no cover - hard startup failure
+    logger.critical(
+        "libmagic is not available — magic-byte MIME validation cannot run. "
+        "Install 'libmagic1' (Debian/Ubuntu) or 'libmagic' (Alpine/macOS). "
+        "Original error: %s",
+        exc,
+    )
+    raise RuntimeError(
+        "libmagic native library is missing; refusing to start without "
+        "anti-spoofing MIME validation."
+    ) from exc
 
 _ALLOWED_MIME_TYPES = {"image/jpeg", "image/png"}
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
 _TASK_MAX_LENGTH = 500  # Maximum characters for task description
 _SERVICE_TOKEN = os.getenv("VDA_SERVICE_API_KEY", "").strip()
+_VISION_MODEL = os.getenv("VDA_VISION_MODEL", DEFAULT_VISION_MODEL).strip() or DEFAULT_VISION_MODEL
 
 # Validate VDA_REQUIRE_AUTH with explicit value checking to prevent typos
 _KNOWN_TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -46,11 +79,55 @@ _ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# Rate-limit knobs (env-tunable so tests can crank them down).
+_ASSESS_RATE_LIMITS = os.getenv("VDA_ASSESS_RATE_LIMIT", "20/minute;200/hour")
+_DEFAULT_RATE_LIMIT = os.getenv("VDA_DEFAULT_RATE_LIMIT", "60/minute")
+# Maximum concurrent /assess handlers that may hit the Gemini API from this
+# worker. Protects against saturation when many 10 MB uploads land at once.
+_ASSESS_CONCURRENCY = int(os.getenv("VDA_ASSESS_CONCURRENCY", "4"))
+
+
+def _rate_limit_key(request: Request) -> str:
+    """
+    Bucket callers by service token (authenticated backends) or by IP
+    (anyone else). Using the token keeps a single backend from being
+    penalized for having many real customers, while ensuring a leaked
+    token still can't burn unlimited Gemini quota.
+    """
+    token = request.headers.get("X-Service-Token", "").strip()
+    if token:
+        # Hash so the raw token never appears in in-memory limit keys / logs.
+        return "token:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    return "ip:" + get_remote_address(request)
+
+
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    default_limits=[_DEFAULT_RATE_LIMIT],
+    headers_enabled=True,
+)
+
+# Bounded worker-local concurrency for /assess. asyncio.Semaphore is created
+# lazily (inside the handler) to attach to the running loop FastAPI uses.
+_assess_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def _get_assess_semaphore() -> asyncio.Semaphore:
+    global _assess_semaphore
+    if _assess_semaphore is None:
+        _assess_semaphore = asyncio.Semaphore(_ASSESS_CONCURRENCY)
+    return _assess_semaphore
+
+
 app = FastAPI(
     title="Visual Damage Assessment API",
     description="Analyze images and assess damages or tasks using AI-powered visual assessment",
     version="1.0.0",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 if _ALLOWED_ORIGINS:
     app.add_middleware(
@@ -118,11 +195,15 @@ async def health_check():
     responses={
         400: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
     },
 )
+@limiter.limit(_ASSESS_RATE_LIMITS)
 async def assess_damage(
+    request: Request,
+    response: Response,
     _: None = Depends(require_service_token),
     image: UploadFile = File(..., description="Image file to analyze (JPEG or PNG)"),
     task: str = Form(
@@ -176,8 +257,22 @@ async def assess_damage(
             ),
         )
 
+    # Gate the blocking Gemini call through a bounded semaphore so a burst
+    # of large uploads can't queue unbounded model calls on this worker.
+    semaphore = _get_assess_semaphore()
     try:
-        result = assess_image(contents, image.content_type, task, DEFAULT_VISION_MODEL)
+        async with semaphore:
+            result = await asyncio.to_thread(
+                assess_image, contents, image.content_type, task, _VISION_MODEL
+            )
+    except ImageValidationError as exc:
+        # Dedicated class for pre-decode safety rejections (dimension / bomb
+        # guard). Map to 400 without surfacing the internal reason verbatim.
+        logger.warning(f"Image validation failed: {exc}")
+        raise HTTPException(
+            status_code=400,
+            detail="Image failed safety checks (dimensions or format). Please upload a standard photo.",
+        )
     except ValueError as exc:
         logger.error(f"ValueError during assessment: {exc}")
         raise HTTPException(
@@ -187,6 +282,22 @@ async def assess_damage(
     except KeyError as exc:
         logger.error(f"Unknown vision model: {exc}")
         raise HTTPException(status_code=500, detail="Internal configuration error.")
+    except httpx.TimeoutException as exc:
+        logger.error(f"Upstream Gemini request timed out: {exc}")
+        raise HTTPException(
+            status_code=504,
+            detail="Upstream AI provider timed out. Please try again.",
+        )
+    except genai_errors.APIError as exc:
+        logger.error(
+            "Gemini API error: code=%s message=%s",
+            getattr(exc, "code", "?"),
+            getattr(exc, "message", str(exc)),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Upstream AI provider returned an error.",
+        )
     except Exception as exc:
         logger.exception("Unexpected error during assessment")
         raise HTTPException(

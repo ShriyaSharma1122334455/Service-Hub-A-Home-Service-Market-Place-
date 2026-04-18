@@ -12,8 +12,12 @@ import os
 # Must be set before `main` is imported so module-level constants are correct.
 os.environ.setdefault("VDA_SERVICE_API_KEY", "test-token-abc")
 os.environ.setdefault("VDA_REQUIRE_AUTH", "true")
-os.environ.setdefault("GROQ_API_KEY", "fake-groq-key-for-tests")
+os.environ.setdefault("GEMINI_API_KEY", "fake-gemini-key-for-tests")
 os.environ.setdefault("VDA_ALLOWED_ORIGINS", "")
+# Generous rate limit so the normal test suite never trips 429. The dedicated
+# rate-limit test reloads main with a tighter limit.
+os.environ.setdefault("VDA_ASSESS_RATE_LIMIT", "10000/minute")
+os.environ.setdefault("VDA_DEFAULT_RATE_LIMIT", "10000/minute")
 
 import pytest
 from PIL import Image

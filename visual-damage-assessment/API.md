@@ -47,14 +47,17 @@ Analyze an image and get a professional damage assessment with cost estimate.
 
 **Authentication:** Requires `X-Service-Token: <VDA_SERVICE_API_KEY>` when `VDA_REQUIRE_AUTH=true` (default). If auth is disabled for local testing (`VDA_REQUIRE_AUTH=false`), this header is not required.
 
-**What it does:** Takes an image and a task description, sends it to Groq's Llama 4 vision model, and returns a structured assessment including damage analysis, recommendations, and estimated cost for professional repair.
+**What it does:** Takes an image and a task description, sends it to Google's Gemma 4 multimodal model (Gemini API / AI Studio), and returns a structured assessment including damage analysis, recommendations, and estimated cost for professional repair.
 
 **How it works:**
 1. Validates the image file (JPEG/PNG, max 10MB)
-2. Reads image bytes and prepares them for model input
-3. Verifies actual file content using magic-byte MIME detection (anti-spoofing check)
-4. Sends both the image and task to the AI model with a professional assessment prompt
-4. Parses and validates the AI response structure before returning it
+2. Verifies actual file content using magic-byte MIME detection (anti-spoofing check)
+3. Pre-processes the image: applies EXIF orientation, flattens transparency, and
+   downscales so the longest edge is at most 1024 px (Lanczos resampling, JPEG
+   quality 90). This preserves damage cues while cutting bandwidth and token cost.
+4. Sends the re-encoded image and the user task to Gemma 4 via the Gemini API
+   with a professional assessment prompt.
+5. Parses and validates the AI response structure before returning it.
 
 **Input (multipart/form-data):**
 

@@ -8,7 +8,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - VDA_VISION_MODEL=${VDA_VISION_MODEL:-gemma-4-31b}
       - VDA_SERVICE_API_KEY=${VDA_SERVICE_API_KEY}
       - VDA_REQUIRE_AUTH=${VDA_REQUIRE_AUTH:-true}
       - VDA_ALLOWED_ORIGINS=${VDA_ALLOWED_ORIGINS:-}

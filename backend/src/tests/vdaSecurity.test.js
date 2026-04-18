@@ -16,14 +16,14 @@ import { validateVdaResponse, validateAndSanitizeVdaResponse } from '../utils/vd
 describe('VDA Security - Error Normalization', () => {
   it('should normalize 500 server errors to generic message', () => {
     const vdaJson = {
-      detail: 'Internal server error: File /app/groq_vision.py line 42 failed',
+      detail: 'Internal server error: File /app/gemini_vision.py line 42 failed',
     };
 
     const { userMessage, logDetails } = normalizeVdaError(vdaJson, 500);
 
     expect(userMessage).toBe('The visual assessment service is temporarily unavailable. Please try again later.');
     expect(logDetails).toContain('"statusCode": 500');
-    expect(logDetails).toContain('groq_vision.py'); // Full error logged
+    expect(logDetails).toContain('gemini_vision.py'); // Full error logged
   });
 
   it('should hide stack traces from client errors', () => {
@@ -218,7 +218,57 @@ describe('VDA Security - Response Validation', () => {
     const { isValid, sanitized } = validateVdaResponse(response);
 
     expect(isValid).toBe(true);
-    expect(sanitized).toEqual(response);
+    // Free-text fields are HTML-escaped; plain text with no special chars is
+    // unchanged by the escape.
+    expect(sanitized.assessment).toBe(response.assessment);
+    expect(sanitized.recommendation).toBe(response.recommendation);
+    expect(sanitized.estimated_cost_usd).toBe(response.estimated_cost_usd);
+    expect(sanitized.confidence_score).toBe(response.confidence_score);
+  });
+
+  it('should HTML-escape script tags injected via image prompt injection', () => {
+    const response = {
+      assessment: 'Wall looks fine <script>alert("xss")</script>',
+      recommendation: 'Paint it <img src=x onerror="boom()"/>',
+      estimated_cost_usd: '$500',
+      confidence_score: '0.85',
+    };
+
+    const { isValid, sanitized } = validateVdaResponse(response);
+
+    expect(isValid).toBe(true);
+    expect(sanitized.assessment).not.toContain('<script>');
+    expect(sanitized.assessment).toContain('&lt;script&gt;');
+    expect(sanitized.assessment).toContain('&quot;xss&quot;');
+    expect(sanitized.recommendation).not.toContain('<img');
+    expect(sanitized.recommendation).toContain('&lt;img');
+    expect(sanitized.recommendation).toContain('onerror=&quot;boom()&quot;');
+  });
+
+  it('should reject responses containing disallowed control characters', () => {
+    const response = {
+      assessment: 'Normal text\x00with null',
+      recommendation: 'fine',
+      estimated_cost_usd: '$500',
+      confidence_score: '0.85',
+    };
+
+    const { isValid, errors } = validateVdaResponse(response);
+
+    expect(isValid).toBe(false);
+    expect(errors.some((e) => /control character/i.test(e))).toBe(true);
+  });
+
+  it('should preserve legitimate whitespace (tab/newline/CR)', () => {
+    const response = {
+      assessment: 'Line one\nLine two\tcolumn\rreturn',
+      recommendation: 'fine',
+      estimated_cost_usd: '$500',
+      confidence_score: '0.85',
+    };
+
+    const { isValid } = validateVdaResponse(response);
+    expect(isValid).toBe(true);
   });
 
   it('should reject response with missing required field', () => {
@@ -235,9 +285,9 @@ describe('VDA Security - Response Validation', () => {
     expect(errors).toContain('Missing required field: confidence_score');
   });
 
-  it('should reject response with oversized field', () => {
+  it('should reject response with oversized assessment field', () => {
     const response = {
-      assessment: 'A'.repeat(6000), // Exceeds 5000 char limit
+      assessment: 'A'.repeat(2001), // Exceeds 2000 char limit
       recommendation: 'Fix it',
       estimated_cost_usd: '$500',
       confidence_score: '0.85',
@@ -248,6 +298,20 @@ describe('VDA Security - Response Validation', () => {
     expect(isValid).toBe(false);
     expect(errors[0]).toContain('exceeds maximum length');
     expect(errors[0]).toContain('assessment');
+  });
+
+  it('should reject response with oversized estimated_cost_usd field', () => {
+    const response = {
+      assessment: 'Fine',
+      recommendation: 'Fine',
+      estimated_cost_usd: '$'.repeat(61), // Exceeds 60 char limit
+      confidence_score: '0.85',
+    };
+
+    const { isValid, errors } = validateVdaResponse(response);
+
+    expect(isValid).toBe(false);
+    expect(errors.some((e) => /estimated_cost_usd/.test(e) && /exceeds maximum length/.test(e))).toBe(true);
   });
 
   it('should reject response with non-string field', () => {
@@ -300,7 +364,15 @@ describe('VDA Security - Response Validation', () => {
   });
 
   it('should accept valid cost estimate formats', () => {
-    const validCosts = ['$500', '$500-$800', '$1,000', 'N/A', 'Contact for quote', '€500'];
+    const validCosts = [
+      '$500',
+      '$500-$800',
+      '$300 - $700',
+      '$1,000',
+      'N/A',
+      'Contact for quote',
+      '€500',
+    ];
 
     validCosts.forEach((cost) => {
       const response = {

@@ -1,7 +1,7 @@
 """
 Tests for main.py — the FastAPI VDA service.
 
-All tests use the synchronous TestClient (no real Groq calls are made).
+All tests use the synchronous TestClient (no real Gemini API calls are made).
 assess_image is patched wherever the endpoint logic would invoke it.
 """
 
@@ -121,12 +121,12 @@ class TestFileValidation:
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# 4. Groq / model failures
+# 4. Gemini / model failures
 # ═════════════════════════════════════════════════════════════════════════
 
 class TestModelFailures:
-    def test_missing_groq_key_returns_503(self, client, auth_headers, jpeg_bytes):
-        with patch("main.assess_image", side_effect=ValueError("GROQ_API_KEY is not set")):
+    def test_missing_gemini_key_returns_503(self, client, auth_headers, jpeg_bytes):
+        with patch("main.assess_image", side_effect=ValueError("GEMINI_API_KEY is not set")):
             res = client.post(
                 "/assess",
                 files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
@@ -184,3 +184,118 @@ class TestSuccessfulAssessment:
         # The default task string should have been passed through
         called_goal = mock_assess.call_args[0][2]
         assert isinstance(called_goal, str) and len(called_goal) > 0
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# 6. Image safety (decompression bomb guard)
+# ═════════════════════════════════════════════════════════════════════════
+
+class TestImageSafety:
+    def test_oversized_declared_dimensions_returns_400(self, client, auth_headers):
+        """
+        A hand-built PNG that declares 100,000 x 100,000 pixels in its IHDR
+        chunk should be rejected by the pre-decode dimension check without
+        Pillow ever allocating a pixel buffer.
+        """
+        import struct
+        import zlib
+
+        # PNG signature + IHDR chunk with a huge declared size.
+        signature = b"\x89PNG\r\n\x1a\n"
+        ihdr_data = struct.pack(
+            ">IIBBBBB",
+            100_000,  # width
+            100_000,  # height
+            8,        # bit depth
+            2,        # color type (RGB)
+            0, 0, 0,  # compression, filter, interlace
+        )
+        ihdr_crc = zlib.crc32(b"IHDR" + ihdr_data)
+        ihdr_chunk = struct.pack(">I", len(ihdr_data)) + b"IHDR" + ihdr_data + struct.pack(">I", ihdr_crc)
+        bomb_bytes = signature + ihdr_chunk + b"\x00" * 16
+
+        res = client.post(
+            "/assess",
+            files={"image": ("bomb.png", bomb_bytes, "image/png")},
+            headers=auth_headers,
+        )
+        # Rejected by magic-byte check (truncated PNG) OR image validation (dims).
+        assert res.status_code == 400
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# 7. Rate limiting
+# ═════════════════════════════════════════════════════════════════════════
+
+class TestRateLimiting:
+    def test_rate_limit_key_uses_token_hash_when_token_present(self):
+        """_rate_limit_key buckets authenticated backends by hashed token."""
+        from unittest.mock import MagicMock
+
+        import main as main_module
+
+        request = MagicMock()
+        request.headers = {"X-Service-Token": "shared-secret-xyz"}
+        key = main_module._rate_limit_key(request)
+        assert key.startswith("token:")
+        # The raw token must never appear in the key.
+        assert "shared-secret-xyz" not in key
+
+    def test_rate_limit_key_falls_back_to_ip_when_no_token(self):
+        from unittest.mock import MagicMock
+
+        import main as main_module
+
+        request = MagicMock()
+        request.headers = {}
+        request.client.host = "198.51.100.4"
+        key = main_module._rate_limit_key(request)
+        assert key.startswith("ip:")
+
+    def test_rate_limit_headers_present_on_success(self, client, auth_headers, jpeg_bytes):
+        """slowapi should add X-RateLimit-* headers when the limiter is wired in."""
+        with patch("main.assess_image", return_value=GOOD_RESULT):
+            res = client.post(
+                "/assess",
+                files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
+                headers=auth_headers,
+            )
+        assert res.status_code == 200
+        # Header names are lowercased by starlette/TestClient.
+        header_names = {k.lower() for k in res.headers.keys()}
+        assert any(h.startswith("x-ratelimit") for h in header_names), (
+            f"Expected X-RateLimit-* header but got: {sorted(header_names)}"
+        )
+
+    def test_burst_exceeding_tight_limit_returns_429(self, monkeypatch, jpeg_bytes):
+        """
+        Reload main with a tight per-minute limit and confirm the N+1th
+        request returns 429. Uses a fresh TestClient bound to the reloaded
+        app so the decorator picks up the tight limit.
+        """
+        import importlib
+
+        import main as main_module
+        from starlette.testclient import TestClient
+
+        monkeypatch.setenv("VDA_ASSESS_RATE_LIMIT", "3/minute")
+        monkeypatch.setenv("VDA_DEFAULT_RATE_LIMIT", "3/minute")
+        reloaded = importlib.reload(main_module)
+        local_client = TestClient(reloaded.app)
+
+        with patch.object(reloaded, "assess_image", return_value=GOOD_RESULT):
+            statuses = []
+            for _ in range(5):
+                resp = local_client.post(
+                    "/assess",
+                    files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
+                    headers={"X-Service-Token": "test-token-abc"},
+                )
+                statuses.append(resp.status_code)
+
+        # Restore the generous default so subsequent tests aren't affected.
+        monkeypatch.setenv("VDA_ASSESS_RATE_LIMIT", "10000/minute")
+        monkeypatch.setenv("VDA_DEFAULT_RATE_LIMIT", "10000/minute")
+        importlib.reload(main_module)
+
+        assert 429 in statuses, f"Expected a 429 in burst, got {statuses}"
