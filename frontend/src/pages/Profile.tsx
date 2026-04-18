@@ -173,10 +173,11 @@ export const Profile: React.FC<ProfileProps> = ({
     const loadReviews = async () => {
       setReviewsLoading(true);
       try {
-        const res = await fetchApi<{ count: number; data: Review[] }>(`/reviews/${providerId}`);
-        if (!cancelled && res.success && res.data) {
-          const payload = res.data as unknown as { count: number; data: Review[] };
-          setReviews(Array.isArray(payload.data) ? payload.data : []);
+        // fetchApi already unwraps `.data` from the response body, so
+        // res.data IS the reviews array directly (not { count, data: [...] }).
+        const res = await fetchApi<Review[]>(`/reviews/${providerId}`);
+        if (!cancelled && res.success) {
+          setReviews(Array.isArray(res.data) ? res.data : []);
         }
       } finally {
         if (!cancelled) setReviewsLoading(false);
@@ -196,9 +197,11 @@ export const Profile: React.FC<ProfileProps> = ({
     let cancelled = false;
 
     const loadBookings = async () => {
-      const res = await fetchApi<{ data: CompletedBooking[] }>("/bookings");
-      if (cancelled || !res.success || !res.data) return;
-      const all = (res.data as unknown as { data: CompletedBooking[] }).data ?? [];
+      // fetchApi already unwraps `.data` from the response body, so
+      // res.data IS the bookings array directly.
+      const res = await fetchApi<CompletedBooking[]>("/bookings");
+      if (cancelled || !res.success) return;
+      const all = Array.isArray(res.data) ? res.data : [];
       // Keep only completed bookings for this specific provider
       const eligible = all.filter(
         (b: CompletedBooking & { provider_id?: string; status?: string }) =>
