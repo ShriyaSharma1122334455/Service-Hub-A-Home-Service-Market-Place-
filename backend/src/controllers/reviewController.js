@@ -72,7 +72,7 @@ export const getProviderReviews = async (req, res) => {
     const { data: reviews, error } = await supabase
       .from('reviews')
       .select(`
-        id, rating, comment, created_at,
+        id, booking_id, rating, comment, created_at,
         reviewer:users(full_name, avatar_url)
       `)
       .eq('provider_id', providerId)
