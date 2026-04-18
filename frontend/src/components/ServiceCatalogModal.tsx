@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Clock, DollarSign, ChevronRight } from "lucide-react";
+import { X, Clock, DollarSign, ChevronRight, Star, User as UserIcon } from "lucide-react";
 import type { User, Provider } from "../../types";
 
 /** Normalized from Supabase (`id`, `base_price`, …) for UI use */
@@ -10,12 +10,17 @@ interface ServiceRow {
   base_price: number;
   duration_minutes: number;
   sub_category?: string;
+  provider_id?: string;
+  provider_name?: string;
+  provider_rating_avg?: number;
+  provider_rating_count?: number;
 }
 
 function normalizeService(raw: Record<string, unknown>): ServiceRow {
   const sub =
     (raw.sub_category as string | null | undefined) ??
     (raw.subCategory as string | undefined);
+  const prov = raw.provider as Record<string, unknown> | null | undefined;
   return {
     id: String(raw.id ?? raw._id ?? ""),
     name: String(raw.name ?? ""),
@@ -23,6 +28,10 @@ function normalizeService(raw: Record<string, unknown>): ServiceRow {
     base_price: Number(raw.base_price ?? raw.basePrice ?? 0),
     duration_minutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
     sub_category: sub || undefined,
+    provider_id: prov ? String(prov.id ?? "") : undefined,
+    provider_name: prov ? String(prov.business_name ?? "") : undefined,
+    provider_rating_avg: prov ? Number(prov.rating_avg ?? 0) : undefined,
+    provider_rating_count: prov ? Number(prov.rating_count ?? 0) : undefined,
   };
 }
 
@@ -251,6 +260,21 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                           <Clock size={11} />
                           {formatDuration(service.duration_minutes)}
                         </span>
+                        {service.provider_name && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full">
+                            <UserIcon size={11} />
+                            {service.provider_name}
+                          </span>
+                        )}
+                        {service.provider_rating_avg !== undefined && service.provider_rating_avg > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
+                            <Star size={11} className="fill-amber-500 text-amber-500" />
+                            {service.provider_rating_avg.toFixed(1)}
+                            {service.provider_rating_count && service.provider_rating_count > 0 && (
+                              <span className="text-amber-500 font-normal">({service.provider_rating_count})</span>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
