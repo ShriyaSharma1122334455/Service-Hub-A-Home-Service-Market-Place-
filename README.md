@@ -395,3 +395,10 @@ Browse, verify, book, pay, review — everything in one place. No external payme
 ---
 
 _ServiceHub — Trust is the product. AI is how we deliver it._
+
+---
+
+### 🔄 Changelog — 2026-04-18 (`a0ade89`)
+**Author:** Deep Talreja
+
+Changelog generation failed.
