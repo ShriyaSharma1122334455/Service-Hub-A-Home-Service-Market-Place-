@@ -279,11 +279,6 @@ const App = () => {
     password?: string,
     name?: string,
     phone?: string,
-    providerMeta?: {
-      businessName: string;
-      description: string;
-      services: CategoryService[];
-    },
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) return { success: false, message: "Password required" };

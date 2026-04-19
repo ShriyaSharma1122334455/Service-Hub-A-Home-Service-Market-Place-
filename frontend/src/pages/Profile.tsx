@@ -513,6 +513,7 @@ export const Profile: React.FC<ProfileProps> = ({
                             alert(
                               "An error occurred while updating your role. Please try again.",
                             );
+                            console.error(error);
                           }
                         }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-full hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl"

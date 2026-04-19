@@ -211,7 +211,7 @@ export const Register: React.FC<RegisterProps> = ({
   }, [notification]);
 
   useEffect(() => {
-    setCategoryServices({});
+    // setCategoryServices({});
   }, [role]);
 
   const steps =
