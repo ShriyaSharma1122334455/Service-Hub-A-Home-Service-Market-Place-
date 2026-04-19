@@ -12,9 +12,12 @@ import profileRoutes from './routes/profileRoutes.js';
 import providerRoutes from './routes/providerRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
+import chatbotRoutes from './routes/chatbotRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
+import testRoutes from './routes/testRoutes.js';
 
 dotenv.config();
 
@@ -44,14 +47,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRoutes);
-// app.use('/api/test', testRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/users', profileRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/verification', verificationRoutes);
+// Mount test routes in development only — never in production
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', testRoutes);
+}
 // app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
@@ -62,7 +70,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -106,7 +114,9 @@ if (process.env.NODE_ENV !== 'test') {
 
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Rejection:', err);
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1);
+  }
 });
 
 export default app;

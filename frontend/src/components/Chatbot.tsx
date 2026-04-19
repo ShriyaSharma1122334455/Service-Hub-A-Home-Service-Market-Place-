@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ChevronDown, Send, MessageCircle } from "lucide-react";
 import type { User, Provider } from "../../types";
 import { UserRole } from "../../types";
+import fetchApi from "../lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -16,8 +17,25 @@ interface DummyOrder {
   serviceIcon: string;
   providerName: string;
   date: string;
-  status: "REQUESTED" | "ACCEPTED" | "COMPLETED";
+  status: "REQUESTED" | "ACCEPTED" | "COMPLETED" | "CANCELLED";
   totalPrice: number;
+}
+
+// Real booking data shape from GET /api/chatbot/context
+interface RealBooking {
+  id: string;
+  status: string;
+  scheduled_at: string;
+  total_price: number;
+  notes?: string | null;
+  service?: { name: string } | null;
+  provider?: { business_name: string } | null;
+  customer?: { full_name: string } | null;
+}
+
+interface ChatbotContext {
+  role: string;
+  bookings: RealBooking[];
 }
 
 interface ServiceItem {
@@ -82,35 +100,45 @@ type Intent =
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
-const DUMMY_ORDERS: DummyOrder[] = [
-  {
-    id: "ORD-001",
-    serviceCategory: "Cleaning",
-    serviceIcon: "🧹",
-    providerName: "Maria's Clean Co.",
-    date: "Mar 28, 2026",
-    status: "REQUESTED",
-    totalPrice: 85,
-  },
-  {
-    id: "ORD-002",
-    serviceCategory: "Plumbing",
-    serviceIcon: "🔧",
-    providerName: "FastFix Plumbing",
-    date: "Mar 22, 2026",
-    status: "ACCEPTED",
-    totalPrice: 120,
-  },
-  {
-    id: "ORD-003",
-    serviceCategory: "Electrical",
-    serviceIcon: "⚡",
-    providerName: "BrightSpark Electric",
-    date: "Mar 10, 2026",
-    status: "COMPLETED",
-    totalPrice: 200,
-  },
-];
+const SERVICE_ICON_MAP: Record<string, string> = {
+  cleaning: "🧹",
+  plumbing: "🔧",
+  electrical: "⚡",
+  electric: "⚡",
+  pest: "🐛",
+};
+
+function getServiceIcon(name: string): string {
+  const lower = name.toLowerCase();
+  for (const [key, icon] of Object.entries(SERVICE_ICON_MAP)) {
+    if (lower.includes(key)) return icon;
+  }
+  return "🔧";
+}
+
+const STATUS_MAP: Record<string, DummyOrder["status"]> = {
+  pending: "REQUESTED",
+  confirmed: "ACCEPTED",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
+};
+
+function mapBookingToOrder(b: RealBooking): DummyOrder {
+  const serviceName = b.service?.name ?? "Service";
+  return {
+    id: `#${b.id.slice(-6).toUpperCase()}`,
+    serviceCategory: serviceName,
+    serviceIcon: getServiceIcon(serviceName),
+    providerName: b.provider?.business_name ?? b.customer?.full_name ?? "Provider",
+    date: new Date(b.scheduled_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    status: STATUS_MAP[b.status] ?? "REQUESTED",
+    totalPrice: b.total_price ?? 0,
+  };
+}
 
 const SERVICE_GROUPS: ServiceGroup[] = [
   {
@@ -361,6 +389,7 @@ function generateResponse(
   intent: Intent,
   input: string,
   user: User | Provider | null,
+  realBookings?: RealBooking[] | null,
 ): Omit<BotMessage, "id" | "timestamp" | "sender"> {
   const role = user?.role?.toLowerCase() ?? null;
   const name = user?.name?.split(" ")[0] || "there";
@@ -395,6 +424,28 @@ function generateResponse(
         };
       }
       if (role === "provider") {
+        // Provider: show their scheduled jobs if available
+        if (realBookings && realBookings.length > 0) {
+          return {
+            contentType: "order-cards",
+            text: `You have ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""} scheduled:`,
+            orders: realBookings.map(mapBookingToOrder),
+            quickReplies: [
+              { label: "💰 Earnings Info", value: "earnings" },
+              { label: "❓ More Help", value: "help" },
+            ],
+          };
+        }
+        if (realBookings && realBookings.length === 0) {
+          return {
+            contentType: "quick-replies",
+            text: "You have no bookings yet. When customers book your services, they'll appear here.",
+            quickReplies: [
+              { label: "💰 Earnings Info", value: "earnings" },
+              { label: "🛠️ Services Offered", value: "show services" },
+            ],
+          };
+        }
         return {
           contentType: "faq-answer",
           text: "As a provider, you manage bookings from your dashboard:",
@@ -406,13 +457,35 @@ function generateResponse(
           quickReplies: [{ label: "💰 Earnings Info", value: "earnings" }],
         };
       }
+      // Customer: show real bookings if fetched
+      if (realBookings && realBookings.length === 0) {
+        return {
+          contentType: "quick-replies",
+          text: "You don't have any bookings yet. Browse our services to get started!",
+          quickReplies: [
+            { label: "🛠️ Browse Services", value: "show services" },
+            { label: "❓ How to Book", value: "how to book" },
+          ],
+        };
+      }
+      if (realBookings && realBookings.length > 0) {
+        return {
+          contentType: "order-cards",
+          text: `Here are your ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""}:`,
+          orders: realBookings.map(mapBookingToOrder),
+          quickReplies: [
+            { label: "🛠️ Browse Services", value: "show services" },
+            { label: "❓ Cancel a Booking", value: "cancel booking" },
+          ],
+        };
+      }
+      // Fallback if fetch failed or not attempted
       return {
-        contentType: "order-cards",
-        text: "Here are your recent orders:",
-        orders: DUMMY_ORDERS,
+        contentType: "quick-replies",
+        text: "Unable to load your bookings right now. Please try again.",
         quickReplies: [
+          { label: "🔄 Try Again", value: "my orders" },
           { label: "🛠️ Browse Services", value: "show services" },
-          { label: "❓ Cancel a Booking", value: "cancel booking" },
         ],
       };
 
@@ -456,6 +529,27 @@ function generateResponse(
       };
 
     case "provider_bookings":
+      if (realBookings && realBookings.length > 0) {
+        return {
+          contentType: "order-cards",
+          text: `You have ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""} from customers:`,
+          orders: realBookings.map(mapBookingToOrder),
+          quickReplies: [
+            { label: "💰 Earnings Info", value: "earnings" },
+            { label: "❓ More Help", value: "help" },
+          ],
+        };
+      }
+      if (realBookings && realBookings.length === 0) {
+        return {
+          contentType: "quick-replies",
+          text: "No incoming bookings yet. Once customers book your services, they'll appear here.",
+          quickReplies: [
+            { label: "💰 Earnings Info", value: "earnings" },
+            { label: "🛠️ Services Offered", value: "show services" },
+          ],
+        };
+      }
       return {
         contentType: "faq-answer",
         text: "Managing your bookings:",
@@ -541,6 +635,7 @@ const STATUS_STYLES: Record<DummyOrder["status"], string> = {
   REQUESTED: "bg-amber-50 text-amber-700 border border-amber-200",
   ACCEPTED: "bg-teal-50 text-teal-700 border border-teal-200",
   COMPLETED: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  CANCELLED: "bg-slate-50 text-slate-500 border border-slate-200",
 };
 
 function OrderCard({ order }: { order: DummyOrder }) {
@@ -735,7 +830,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ user }) => {
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, handleClose]);
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
 
     const userMsg: UserMessage = {
@@ -749,19 +844,35 @@ export const Chatbot: React.FC<ChatbotProps> = ({ user }) => {
     setInputValue("");
     setIsTyping(true);
 
-    setTimeout(() => {
-      const role = user?.role?.toLowerCase() ?? null;
-      const intent = detectIntent(text, role);
-      const payload = generateResponse(intent, text, user);
-      const botMsg: BotMessage = {
-        id: generateId(),
-        sender: "bot",
-        timestamp: new Date(),
-        ...payload,
-      };
-      setMessages((prev) => [...prev.slice(-49), botMsg]);
-      setIsTyping(false);
-    }, 750);
+    const role = user?.role?.toLowerCase() ?? null;
+    const intent = detectIntent(text, role);
+
+    // Fetch real booking data for order/booking intents
+    let realBookings: RealBooking[] | null = null;
+    if (user && (intent === "my_orders" || intent === "provider_bookings")) {
+      try {
+        const result = await fetchApi<ChatbotContext>("/chatbot/context");
+        if (result.success && result.data) {
+          const ctx = result.data as unknown as ChatbotContext;
+          realBookings = ctx.bookings ?? [];
+        }
+      } catch {
+        // realBookings stays null → fallback message shown
+      }
+    }
+
+    // Small delay for a natural conversational feel
+    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+
+    const payload = generateResponse(intent, text, user, realBookings);
+    const botMsg: BotMessage = {
+      id: generateId(),
+      sender: "bot",
+      timestamp: new Date(),
+      ...payload,
+    };
+    setMessages((prev) => [...prev.slice(-49), botMsg]);
+    setIsTyping(false);
   };
 
   const roleBadge = user

@@ -3,12 +3,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 const supabaseUrl      = process.env.SUPABASE_URL;
 const serviceRoleKey   = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const anonKey          = process.env.SUPABASE_ANON_KEY;
-
-
 if (!supabaseUrl)    throw new Error('❌ Missing SUPABASE_URL in .env');
 if (!serviceRoleKey) throw new Error('❌ Missing SUPABASE_SERVICE_ROLE_KEY in .env');
-if (!anonKey)        throw new Error('❌ Missing SUPABASE_ANON_KEY in .env');
+// SUPABASE_ANON_KEY is only needed by the frontend client; the backend uses the service role key.
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: {

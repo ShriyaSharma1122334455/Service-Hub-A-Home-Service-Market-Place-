@@ -1,35 +1,69 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, Star, DollarSign, Clock } from "lucide-react";
 import {
   VerificationBadge,
   type VerificationStatusType,
 } from "../components/VerificationBadge";
+import { ArrowLeft, Star, DollarSign, Clock, ExternalLink } from "lucide-react";
+import { BookingModal } from "../components/BookingModal";
 
 interface ServiceDetail {
-  _id: string;
+  id: string;
   name: string;
   basePrice: number;
   durationMinutes: number;
   description: string;
-  subCategory?: string;
-  categoryId?: { name: string; slug: string };
+  categorySlug: string;
 }
 
 interface ProviderCard {
-  _id: string;
+  id: string;
   businessName: string;
   ratingAvg: number;
   ratingCount: number;
-  fullName?: string;
-  avatarUrl?: string;
   verificationStatus?: string;
+  fullName?: string | null;
+  avatarUrl?: string | null;
   customPrice?: number | null;
   customDescription?: string | null;
+}
+
+function normalizeServiceDetail(raw: Record<string, unknown>): ServiceDetail | null {
+  const id = raw.id ?? raw._id;
+  if (id == null) return null;
+  const category = raw.category as { slug?: string } | null | undefined;
+  const legacyCat = raw.categoryId as { slug?: string } | null | undefined;
+  return {
+    id: String(id),
+    name: String(raw.name ?? ""),
+    description: String(raw.description ?? ""),
+    basePrice: Number(raw.base_price ?? raw.basePrice ?? 0),
+    durationMinutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    categorySlug: category?.slug ?? legacyCat?.slug ?? "",
+  };
+}
+
+function normalizeProviderCard(raw: Record<string, unknown>): ProviderCard {
+  return {
+    id: String(raw.id ?? raw._id ?? ""),
+    businessName: String(raw.business_name ?? raw.businessName ?? ""),
+    ratingAvg: Number(raw.rating_avg ?? raw.ratingAvg ?? 0),
+    ratingCount: Number(raw.rating_count ?? raw.ratingCount ?? 0),
+    fullName: (raw.full_name ?? raw.fullName) as string | null | undefined,
+    avatarUrl: (raw.avatar_url ?? raw.avatarUrl) as string | null | undefined,
+    customPrice: (raw.custom_price ?? raw.customPrice) as number | null | undefined,
+    customDescription: (raw.custom_description ?? raw.customDescription) as
+      | string
+      | null
+      | undefined,
+  };
 }
 
 interface ServiceProvidersProps {
   serviceId: string;
   onNavigate: (path: string) => void;
+  user?: { role?: string } | null;
+  /** Supabase access token — required to open BookingModal */
+  token?: string;
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -71,11 +105,19 @@ const ProviderSkeleton: React.FC = () => (
 export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   serviceId,
   onNavigate,
+  user,
+  token,
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // Booking modal state
+  const [bookingTarget, setBookingTarget] = useState<{
+    providerId: string;
+    providerName: string;
+  } | null>(null);
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
@@ -83,8 +125,6 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
     const controller = new AbortController();
     const { signal } = controller;
 
-    // All setState calls are inside this async function, not directly in the
-    // effect body — satisfies react-hooks/set-state-in-effect lint rule.
     async function load() {
       setLoading(true);
       setError(false);
@@ -93,9 +133,23 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
           fetch(`${API_BASE}/api/services/${serviceId}`, { signal }).then((r) => r.json()),
           fetch(`${API_BASE}/api/providers/by-service/${serviceId}`, { signal }).then((r) => r.json()),
         ]);
-        if (svcData.success) setService(svcData.data);
-        if (provData.success) setProviders(provData.data);
-        if (!svcData.success) setError(true);
+        if (svcData.success && svcData.data) {
+          const svc = normalizeServiceDetail(svcData.data as Record<string, unknown>);
+          setService(svc);
+          if (!svc) setError(true);
+        } else {
+          setService(null);
+          setError(true);
+        }
+        if (provData.success && Array.isArray(provData.data)) {
+          setProviders(
+            provData.data.map((row: Record<string, unknown>) =>
+              normalizeProviderCard(row),
+            ),
+          );
+        } else {
+          setProviders([]);
+        }
       } catch {
         if (!signal.aborted) setError(true);
       } finally {
@@ -107,7 +161,7 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
     return () => controller.abort();
   }, [serviceId, API_BASE]);
 
-  const categorySlug = service?.categoryId?.slug ?? "";
+  const categorySlug = service?.categorySlug ?? "";
   const categoryIcon = CATEGORY_ICONS[categorySlug] ?? "🔧";
 
   return (
@@ -178,11 +232,9 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
       {!loading && !error && providers.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {providers
-            .filter((p) => p.verificationStatus === "verified")
-            .map((provider) => (
-              <div
-                key={provider._id}
+          {providers.map((provider) => (
+            <div
+              key={provider.id}
               className="glass-panel rounded-2xl p-6 flex flex-col hover:shadow-lg hover:bg-white/90 transition-all duration-300"
             >
               {/* Avatar + name row */}
@@ -191,15 +243,15 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                   <img
                     src={provider.avatarUrl}
                     alt={provider.businessName}
-                    className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-white shadow-sm"
+                    className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white font-bold text-2xl flex-shrink-0 shadow-sm">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-white text-xl font-bold flex-shrink-0 shadow-md">
                     {provider.businessName.charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className="min-w-0">
-                  <h3 className="font-bold text-slate-900 leading-snug truncate">
+                  <h3 className="font-bold text-slate-900 text-base leading-snug truncate">
                     {provider.businessName}
                   </h3>
                   {provider.verificationStatus && (
@@ -212,19 +264,17 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                     />
                   )}
                   {provider.fullName && (
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">
-                      {provider.fullName}
-                    </p>
+                    <p className="text-xs text-slate-500 truncate">{provider.fullName}</p>
                   )}
-                  {/* Rating */}
+                  {/* Star rating */}
                   <div className="flex items-center gap-1 mt-1">
-                    <Star size={12} className="fill-amber-400 text-amber-400" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      {provider.ratingAvg.toFixed(1)}
+                    <Star size={12} className="text-amber-400 fill-amber-400" />
+                    <span className="text-xs font-bold text-slate-700">
+                      {provider.ratingAvg > 0 ? provider.ratingAvg.toFixed(1) : "New"}
                     </span>
                     {provider.ratingCount > 0 && (
                       <span className="text-xs text-slate-400">
-                        ({provider.ratingCount} reviews)
+                        ({provider.ratingCount})
                       </span>
                     )}
                   </div>
@@ -232,7 +282,7 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
               </div>
 
               {/* Description */}
-              <p className="text-sm text-slate-500 leading-relaxed line-clamp-3 flex-1 mb-4">
+              <p className="text-sm text-slate-500 line-clamp-2 mb-4 flex-1">
                 {provider.customDescription ?? service?.description ?? ""}
               </p>
 
@@ -250,25 +300,51 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                 )}
               </div>
 
-              {/* Book button */}
-              <div className="relative group/btn">
+              {/* Action buttons */}
+              <div className="flex gap-2 mt-auto">
                 <button
-                  disabled={provider.verificationStatus !== "verified"}
-                  className={`w-full py-2.5 rounded-xl font-semibold text-sm border transition-colors ${
-                    provider.verificationStatus !== "verified"
-                      ? "bg-teal-50 text-teal-400 border-teal-100 cursor-not-allowed"
-                      : "bg-teal-600 text-white border-teal-600 hover:bg-teal-700"
-                  }`}
+                  onClick={() => onNavigate(`/profile/${provider.id}?type=provider`)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-50 text-slate-600 font-semibold text-sm border border-slate-100 hover:bg-slate-100 transition-colors"
                 >
-                  Book with Provider
+                  <ExternalLink size={13} />
+                  View Profile
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-white text-[10px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none">
-                  {provider.verificationStatus !== "verified" ? "This provider is pending verification" : "Coming Soon"}
-                </span>
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      onNavigate("/login");
+                      return;
+                    }
+                    setBookingTarget({
+                      providerId: provider.id,
+                      providerName: provider.businessName,
+                    });
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-bold text-sm hover:bg-teal-700 transition-colors shadow-md shadow-teal-100 active:scale-[0.98]"
+                >
+                  Book
+                </button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Booking Modal */}
+      {bookingTarget && service && token && (
+        <BookingModal
+          providerId={bookingTarget.providerId}
+          providerName={bookingTarget.providerName}
+          serviceId={service.id}
+          serviceName={service.name}
+          servicePrice={service.basePrice}
+          token={token}
+          onClose={() => setBookingTarget(null)}
+          onSuccess={(bookingId) => {
+            setBookingTarget(null);
+            onNavigate(`/booking-confirmation/${bookingId}`);
+          }}
+        />
       )}
     </div>
   );

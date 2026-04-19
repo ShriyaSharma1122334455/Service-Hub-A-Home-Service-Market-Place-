@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { profileService } from "../services/profile";
 import type { BackendUser, BackendProvider } from "../services/profile";
+import fetchApi from "../lib/api";
 import {
   User as UserIcon,
   Mail,
@@ -9,12 +10,30 @@ import {
   Loader2,
   Star,
   Briefcase,
+  MessageSquare,
+  Send,
+  CheckCircle,
 } from "lucide-react";
 import {
   VerificationBadge,
   type VerificationStatusType,
 } from "../components/VerificationBadge";
 import { VerificationDetailsModal } from "../components/VerificationDetailsModal";
+
+interface Review {
+  id: string;
+  booking_id?: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  reviewer: { full_name: string; avatar_url: string | null } | null;
+}
+
+interface CompletedBooking {
+  id: string;
+  created_at: string;
+  service?: { name: string } | null;
+}
 
 interface ProfileProps {
   profileId: string;
@@ -36,7 +55,17 @@ export const Profile: React.FC<ProfileProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  // Review form state (only for customers viewing a provider profile)
+  const [reviewableBookings, setReviewableBookings] = useState<CompletedBooking[]>([]);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,11 +103,11 @@ export const Profile: React.FC<ProfileProps> = ({
             type,
             data: {
               id: "me",
-              supabase_id: "me",
+              supabase_id: "",
               full_name:
                 (currentUser as { name?: string }).name || email.split("@")[0],
               email,
-              avatarUrl: (currentUser as { avatar?: string }).avatar,
+              avatar_url: (currentUser as { avatar?: string }).avatar,
               role,
             } as BackendUser & BackendProvider,
           });
@@ -138,6 +167,99 @@ export const Profile: React.FC<ProfileProps> = ({
       cancelled = true;
     };
   }, [profileId, initialType, currentUser, currentUser?.email]);
+
+  // Fetch reviews when a provider profile loads
+  useEffect(() => {
+    if (!profile || profile.type !== "provider") return;
+    const providerId = profile.data.id;
+    if (!providerId) return;
+
+    let cancelled = false;
+    const loadReviews = async () => {
+      setReviewsLoading(true);
+      try {
+        // fetchApi already unwraps `.data` from the response body, so
+        // res.data IS the reviews array directly (not { count, data: [...] }).
+        const res = await fetchApi<Review[]>(`/reviews/${providerId}`);
+        if (!cancelled && res.success) {
+          setReviews(Array.isArray(res.data) ? res.data : []);
+        }
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+    loadReviews();
+    return () => { cancelled = true; };
+  }, [profile]);
+
+  // Fetch the customer's completed bookings for this provider so we can show the review form
+  useEffect(() => {
+    if (!profile || profile.type !== "provider") return;
+    if (currentUser?.role?.toLowerCase() !== "customer") return;
+    if (profileId === "me") return;
+
+    const providerId = String(profile.data.id);
+    let cancelled = false;
+
+    const loadBookings = async () => {
+      // fetchApi already unwraps `.data` from the response body, so
+      // res.data IS the bookings array directly.
+      const res = await fetchApi<CompletedBooking[]>("/bookings");
+      if (cancelled || !res.success) return;
+      const all = Array.isArray(res.data) ? res.data : [];
+      // Keep only completed bookings for this specific provider
+      const eligible = all.filter(
+        (b: CompletedBooking & { provider_id?: string; status?: string }) =>
+          b.status === "completed" && String(b.provider_id ?? "") === providerId,
+      );
+      if (!cancelled) setReviewableBookings(eligible);
+    };
+    loadBookings();
+    return () => { cancelled = true; };
+  }, [profile, currentUser, profileId]);
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (reviewRating === 0) {
+      setReviewError("Please select a star rating.");
+      return;
+    }
+    if (reviewableBookings.length === 0) return;
+
+    setReviewSubmitting(true);
+    setReviewError(null);
+
+    // Use the most recent completed booking (index 0, ordered desc)
+    const bookingId = reviewableBookings[0].id;
+    const res = await fetchApi<Review>("/reviews", {
+      method: "POST",
+      body: JSON.stringify({ booking_id: bookingId, rating: reviewRating, comment: reviewComment.trim() || undefined }),
+    });
+
+    setReviewSubmitting(false);
+
+    if (res.success && res.data) {
+      setReviewSuccess(true);
+      setReviewRating(0);
+      setReviewComment("");
+      // Prepend new review optimistically so user sees it immediately
+      const newReview = res.data as unknown as Review;
+      setReviews((prev) => [
+        {
+          ...newReview,
+          reviewer: { full_name: "You", avatar_url: null },
+        },
+        ...prev,
+      ]);
+    } else {
+      const msg = (res as { error?: string }).error ?? "Failed to submit review.";
+      if (msg.includes("already reviewed")) {
+        setReviewSuccess(true); // treat as success — just hide the form
+      } else {
+        setReviewError(msg);
+      }
+    }
+  };
 
   const getRoleLabel = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -218,7 +340,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const isProvider = profile.type === "provider";
   const data = profile.data;
   const fullName =
-    (data as BackendProvider).businessName || (data as BackendProvider).business_name || (data as BackendProvider).full_name || (data as BackendUser).full_name || "Unknown";
+    (data as BackendProvider).business_name || data.full_name || "Unknown";
   const avatarUrl = data.avatarUrl;
   const role = data.role || (isProvider ? "provider" : "customer");
   const email = data.email;
@@ -226,7 +348,7 @@ export const Profile: React.FC<ProfileProps> = ({
     data.bio ||
     (isProvider ? (data as BackendProvider).description : undefined);
   const rating = isProvider
-    ? ((data as BackendProvider).ratingAvg ?? (data as BackendProvider).rating)
+    ? ((data as BackendProvider).rating_avg ?? (data as BackendProvider).rating)
     : (data as BackendUser).provider?.rating;
   const serviceCategory = (data as BackendProvider).serviceCategory;
 
@@ -354,6 +476,185 @@ export const Profile: React.FC<ProfileProps> = ({
                     ID
                   </p>
                   <p className="text-slate-500 text-sm font-mono">{data.id}</p>
+                </div>
+              )}
+
+              {/* Reviews section — provider profiles only */}
+              {isProvider && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <MessageSquare className="h-5 w-5 text-slate-400" />
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+                      Reviews
+                      {reviews.length > 0 && (
+                        <span className="ml-2 normal-case font-semibold text-slate-500">
+                          ({reviews.length})
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+
+                  {reviewsLoading && (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="h-6 w-6 text-teal-500 animate-spin" />
+                    </div>
+                  )}
+
+                  {!reviewsLoading && reviews.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50 rounded-2xl">
+                      <Star className="h-8 w-8 text-slate-200 mb-2" />
+                      <p className="text-slate-500 font-medium text-sm">No reviews yet</p>
+                      <p className="text-slate-400 text-xs mt-1">Reviews appear here after completed bookings.</p>
+                    </div>
+                  )}
+
+                  {!reviewsLoading && reviews.length > 0 && (
+                    <div className="space-y-3">
+                      {reviews.map((review) => (
+                        <div key={review.id} className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              {review.reviewer?.avatar_url ? (
+                                <img
+                                  src={review.reviewer.avatar_url}
+                                  alt={review.reviewer.full_name}
+                                  className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="h-4 w-4 text-slate-400" />
+                                </div>
+                              )}
+                              <span className="text-sm font-semibold text-slate-700">
+                                {review.reviewer?.full_name ?? "Anonymous"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={13}
+                                  className={
+                                    i < review.rating
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "text-slate-200 fill-slate-200"
+                                  }
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          {review.comment && (
+                            <p className="text-sm text-slate-600 leading-relaxed">
+                              {review.comment}
+                            </p>
+                          )}
+                          <p className="text-xs text-slate-400">
+                            {new Date(review.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Leave a Review form ── */}
+                  {/* Only shown to logged-in customers who have a completed booking with this provider */}
+                  {currentUser?.role?.toLowerCase() === "customer" &&
+                    profileId !== "me" &&
+                    reviewableBookings.length > 0 && (
+                      <div className="mt-6 pt-5 border-t border-slate-100">
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                          <Star className="h-4 w-4 text-amber-400" />
+                          Leave a Review
+                        </h3>
+
+                        {reviewSuccess ? (
+                          <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl">
+                            <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
+                            <p className="text-sm font-semibold text-emerald-700">
+                              Thanks! Your review has been submitted.
+                            </p>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleReviewSubmit} className="space-y-4">
+                            {/* Star picker */}
+                            <div>
+                              <p className="text-xs text-slate-500 mb-2 font-medium">Your rating</p>
+                              <div className="flex items-center gap-1">
+                                {Array.from({ length: 5 }).map((_, i) => {
+                                  const val = i + 1;
+                                  return (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      onClick={() => setReviewRating(val)}
+                                      onMouseEnter={() => setReviewHover(val)}
+                                      onMouseLeave={() => setReviewHover(0)}
+                                      className="p-0.5 transition-transform hover:scale-110 focus:outline-none"
+                                      aria-label={`${val} star${val > 1 ? "s" : ""}`}
+                                    >
+                                      <Star
+                                        size={28}
+                                        className={
+                                          val <= (reviewHover || reviewRating)
+                                            ? "fill-amber-400 text-amber-400"
+                                            : "text-slate-200 fill-slate-200"
+                                        }
+                                      />
+                                    </button>
+                                  );
+                                })}
+                                {reviewRating > 0 && (
+                                  <span className="ml-2 text-sm font-semibold text-slate-500">
+                                    {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][reviewRating]}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Comment */}
+                            <div>
+                              <label className="text-xs text-slate-500 font-medium block mb-1.5">
+                                Comment <span className="text-slate-300">(optional)</span>
+                              </label>
+                              <textarea
+                                value={reviewComment}
+                                onChange={(e) => setReviewComment(e.target.value)}
+                                rows={3}
+                                maxLength={500}
+                                placeholder="Share your experience with this provider…"
+                                className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent resize-none transition"
+                              />
+                              <p className="text-right text-xs text-slate-300 mt-1">
+                                {reviewComment.length}/500
+                              </p>
+                            </div>
+
+                            {/* Error */}
+                            {reviewError && (
+                              <p className="text-xs text-red-500 font-medium">{reviewError}</p>
+                            )}
+
+                            {/* Submit */}
+                            <button
+                              type="submit"
+                              disabled={reviewSubmitting || reviewRating === 0}
+                              className="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white text-sm font-bold rounded-full hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                              {reviewSubmitting ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                              {reviewSubmitting ? "Submitting…" : "Submit Review"}
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
                 </div>
               )}
 

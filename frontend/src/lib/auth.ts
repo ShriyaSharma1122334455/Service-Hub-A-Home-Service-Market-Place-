@@ -14,8 +14,8 @@ export const signUpWithRole = async (
     options: {
       data: { role: role || 'customer',
         phone: phone || null,
-        fullName: fullName || email.split("@")[0],
-       },
+        full_name: fullName || email.split("@")[0],
+      },
     },
   });
 }
@@ -28,8 +28,7 @@ export const signIn = async (
     email,
     password,
   })
-}
-
-export const signOut = async () => {
+ }
+ export const signOut = async () => {
   return supabase.auth.signOut()
 }

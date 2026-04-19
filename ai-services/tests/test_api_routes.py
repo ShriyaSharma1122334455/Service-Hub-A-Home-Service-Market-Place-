@@ -12,7 +12,7 @@ async def test_root_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["service"] == "ServiceHub Verification Service"
-    assert "/ai/verify/document" in data["endpoints"].values()
+    assert data["status"] == "online"
 
 @pytest.mark.asyncio
 async def test_health_endpoint():
@@ -32,7 +32,7 @@ async def test_internal_key_security():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # Sending a request without the required X-Internal-Key header
         # Note: If settings.ENV is "development", this might pass depending on verification.py logic
-        response = await ac.post("/ai/verify/document", json={
+        response = await ac.post("/api/v1/verify/document", json={
             "image_url": "http://example.com/id.jpg",
             "user_id": "test_user",
             "document_type": "drivers_license"

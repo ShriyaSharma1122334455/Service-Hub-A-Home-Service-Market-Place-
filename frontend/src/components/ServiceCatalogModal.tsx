@@ -1,14 +1,38 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Clock, DollarSign, ChevronRight } from "lucide-react";
+import { X, Clock, DollarSign, ChevronRight, Star, User as UserIcon } from "lucide-react";
 import type { User, Provider } from "../../types";
 
-interface BackendService {
-  _id: string;
+/** Normalized from Supabase (`id`, `base_price`, …) for UI use */
+interface ServiceRow {
+  id: string;
   name: string;
   description: string;
-  basePrice: number;
-  durationMinutes: number;
-  subCategory?: string;
+  base_price: number;
+  duration_minutes: number;
+  sub_category?: string;
+  provider_id?: string;
+  provider_name?: string;
+  provider_rating_avg?: number;
+  provider_rating_count?: number;
+}
+
+function normalizeService(raw: Record<string, unknown>): ServiceRow {
+  const sub =
+    (raw.sub_category as string | null | undefined) ??
+    (raw.subCategory as string | undefined);
+  const prov = raw.provider as Record<string, unknown> | null | undefined;
+  return {
+    id: String(raw.id ?? raw._id ?? ""),
+    name: String(raw.name ?? ""),
+    description: String(raw.description ?? ""),
+    base_price: Number(raw.base_price ?? raw.basePrice ?? 0),
+    duration_minutes: Number(raw.duration_minutes ?? raw.durationMinutes ?? 0),
+    sub_category: sub || undefined,
+    provider_id: prov ? String(prov.id ?? "") : undefined,
+    provider_name: prov ? String(prov.business_name ?? "") : undefined,
+    provider_rating_avg: prov ? Number(prov.rating_avg ?? 0) : undefined,
+    provider_rating_count: prov ? Number(prov.rating_count ?? 0) : undefined,
+  };
 }
 
 interface ServiceCatalogModalProps {
@@ -51,7 +75,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   user,
   onNavigate,
 }) => {
-  const [services, setServices] = useState<BackendService[]>([]);
+  const [services, setServices] = useState<ServiceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -63,8 +87,8 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
     fetch(`${API_BASE}/api/services?category=${categoryId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          setServices(data.data);
+        if (data.success && Array.isArray(data.data)) {
+          setServices(data.data.map((row: Record<string, unknown>) => normalizeService(row)));
         } else {
           setError(true);
         }
@@ -90,9 +114,9 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   );
 
   // Group services by subCategory
-  const grouped = services.reduce<Record<string, BackendService[]>>(
+  const grouped = services.reduce<Record<string, ServiceRow[]>>(
     (acc, svc) => {
-      const key = svc.subCategory || "General";
+      const key = svc.sub_category || "General";
       (acc[key] ??= []).push(svc);
       return acc;
     },
@@ -181,7 +205,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
               <div className="space-y-3">
                 {svcs.map((service) => (
                   <div
-                    key={service._id}
+                    key={service.id}
                     className="group flex gap-4 p-5 rounded-2xl bg-white/60 hover:bg-white/90 border border-white/60 hover:border-teal-100 transition-all duration-300 hover:shadow-md"
                   >
                     {/* Left — icon */}
@@ -201,7 +225,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                           <button
                             onClick={() => {
                               onClose();
-                              onNavigate(`/book/${service._id}`);
+                              onNavigate(`/book/${service.id}`);
                             }}
                             className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-teal-600 text-white hover:bg-teal-700 transition-colors"
                           >
@@ -230,12 +254,27 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                       <div className="flex flex-wrap items-center gap-2 mt-3">
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
                           <DollarSign size={11} />
-                          From ${service.basePrice}
+                          From ${service.base_price}
                         </span>
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full">
                           <Clock size={11} />
-                          {formatDuration(service.durationMinutes)}
+                          {formatDuration(service.duration_minutes)}
                         </span>
+                        {service.provider_name && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full">
+                            <UserIcon size={11} />
+                            {service.provider_name}
+                          </span>
+                        )}
+                        {service.provider_rating_avg !== undefined && service.provider_rating_avg > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
+                            <Star size={11} className="fill-amber-500 text-amber-500" />
+                            {service.provider_rating_avg.toFixed(1)}
+                            {service.provider_rating_count && service.provider_rating_count > 0 && (
+                              <span className="text-amber-500 font-normal">({service.provider_rating_count})</span>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
