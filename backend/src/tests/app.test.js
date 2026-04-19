@@ -83,6 +83,14 @@ describe('Auth – /api/auth', () => {
       error: null,
     });
 
+    mockSignIn.mockResolvedValueOnce({
+      data: {
+        session: { access_token: 'fake-jwt-token' },
+        user: { id: 'uuid-1', email: 'test@example.com', user_metadata: { role: 'customer' } },
+      },
+      error: null,
+    });
+
     const res = await request(app).post('/api/auth/register').send({
       email: 'test@example.com',
       password: 'Password123!',
@@ -92,7 +100,8 @@ describe('Auth – /api/auth', () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.data).toHaveProperty('id');
+    expect(res.body.data).toHaveProperty('token');
+    expect(res.body.data.user).toHaveProperty('id');
   });
 
   it('POST /register rejects missing fields (400)', async () => {
