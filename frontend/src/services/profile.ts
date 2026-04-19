@@ -21,8 +21,8 @@ export type BackendUser = {
 };
 
 export type BackendProvider = {
-  businessName: string;
-  ratingAvg: number | undefined;
+  businessName?: string;
+  ratingAvg?: number;
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'failed';
   id: string;
   user_id?: string;

@@ -66,6 +66,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +110,7 @@ export const Profile: React.FC<ProfileProps> = ({
               email,
               avatar_url: (currentUser as { avatar?: string }).avatar,
               role,
+              verificationStatus: "unverified",
             } as BackendUser & BackendProvider,
           });
         } else {

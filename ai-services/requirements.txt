@@ -33,3 +33,8 @@ beautifulsoup4==4.12.3
 
 # ── NSOPW browser automation (primary strategy) ──────────────────────────
 #playwright==1.44.0
+
+#dependencies for CI
+flake8==6.1.0
+pytest==8.3.2
+pytest-asyncio==0.24.0
