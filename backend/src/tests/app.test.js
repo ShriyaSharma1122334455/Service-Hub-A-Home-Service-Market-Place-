@@ -38,7 +38,7 @@ function createChainProxy() {
 const mockFrom = jest.fn(() => createChainProxy());
 
 const mockCreateUser = jest.fn();
-const mockSignIn     = jest.fn();
+const mockSignIn = jest.fn();
 
 const mockSupabaseClient = {
   from: mockFrom,
@@ -69,7 +69,7 @@ describe('Health', () => {
   it('GET /api/health returns 200', async () => {
     const res = await request(app).get('/api/health');
     expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('status', 'ok');
+    expect(res.body).toHaveProperty('status', 'healthy');
   });
 });
 
@@ -200,9 +200,9 @@ describe('Providers – /api/providers', () => {
 // ─── 5. Protected routes ──────────────────────────────────────────────────
 describe('Protected route guard', () => {
   const protectedRoutes = [
-    { method: 'get',  path: '/api/bookings' },
+    { method: 'get', path: '/api/bookings' },
     { method: 'post', path: '/api/bookings' },
-    { method: 'get',  path: '/api/users/profile' },
+    { method: 'get', path: '/api/users/profile' },
   ];
 
   protectedRoutes.forEach(({ method, path }) => {

@@ -63,7 +63,7 @@ export const profileService = {
   },
 
   async getProvider(id: string): Promise<ApiResponse<BackendProvider>> {
-    return fetchApi<BackendProvider>(`/provider/${id}`);
+    return fetchApi<BackendProvider>(`/providers/${id}`);
   },
 
   async listProviders(): Promise<ApiResponse<BackendProvider[]>> {

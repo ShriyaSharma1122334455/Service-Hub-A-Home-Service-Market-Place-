@@ -13,9 +13,7 @@ async def test_root_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["service"] == "ServiceHub Verification Service"
-    assert "routes" in data
-    assert "ocr" in data["routes"]
-
+    assert "/ai/verify/document" in data["endpoints"].values()
 
 @pytest.mark.asyncio
 async def test_health_endpoint():
@@ -33,7 +31,9 @@ async def test_internal_key_security():
     """Verify that document verification is protected by the internal key guard."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.post("/api/v1/verify/document", json={
+        # Sending a request without the required X-Internal-Key header
+        # Note: If settings.ENV is "development", this might pass depending on verification.py logic
+        response = await ac.post("/ai/verify/document", json={
             "image_url": "http://example.com/id.jpg",
             "user_id": "test_user",
             "document_type": "drivers_license"

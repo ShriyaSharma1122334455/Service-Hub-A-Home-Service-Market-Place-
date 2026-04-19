@@ -42,7 +42,9 @@ export const UsersList: React.FC<UsersListProps> = ({ onNavigate }) => {
     };
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -104,7 +106,9 @@ export const UsersList: React.FC<UsersListProps> = ({ onNavigate }) => {
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-900 truncate">{u.full_name || "Unknown"}</p>
+                  <p className="font-bold text-slate-900 truncate">
+                    {u.full_name || "Unknown"}
+                  </p>
                   <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                     {getRoleLabel(u.role)}
                   </span>
@@ -115,7 +119,9 @@ export const UsersList: React.FC<UsersListProps> = ({ onNavigate }) => {
         </div>
 
         {users.length === 0 && (
-          <p className="text-center text-slate-500 font-medium py-12">No users found.</p>
+          <p className="text-center text-slate-500 font-medium py-12">
+            No users found.
+          </p>
         )}
       </div>
     </div>

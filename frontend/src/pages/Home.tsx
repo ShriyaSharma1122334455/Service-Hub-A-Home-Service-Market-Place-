@@ -20,7 +20,7 @@ const SLUG_MAP: Record<string, string> = {
 };
 
 interface BackendCategory {
-  _id: string;
+  id: string;
   name: string;
   slug: string;
 }
@@ -124,7 +124,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
       {/* Service catalog modal */}
       {activeCategory && (
         <ServiceCatalogModal
-          categoryId={activeCategory._id}
+          categoryId={activeCategory.id}
           categoryName={activeCategory.name}
           categoryIcon={SERVICE_ICONS[activeCategory.name] ?? "🔧"}
           onClose={() => setActiveCategory(null)}

@@ -1,14 +1,5 @@
 import supabase from '../config/supabase.js';
-
-const getInternalUser = async (supabaseId) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, role')
-    .eq('supabase_id', supabaseId)
-    .single();
-  if (error) return null;
-  return data;
-};
+import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 // POST /api/reviews
 export const createReview = async (req, res) => {
@@ -24,9 +15,7 @@ export const createReview = async (req, res) => {
     }
 
     const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    if (!internalUser) return profileNotFoundResponse(res);
 
     // Verify the booking exists, is completed, and belongs to this user
     const { data: booking } = await supabase
@@ -44,17 +33,7 @@ export const createReview = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Can only review completed bookings' });
     }
 
-    // Check review doesn't already exist — booking_id is UNIQUE in reviews table
-    const { data: existing } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('booking_id', booking_id)
-      .single();
-
-    if (existing) {
-      return res.status(400).json({ success: false, error: 'You have already reviewed this booking' });
-    }
-
+    // INSERT directly and let the UNIQUE constraint on booking_id catch duplicates atomically
     const { data: review, error } = await supabase
       .from('reviews')
       .insert({
@@ -67,7 +46,12 @@ export const createReview = async (req, res) => {
       .select()
       .single();
 
-    if (error) return res.status(400).json({ success: false, error: error.message });
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(400).json({ success: false, error: 'You have already reviewed this booking' });
+      }
+      return res.status(400).json({ success: false, error: error.message });
+    }
 
     // Update provider rating average
     await updateProviderRating(booking.provider_id);
@@ -88,7 +72,7 @@ export const getProviderReviews = async (req, res) => {
     const { data: reviews, error } = await supabase
       .from('reviews')
       .select(`
-        id, rating, comment, created_at,
+        id, booking_id, rating, comment, created_at,
         reviewer:users(full_name, avatar_url)
       `)
       .eq('provider_id', providerId)

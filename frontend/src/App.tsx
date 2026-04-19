@@ -10,11 +10,17 @@ import { Profile } from "./pages/Profile";
 import { ProviderDashboard } from "./pages/ProviderDashboard";
 import { FAQ } from "./pages/FAQ";
 import { ServiceProviders } from "./pages/ServiceProviders";
+import { BookingConfirmation } from "./pages/BookingConfirmation";
+import { ProviderBookings } from "./pages/ProviderBookings";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
 import { VerifyPage } from "./pages/verify";
+import { supabase } from "./lib/supabase";
+import { toUserRole } from "./lib/roleUtils";
 
 const AUTH_STORAGE_KEY = "servicehub-auth";
+const MIGRATION_VERSION     = "supabase-v1";
+const MIGRATION_VERSION_KEY = "servicehub-migration-version";
 
 type StoredAuth = {
   id?: string;
@@ -46,15 +52,20 @@ const clearAuth = () => {
 };
 
 const App = () => {
+  const storedVersion = localStorage.getItem(MIGRATION_VERSION_KEY);
+  if (storedVersion !== MIGRATION_VERSION) {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.setItem(MIGRATION_VERSION_KEY, MIGRATION_VERSION);
+  }
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
   const [user, setUser] = useState<User | Provider | null>(() => {
     const stored = loadStoredAuth();
     if (stored) {
       return {
-        id: stored.id || "1",
+        id: "",
         name: stored.name,
         email: stored.email,
-        role: stored.role,
+        role: toUserRole(stored.role),
         avatar: stored.avatar,
       } as User;
     }
@@ -64,7 +75,7 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => !!loadStoredAuth(),
   );
-  const authRestored = true;
+  const [authRestored, setAuthRestored] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const [basePath, search] = currentPath.split("?");
@@ -74,6 +85,35 @@ const App = () => {
     profileTypeParam === "user" || profileTypeParam === "provider"
       ? profileTypeParam
       : null;
+
+  // Validate Supabase session on every app init / page reload.
+  // Prevents stale localStorage from showing user as logged in
+  // after the Supabase access token has expired.
+  useEffect(() => {
+    const validateSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        // No active session — clear any stale localStorage and reset state
+        clearAuth();
+        setUser(null);
+        setIsAuthenticated(false);
+      } else {
+        // Session is valid — refresh the stored token in case it was rotated
+        const stored = loadStoredAuth();
+        if (stored) {
+          saveAuth({ ...stored, accessToken: session.access_token });
+        }
+      }
+
+      // Only mark auth as restored AFTER the check completes.
+      // This prevents the protected-path redirect from firing
+      // before we know whether the session is actually valid.
+      setAuthRestored(true);
+    };
+
+    validateSession();
+  }, []); // runs once on mount — no dependencies needed
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -87,7 +127,10 @@ const App = () => {
 
   // Protected paths require a logged-in session
   const isProtectedPath =
-    basePath === "/dashboard" || basePath.startsWith("/profile") || basePath === "/verify";
+    basePath === "/dashboard" ||
+    basePath.startsWith("/profile") ||
+    basePath === "/my-bookings" ||
+    basePath.startsWith("/booking-confirmation");
 
   // Redirect unauthenticated users away from protected pages
   useEffect(() => {
@@ -97,17 +140,23 @@ const App = () => {
     }
   }, [isProtectedPath, isAuthenticated, authRestored]);
 
-  // Redirect providers away from /dashboard if not authenticated
-  // (handled by isProtectedPath guard above)
-
   const profileIdMatch = basePath.match(/^\/profile\/(.+)$/);
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
 
   const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
   const bookServiceId = bookServiceMatch ? bookServiceMatch[1] : null;
 
+  const bookingConfirmationMatch = basePath.match(/^\/booking-confirmation\/(.+)$/);
+  const bookingConfirmationId = bookingConfirmationMatch ? bookingConfirmationMatch[1] : null;
+
   const navigate = (path: string) => {
     window.location.hash = path;
+  };
+
+  /** Read the current access token from localStorage */
+  const getToken = (): string => {
+    const stored = loadStoredAuth();
+    return stored?.accessToken ?? "";
   };
 
   const handleLogin = async (
@@ -116,18 +165,27 @@ const App = () => {
     password?: string,
   ): Promise<{ success: boolean; message?: string }> => {
     try {
-      if (!password) return { success: false, message: "Password required" };
+      if (!password) {
+        return { success: false, message: "Password required" };
+      }
       const { data, error } = await signIn(email, password);
-      if (error) return { success: false, message: error.message };
+      if (error) {
+        return {
+          success: false,
+          message: error.message || "Invalid credentials",
+        };
+      }
+
       const accessToken = data?.session?.access_token;
       const supabaseUser = data?.user;
+
+      if (!accessToken) {
+        return { success: false, message: "Login failed — no session returned" };
+      }
+
       const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
 
-      // Sync Supabase user → MongoDB on every login (idempotent upsert).
-      // This covers: first-time login, email-confirmation-delayed signups, and role updates.
-
-      // fetch full profile from backend
       let profile = null;
       if (accessToken) {
         try {
@@ -135,8 +193,7 @@ const App = () => {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (!resp.ok) {
-            const text = await resp.text();
-            console.error("Profile fetch failed", resp.status, text);
+            console.error("Profile fetch failed", resp.status);
           } else {
             const json = await resp.json();
             if (json?.success) profile = json.data;
@@ -146,18 +203,11 @@ const App = () => {
         }
       }
 
-      const normalizeRole = (r?: string, fallback?: UserRole) => {
-        if (!r) return fallback || UserRole.CUSTOMER;
-        return (
-          (String(r).toUpperCase() as UserRole) || fallback || UserRole.CUSTOMER
-        );
-      };
-
       const userData = {
-        id: profile?.id || "1",
+        id: profile?.id || supabaseUser?.id || "",
         name: profile?.full_name || name,
         email,
-        role: normalizeRole(profile?.role, role),
+        role: toUserRole(profile?.role, role),
         avatar: profile?.avatar_url || avatar,
       } as User;
 
@@ -171,11 +221,13 @@ const App = () => {
         avatar: userData.avatar,
         accessToken,
       });
+
       if (userData.role === UserRole.PROVIDER) {
         navigate("/dashboard");
       } else {
         navigate("/");
       }
+
       return { success: true };
     } catch (err) {
       console.error("Login failed", err);
@@ -191,34 +243,6 @@ const App = () => {
     clearAuth();
     navigate("/");
   };
-
-  // const handleRegister = async (
-  //   email: string,
-  //   role: UserRole,
-  //   password?: string,
-  //   name?: string,
-  //   phone?: string,
-  // ) => {
-  //   try {
-  //     if (!password) throw new Error("Password required");
-  //     // ensure role stored in Supabase as lowercase (backend expects lowercase)
-  //     const roleLower = String(role).toLowerCase();
-  //     const { error: signupError } = await signUpWithRole(
-  //       email,
-  //       password,
-  //       roleLower,
-  //       name,
-  //       phone,
-  //     );
-  //     if (signupError) throw signupError;
-
-  //     // complete login flow
-  //     await handleLogin(email, role, password);
-  //   } catch (err) {
-  //     console.error("Register failed", err);
-  //     // TODO: show UI error
-  //   }
-  // };
 
   const handleRegister = async (
     email: string,
@@ -280,7 +304,22 @@ const App = () => {
 
     if (bookServiceId) {
       return (
-        <ServiceProviders serviceId={bookServiceId} onNavigate={navigate} />
+        <ServiceProviders
+          serviceId={bookServiceId}
+          onNavigate={navigate}
+          user={user}
+          token={getToken()}
+        />
+      );
+    }
+
+    if (bookingConfirmationId) {
+      return (
+        <BookingConfirmation
+          bookingId={bookingConfirmationId}
+          token={getToken()}
+          onNavigate={navigate}
+        />
       );
     }
 
@@ -306,7 +345,14 @@ const App = () => {
       case "/verify":
         return <VerifyPage userId={user?.id || ""} onNavigate={navigate} />;
       case "/faq":
-        return <FAQ />;
+        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
+      case "/my-bookings":
+        return (
+          <ProviderBookings
+            token={getToken()}
+            onNavigate={navigate}
+          />
+        );
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">

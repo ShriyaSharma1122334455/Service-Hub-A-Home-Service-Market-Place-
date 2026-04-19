@@ -29,7 +29,9 @@ export const ProvidersList: React.FC<ProvidersListProps> = ({ onNavigate }) => {
     };
 
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -92,13 +94,13 @@ export const ProvidersList: React.FC<ProvidersListProps> = ({ onNavigate }) => {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-slate-900 truncate">
-                    {p.businessName || p.business_name || p.full_name || "Unknown"}
+                    {p.business_name || p.full_name || "Unknown"}
                   </p>
-                  {(p.ratingAvg ?? p.rating) !== undefined && (
+                  {(p.rating_avg ?? p.rating) !== undefined && (
                     <div className="flex items-center gap-1 mt-1">
                       <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
                       <span className="text-sm font-semibold text-slate-700">
-                        {(p.ratingAvg ?? p.rating)!.toFixed(1)}
+                        {(p.rating_avg ?? p.rating)!.toFixed(1)}
                       </span>
                     </div>
                   )}
@@ -114,7 +116,9 @@ export const ProvidersList: React.FC<ProvidersListProps> = ({ onNavigate }) => {
         </div>
 
         {providers.length === 0 && (
-          <p className="text-center text-slate-500 font-medium py-12">No providers found.</p>
+          <p className="text-center text-slate-500 font-medium py-12">
+            No providers found.
+          </p>
         )}
       </div>
     </div>

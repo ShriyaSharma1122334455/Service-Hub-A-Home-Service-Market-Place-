@@ -232,7 +232,7 @@ def _parse_passport_regex(raw_text: str) -> Dict[str, Optional[str]]:
 
     # Name patterns
     name_match = re.search(
-        r"(?:SURNAME|LAST\s*NAME|NOM)[:\s/]+([A-Z]+)[,\s]+(?:GIVEN\s*NAME|FIRST\s*NAME|PRENOM)[:\s/]+([A-Z\s]+)",
+        r"(?:LN|LAST\s*NAME)[:\s]+([A-Z]+)[\s,\n]+(?:FN|FIRST\s*NAME)[:\s]+([A-Z]+)",
         raw_text, re.IGNORECASE,
     )
     if name_match:

@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import { PROFILE_NOT_FOUND_MESSAGE } from '../utils/internalUser.js';
 
 export const getMe = async (req, res) => {
   try {
@@ -7,27 +8,58 @@ export const getMe = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Authenticated user required' });
     }
 
-    // Get user from public.users
+    // Fetch user from public.users, joining providers in the same query
+    // Left join means we get the user row even if no provider row exists yet
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, supabase_id, full_name, email, avatar_url, role, verification_status')
+      .select(`
+        id,
+        supabase_id,
+        full_name,
+        email,
+        avatar_url,
+        role,
+        providers (
+          id,
+          business_name,
+          description,
+          rating_avg,
+          rating_count,
+          provider_categories ( category_id )
+        )
+      `)
       .eq('supabase_id', supabaseId)
       .single();
 
     if (error || !user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, error: PROFILE_NOT_FOUND_MESSAGE });
     }
 
-    // If provider, fetch their profile too
-    if (user.role === 'provider') {
-      const { data: provider, error: providerError } = await supabase
-        .from('providers')
-        .select('id, business_name, description, rating_avg, rating_count, verification_status, provider_categories(category_id)')
-        .eq('user_id', user.id)
-        .single();
+    // provider is the first element of the joined array (or null if no row yet)
+    const provider = user.providers?.[0] ?? null;
 
-      if (providerError || !provider) {
-        return res.status(404).json({ success: false, error: 'Provider profile not found' });
+    if (user.role === 'provider') {
+      if (!provider) {
+        // Provider account exists in public.users but no providers row yet.
+        // Return the user data with type: 'provider' and empty provider fields.
+        // This happens on first login before an onboarding flow creates the row.
+        return res.json({
+          success: true,
+          data: {
+            type: 'provider',
+            id: null,
+            business_name: null,
+            description: null,
+            rating_avg: null,
+            rating_count: null,
+            service_categories: [],
+            full_name: user.full_name,
+            email: user.email,
+            avatar_url: user.avatar_url,
+            role: user.role,
+            profile_incomplete: true,
+          }
+        });
       }
 
       return res.json({
@@ -39,17 +71,18 @@ export const getMe = async (req, res) => {
           description: provider.description,
           rating_avg: provider.rating_avg,
           rating_count: provider.rating_count,
-          service_categories: provider.provider_categories,
+          service_categories: provider.provider_categories ?? [],
           full_name: user.full_name,
           email: user.email,
           avatar_url: user.avatar_url,
           role: user.role,
           verificationStatus: provider.verification_status || user.verification_status || 'unverified',
+          profile_incomplete: false,
         }
       });
     }
 
-    // Customer
+    // Customer — no provider join needed
     return res.json({
       success: true,
       data: { type: 'user', ...user, verificationStatus: user.verification_status || 'unverified' }
