@@ -14,6 +14,7 @@ import { BookingConfirmation } from "./pages/BookingConfirmation";
 import { ProviderBookings } from "./pages/ProviderBookings";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
+import { VerifyPage } from "./pages/verify";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
@@ -22,6 +23,7 @@ const MIGRATION_VERSION     = "supabase-v1";
 const MIGRATION_VERSION_KEY = "servicehub-migration-version";
 
 type StoredAuth = {
+  id?: string;
   email: string;
   role: UserRole;
   name: string;
@@ -212,6 +214,7 @@ const App = () => {
       setUser(userData);
       setIsAuthenticated(true);
       saveAuth({
+        id: userData.id,
         email,
         role: userData.role,
         name: userData.name,
@@ -339,6 +342,8 @@ const App = () => {
         );
       case "/dashboard":
         return <ProviderDashboard user={user} onNavigate={navigate} />;
+      case "/verify":
+        return <VerifyPage userId={user?.id || ""} onNavigate={navigate} />;
       case "/faq":
         return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
       case "/my-bookings":

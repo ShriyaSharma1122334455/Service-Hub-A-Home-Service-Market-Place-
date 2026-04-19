@@ -13,13 +13,13 @@ export const listServices = async (req, res) => {
 
     // Filters
     if (category) query = query.eq('category_id', category);
-    if (search)   query = query.ilike('name', `%${search}%`); // replaces $regex
+    if (search) query = query.ilike('name', `%${search}%`); // replaces $regex
     if (minPrice) query = query.gte('base_price', Number(minPrice));
     if (maxPrice) query = query.lte('base_price', Number(maxPrice));
 
     // Pagination
     const from = (Number(page) - 1) * Number(limit);
-    const to   = from + Number(limit) - 1;
+    const to = from + Number(limit) - 1;
     query = query.range(from, to);
 
     const { data: services, error, count } = await query;
@@ -88,14 +88,14 @@ export const createService = async (req, res) => {
     const { data: service, error } = await supabase
       .from('services')
       .insert({
-        provider_id:      providerProfile.id,
+        provider_id: providerProfile.id,
         category_id,
         name,
         description,
         base_price,
         duration_minutes,
-        sub_category:     sub_category || null,
-        is_active:        true
+        sub_category: sub_category || null,
+        is_active: true
       })
       .select()
       .single();

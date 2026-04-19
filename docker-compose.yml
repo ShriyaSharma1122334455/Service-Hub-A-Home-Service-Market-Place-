@@ -24,23 +24,23 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: development            # multi-stage: dev or production
+      target: development # multi-stage: dev or production
     container_name: servicehub-backend
     image: servicehub-backend:local
     ports:
       - "3000:3000"
     env_file:
-      - ./backend/.env               # reads MONGODB_URI, SUPABASE_*, CLOUDINARY_*, etc.
+      - ./backend/.env # reads MONGODB_URI, SUPABASE_*, CLOUDINARY_*, etc.
     environment:
-      - NODE_ENV=${NODE_ENV:-development}   # override NODE_ENV only if needed
+      - NODE_ENV=${NODE_ENV:-development} # override NODE_ENV only if needed
       - PORT=3000
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173}
     volumes:
-      - ./backend:/app               # hot reload in dev
-      - /app/node_modules            # preserve container node_modules
+      - ./backend:/app # hot reload in dev
+      - /app/node_modules # preserve container node_modules
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -80,10 +80,10 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./visual-damage-assessment/.env    # reads GROQ_API_KEY
+      - ./visual-damage-assessment/.env # reads GROQ_API_KEY
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -92,19 +92,19 @@ services:
       - servicehub-network
 
   # ── User Verification (Python/FastAPI) ─────────────────────────────────────
-  # Uncomment when Prithvi's service is ready
-  # user-verification:
-  #   build:
-  #     context: ./user-verification
-  #     dockerfile: Dockerfile
-  #   container_name: servicehub-user-verification
-  #   image: servicehub-user-verification:local
-  #   ports:
-  #     - "8001:8001"
-  #   env_file:
-  #     - ./user-verification/.env
-  #   networks:
-  #     - servicehub-network
+  #Uncomment when Prithvi's service is ready
+  user-verification:
+    build:
+      context: ./ai-services
+      dockerfile: Dockerfile
+    container_name: servicehub-user-verification
+    image: servicehub-user-verification:local
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./ai-services/.env
+    networks:
+      - servicehub-network
 
 networks:
   servicehub-network:

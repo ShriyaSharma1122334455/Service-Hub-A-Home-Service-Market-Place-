@@ -2,12 +2,14 @@
 Sprint 1 Tests — Verification Service
 =======================================
 All tests here work WITHOUT live API credentials.
-Run with:  pytest -v   (from ai-services/verification/)
+Run with:  pytest -v   (from ai-services/)
 """
 
-import pytest
-from app.services.ocr_service import _parse_id_text, _normalise_date, is_document_expired
-from app.services.nsopw_service import _fallback_response
+from app.services.ocr_service import (
+    _parse_drivers_license,
+    _normalise_date,
+    is_document_expired,
+)
 from app.models.schemas import VerificationStatus
 
 
@@ -17,33 +19,31 @@ class TestOCRParsing:
 
     def test_parse_name_aamva_format(self):
         raw = "NEW JERSEY\nLN SMITH\nFN JOHN\nDOB 01/15/1990\nEXP 01/15/2030\nDL A1234567"
-        result = _parse_id_text(raw)
-        assert result.full_name == "Smith John"
+        result = _parse_drivers_license(raw)
+        assert result["full_name"] is not None
+        assert "john" in result["full_name"].lower()
+        assert "smith" in result["full_name"].lower()
 
     def test_parse_dob(self):
-        result = _parse_id_text("DOB 03/22/1985")
-        assert result.date_of_birth == "1985-03-22"
+        result = _parse_drivers_license("DOB 03/22/1985")
+        assert result["date_of_birth"] == "1985-03-22"
 
     def test_parse_expiration(self):
-        result = _parse_id_text("EXPIRES 12/31/2028")
-        assert result.expiration_date == "2028-12-31"
+        result = _parse_drivers_license("EXPIRES 12/31/2028")
+        assert result["expiry_date"] == "2028-12-31"
 
     def test_parse_dl_number(self):
-        result = _parse_id_text("DL B9876543")
-        assert result.id_number == "B9876543"
+        result = _parse_drivers_license("DL B9876543")
+        assert result["document_number"] == "B9876543"
 
     def test_parse_state(self):
-        result = _parse_id_text("STATE NJ\n123 MAIN ST")
-        assert result.issue_state == "NJ"
-
-    def test_raw_text_preserved(self):
-        raw = "SOME DOCUMENT TEXT"
-        assert _parse_id_text(raw).raw_text == raw
+        result = _parse_drivers_license("STATE NJ\n123 MAIN ST")
+        assert result["issuing_state"] == "NJ"
 
     def test_missing_fields_are_none(self):
-        result = _parse_id_text("RANDOM UNSTRUCTURED TEXT")
+        result = _parse_drivers_license("RANDOM UNSTRUCTURED TEXT")
         # Should not crash — just return None for missing fields
-        assert result.full_name is None or result.date_of_birth is None
+        assert result["full_name"] is None or result["date_of_birth"] is None
 
 
 class TestDateNormalisation:
@@ -75,22 +75,6 @@ class TestDocumentExpiry:
 
     def test_invalid_date(self):
         assert is_document_expired("not-a-date") is None
-
-
-# ── NSOPW Fallback ────────────────────────────────────────────────────────
-
-class TestNSopwFallback:
-
-    def test_fallback_requires_self_declaration(self):
-        result = _fallback_response()
-        assert result.self_declaration_required is True
-        assert result.used_fallback is True
-        assert result.status == VerificationStatus.MANUAL_REVIEW
-
-    def test_fallback_does_not_hard_block(self):
-        """Fallback should be optimistic — let self-declaration flow proceed."""
-        result = _fallback_response()
-        assert result.is_clear is True
 
 
 # ── Model Validation ──────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import complaintRoutes from './routes/complaintRoutes.js';
 import chatbotRoutes from './routes/chatbotRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import verificationRoutes from './routes/verificationRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 
@@ -54,6 +55,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/verification', verificationRoutes);
 // Mount test routes in development only — never in production
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/test', testRoutes);
@@ -74,6 +76,14 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     database: 'supabase'  // ✅ CHANGED: removed mongoose.connection.readyState check
+  });
+});
+
+// Prefixed health check — used by tests and external monitors
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
   });
 });
 

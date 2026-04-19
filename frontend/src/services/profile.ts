@@ -2,6 +2,7 @@ import fetchApi from '../lib/api';
 import type { ApiResponse } from '../lib/api';
 
 export type BackendUser = {
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'failed';
   id: string;
   supabase_id: string;
   full_name: string;
@@ -20,6 +21,9 @@ export type BackendUser = {
 };
 
 export type BackendProvider = {
+  businessName?: string;
+  ratingAvg?: number;
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'failed';
   id: string;
   user_id?: string;
   supabase_id?: string;

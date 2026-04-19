@@ -76,6 +76,7 @@ export const getMe = async (req, res) => {
           email: user.email,
           avatar_url: user.avatar_url,
           role: user.role,
+          verificationStatus: provider.verification_status || user.verification_status || 'unverified',
           profile_incomplete: false,
         }
       });
@@ -84,7 +85,7 @@ export const getMe = async (req, res) => {
     // Customer — no provider join needed
     return res.json({
       success: true,
-      data: { type: 'user', ...user, providers: undefined }
+      data: { type: 'user', ...user, verificationStatus: user.verification_status || 'unverified' }
     });
 
   } catch (err) {
@@ -99,7 +100,7 @@ export const getUser = async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role')
+      .select('id, supabase_id, full_name, avatar_url, role, verification_status')
       .eq('id', id)  // id here is the public.users UUID, not supabase_id
       .single();
 
@@ -107,7 +108,7 @@ export const getUser = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: { ...user, verificationStatus: user.verification_status || 'unverified' } });
 
   } catch (err) {
     console.error('Error fetching user:', err);
@@ -119,14 +120,16 @@ export const listUsers = async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role, email')
+      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
       .eq('role', 'customer');
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
 
-    return res.json({ success: true, data: { users } });
+    const mappedUsers = users.map(u => ({ ...u, verificationStatus: u.verification_status || 'unverified' }));
+
+    return res.json({ success: true, data: { users: mappedUsers } });
 
   } catch (err) {
     console.error('Error fetching users:', err);
