@@ -17,8 +17,14 @@ import { Chatbot } from "./components/Chatbot";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
+interface CategoryService {
+  category: string;
+  description: string;
+  price: string;
+}
+
 const AUTH_STORAGE_KEY = "servicehub-auth";
-const MIGRATION_VERSION     = "supabase-v1";
+const MIGRATION_VERSION = "supabase-v1";
 const MIGRATION_VERSION_KEY = "servicehub-migration-version";
 
 type StoredAuth = {
@@ -89,7 +95,9 @@ const App = () => {
   // after the Supabase access token has expired.
   useEffect(() => {
     const validateSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
         // No active session — clear any stale localStorage and reset state
@@ -144,8 +152,12 @@ const App = () => {
   const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
   const bookServiceId = bookServiceMatch ? bookServiceMatch[1] : null;
 
-  const bookingConfirmationMatch = basePath.match(/^\/booking-confirmation\/(.+)$/);
-  const bookingConfirmationId = bookingConfirmationMatch ? bookingConfirmationMatch[1] : null;
+  const bookingConfirmationMatch = basePath.match(
+    /^\/booking-confirmation\/(.+)$/,
+  );
+  const bookingConfirmationId = bookingConfirmationMatch
+    ? bookingConfirmationMatch[1]
+    : null;
 
   const navigate = (path: string) => {
     window.location.hash = path;
@@ -178,7 +190,10 @@ const App = () => {
       const supabaseUser = data?.user;
 
       if (!accessToken) {
-        return { success: false, message: "Login failed — no session returned" };
+        return {
+          success: false,
+          message: "Login failed — no session returned",
+        };
       }
 
       const name = supabaseUser?.email?.split("@")[0] || email.split("@")[0];
@@ -205,9 +220,26 @@ const App = () => {
         id: profile?.id || supabaseUser?.id || "",
         name: profile?.full_name || name,
         email,
-        role: toUserRole(profile?.role, role),
+        role: profile?.role ? toUserRole(profile.role) : role,
         avatar: profile?.avatar_url || avatar,
       } as User;
+
+      // Validate that the selected role matches the actual role from database
+      if (profile?.role) {
+        const actualRole = toUserRole(profile.role);
+        if (actualRole !== role) {
+          return {
+            success: false,
+            message: `Invalid role selected. This account is registered as a ${actualRole.toLowerCase()}.`,
+          };
+        }
+      } else {
+        // If we can't fetch profile, assume the selected role is correct
+        // This handles cases where profile creation is pending
+        console.warn(
+          "Could not fetch user profile, proceeding with selected role",
+        );
+      }
 
       setUser(userData);
       setIsAuthenticated(true);
@@ -247,6 +279,11 @@ const App = () => {
     password?: string,
     name?: string,
     phone?: string,
+    providerMeta?: {
+      businessName: string;
+      description: string;
+      services: CategoryService[];
+    },
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) return { success: false, message: "Password required" };
@@ -272,7 +309,15 @@ const App = () => {
         return { success: false, message: signupError.message };
       }
 
-      await handleLogin(email, role, password);
+      // Login the user after successful signup
+      const loginResult = await handleLogin(email, role, password);
+      if (!loginResult.success) {
+        return loginResult;
+      }
+
+      // TODO: Save provider business information when the API endpoint is implemented
+      // For now, providers will need to complete their profile through a separate flow
+
       return { success: true };
     } catch (err) {
       console.error("Register failed", err);
@@ -340,14 +385,13 @@ const App = () => {
       case "/dashboard":
         return <ProviderDashboard user={user} onNavigate={navigate} />;
       case "/faq":
-        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
-      case "/my-bookings":
         return (
-          <ProviderBookings
-            token={getToken()}
-            onNavigate={navigate}
+          <FAQ
+            userRole={user?.role?.toLowerCase() as "customer" | "provider"}
           />
         );
+      case "/my-bookings":
+        return <ProviderBookings token={getToken()} onNavigate={navigate} />;
       default:
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
