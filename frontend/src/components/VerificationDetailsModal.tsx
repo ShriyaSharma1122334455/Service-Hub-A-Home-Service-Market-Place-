@@ -73,7 +73,6 @@ export const VerificationDetailsModal: React.FC<
     if (!isOpen || !userId) return;
 
     let cancelled = false;
-    setLoading(true);
 
     const load = async () => {
       const resp = await fetchApi<VerificationData>(

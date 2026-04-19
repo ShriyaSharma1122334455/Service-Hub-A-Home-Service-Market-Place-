@@ -71,10 +71,10 @@ export const getPrefill = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        fullName: user.full_name,
+        full_name: user.full_name,
         email: user.email,
         phone: user.phone || null,
-        dateOfBirth: null,
+        date_of_birth: null,
       },
       error: null,
     });

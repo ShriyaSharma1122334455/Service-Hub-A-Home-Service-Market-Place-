@@ -177,9 +177,11 @@ const App = () => {
         navigate("/");
       }
       return { success: true };
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login failed", err);
-      return { success: false, message: err.message || "An unexpected error occurred during login." };
+      const message =
+        err instanceof Error ? err.message : "Login failed. Please try again.";
+      return { success: false, message };
     }
   };
 

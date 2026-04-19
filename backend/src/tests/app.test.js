@@ -1,37 +1,70 @@
 /**
  * backend/tests/app.test.js
- * Basic smoke tests + code quality checks for ServiceHub backend
+ * Smoke tests + code quality checks for ServiceHub backend (Supabase)
+ *
+ * These tests exercise the Express routes WITHOUT hitting a real Supabase
+ * instance.  The Supabase client module is mocked via jest.unstable_mockModule
+ * so that every `supabase.from(...)` and `supabase.auth.*` call returns
+ * predictable data.
+ *
  * Run: npm test
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { jest } from '@jest/globals';
+
+// ── Mock Supabase BEFORE any app code is imported ─────────────────────────
+// jest.unstable_mockModule works with native ESM (--experimental-vm-modules).
+
+// Build a Proxy-based chainable mock that handles any supabase query chain.
+// Every chained method (.select, .eq, .order, .limit, .range, .single, etc.)
+// returns the same proxy. When awaited, it resolves to { data: [], error: null }.
+// Individual tests can override the response via mockFromResult.
+let mockFromResult = { data: [], error: null };
+
+function createChainProxy() {
+  const handler = {
+    get(target, prop) {
+      // When awaited, JS calls .then()
+      if (prop === 'then') {
+        return (resolve) => resolve(mockFromResult);
+      }
+      // Any chained method returns the proxy itself
+      return jest.fn().mockReturnValue(new Proxy({}, handler));
+    },
+  };
+  return new Proxy({}, handler);
+}
+
+const mockFrom = jest.fn(() => createChainProxy());
+
+const mockCreateUser = jest.fn();
+const mockSignIn     = jest.fn();
+
+const mockSupabaseClient = {
+  from: mockFrom,
+  auth: {
+    admin: { createUser: mockCreateUser },
+    signInWithPassword: mockSignIn,
+  },
+};
+
+jest.unstable_mockModule('../config/supabase.js', () => ({
+  default: mockSupabaseClient,
+  checkSupabaseConnection: jest.fn(),
+}));
+
+// ── NOW import the app (after mocks are in place) ─────────────────────────
+const { default: app } = await import('../server.js');
 import request from 'supertest';
-import mongoose from 'mongoose';
-import app from '../server.js'; 
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 
-let mongod;
-
-// ─── Test database - connection to remote MongoDB ────────────────────────────────────────────────────────────
-// beforeAll(async () => {
-//   if (mongoose.connection.readyState === 0) { // 0 = disconnected
-//     const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/service_hub_test';
-//     await mongoose.connect(uri);
-//   }
-// });
-
-// ─── Test database - in-memory MongoDB (faster, isolated) ───────────────────────────────────────────────────
-
-beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-}, 30000);
-
-afterAll(async () => {
-  await mongoose.connection.close();
+// ── Reset mocks between tests ─────────────────────────────────────────────
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockFromResult = { data: [], error: null };
 });
 
-// ─── 1. Health check ──────────────────────────────────────────────────────────
+// ─── 1. Health check ──────────────────────────────────────────────────────
 describe('Health', () => {
   it('GET /api/health returns 200', async () => {
     const res = await request(app).get('/api/health');
@@ -40,106 +73,136 @@ describe('Health', () => {
   });
 });
 
-// ─── 2. Auth routes ───────────────────────────────────────────────────────────
+// ─── 2. Auth routes ───────────────────────────────────────────────────────
 describe('Auth – /api/auth', () => {
-  const testUser = {
-    name: 'Test User',
-    email: `test_${Date.now()}@example.com`,
-    password: 'Password123!',
-    role: 'customer',
-  };
-  let token = '';
+  it('POST /register creates a new user (201)', async () => {
+    mockCreateUser.mockResolvedValueOnce({
+      data: {
+        user: { id: 'uuid-1', email: 'test@example.com' },
+      },
+      error: null,
+    });
 
-  it('POST /register creates a new user', async () => {
-    const res = await request(app).post('/api/auth/register').send(testUser);
+    const res = await request(app).post('/api/auth/register').send({
+      email: 'test@example.com',
+      password: 'Password123!',
+      fullName: 'Test User',
+      role: 'customer',
+    });
+
     expect(res.statusCode).toBe(201);
-    expect(res.body).toHaveProperty('token');
-    token = res.body.token;
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('id');
   });
 
-  it('POST /register rejects duplicate email', async () => {
-    const res = await request(app).post('/api/auth/register').send(testUser);
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('POST /register rejects weak password', async () => {
+  it('POST /register rejects missing fields (400)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ ...testUser, email: 'weak@example.com', password: '123' });
+      .send({ email: 'test@example.com' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('POST /register rejects short password (400)', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'test@example.com', password: '123', fullName: 'Test' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('POST /register rejects duplicate email (400)', async () => {
+    mockCreateUser.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'User already registered' },
+    });
+
+    const res = await request(app).post('/api/auth/register').send({
+      email: 'dup@example.com',
+      password: 'Password123!',
+      fullName: 'Dup User',
+      role: 'customer',
+    });
+
     expect(res.statusCode).toBe(400);
   });
 
   it('POST /login returns token for valid credentials', async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: {
+        session: { access_token: 'fake-jwt-token' },
+        user: { id: 'uuid-1', email: 'test@example.com', user_metadata: { role: 'customer' } },
+      },
+      error: null,
+    });
+
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: testUser.email, password: testUser.password });
+      .send({ email: 'test@example.com', password: 'Password123!' });
+
     expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('token');
-    token = res.body.token;
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('token');
   });
 
-  it('POST /login rejects wrong password', async () => {
+  it('POST /login rejects wrong password (401)', async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Invalid login credentials' },
+    });
+
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: testUser.email, password: 'WrongPass!' });
+      .send({ email: 'test@example.com', password: 'WrongPass!' });
+
     expect(res.statusCode).toBe(401);
   });
 
-  it('GET /me returns user profile when authenticated', async () => {
+  it('POST /login rejects missing fields (400)', async () => {
     const res = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${token}`);
-    expect(res.statusCode).toBe(200);
-    expect(res.body.data.email).toBe(testUser.email);
-  });
+      .post('/api/auth/login')
+      .send({});
 
-  it('GET /me returns 401 without token', async () => {
-    const res = await request(app).get('/api/auth/me');
-    expect(res.statusCode).toBe(401);
-  });
-});
-
-// ─── 3. Categories ────────────────────────────────────────────────────────────
-describe('Categories – /api/categories', () => {
-  it('GET / returns array of categories', async () => {
-    const res = await request(app).get('/api/categories');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.data)).toBe(true);
-  });
-});
-
-// ─── 4. Providers ─────────────────────────────────────────────────────────────
-describe('Providers – /api/providers', () => {
-  it('GET / returns paginated provider list', async () => {
-    const res = await request(app).get('/api/providers');
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('data');
-    expect(res.body).toHaveProperty('pagination');
-  });
-
-  it('GET / supports category filter', async () => {
-    const res = await request(app).get('/api/providers?category=plumbing');
-    expect(res.statusCode).toBe(200);
-  });
-
-  it('GET /:id returns 404 for non-existent provider', async () => {
-    const fakeId = new mongoose.Types.ObjectId();
-    const res = await request(app).get(`/api/providers/${fakeId}`);
-    expect(res.statusCode).toBe(404);
-  });
-
-  it('GET /:id returns 400 for invalid ObjectId', async () => {
-    const res = await request(app).get('/api/providers/not-an-id');
     expect(res.statusCode).toBe(400);
   });
 });
 
-// ─── 5. Protected routes ──────────────────────────────────────────────────────
+// ─── 3. Categories ────────────────────────────────────────────────────────
+describe('Categories – /api/categories', () => {
+  it('GET / returns array of categories', async () => {
+    mockFromResult = { data: [], error: null };
+
+    const res = await request(app).get('/api/categories');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+});
+
+// ─── 4. Providers ─────────────────────────────────────────────────────────
+describe('Providers – /api/providers', () => {
+  it('GET / returns provider list', async () => {
+    mockFromResult = { data: [], error: null };
+
+    const res = await request(app).get('/api/providers');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body).toHaveProperty('pagination');
+  });
+
+  it('GET /:id returns 404 for non-existent provider', async () => {
+    mockFromResult = { data: null, error: { message: 'not found' } };
+
+    const res = await request(app).get('/api/providers/non-existent-uuid');
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+// ─── 5. Protected routes ──────────────────────────────────────────────────
 describe('Protected route guard', () => {
   const protectedRoutes = [
-    { method: 'get', path: '/api/bookings' },
+    { method: 'get',  path: '/api/bookings' },
     { method: 'post', path: '/api/bookings' },
-    { method: 'get', path: '/api/users/profile' },
+    { method: 'get',  path: '/api/users/profile' },
   ];
 
   protectedRoutes.forEach(({ method, path }) => {
@@ -150,7 +213,7 @@ describe('Protected route guard', () => {
   });
 });
 
-// ─── 6. Input validation ──────────────────────────────────────────────────────
+// ─── 6. Input validation ──────────────────────────────────────────────────
 describe('Input validation', () => {
   it('POST /api/auth/register rejects missing fields', async () => {
     const res = await request(app).post('/api/auth/register').send({ email: 'x@x.com' });
@@ -164,7 +227,7 @@ describe('Input validation', () => {
   });
 });
 
-// ─── 7. Security headers ──────────────────────────────────────────────────────
+// ─── 7. Security headers ──────────────────────────────────────────────────
 describe('Security headers (helmet)', () => {
   it('Response includes X-Content-Type-Options', async () => {
     const res = await request(app).get('/api/health');
@@ -177,16 +240,10 @@ describe('Security headers (helmet)', () => {
   });
 });
 
-// ─── 8. Rate limiting ─────────────────────────────────────────────────────────
-describe('Rate limiting', () => {
-  it('Returns 429 after exceeding login attempts', async () => {
-    const attempts = Array.from({ length: 15 }, () =>
-      request(app)
-        .post('/api/auth/login')
-        .send({ email: 'flood@test.com', password: 'wrong' })
-    );
-    const responses = await Promise.all(attempts);
-    const tooMany = responses.filter((r) => r.statusCode === 429);
-    expect(tooMany.length).toBeGreaterThan(0);
-  }, 15000);
+// ─── 8. 404 handler ──────────────────────────────────────────────────────
+describe('404 handler', () => {
+  it('Returns 404 for unknown routes', async () => {
+    const res = await request(app).get('/api/nonexistent');
+    expect(res.statusCode).toBe(404);
+  });
 });

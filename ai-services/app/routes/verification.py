@@ -19,9 +19,8 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.models.schemas import (
-    DocumentVerifyRequest, DocumentVerifyResponse,
-    FaceMatchRequest,      FaceMatchResponse,
-    VerificationStatus,
+    DocumentVerifyRequest,
+    FaceMatchRequest, FaceMatchResponse,
 )
 from app.services import ocr_service, face_service, nsopw_service
 
@@ -117,7 +116,15 @@ async def verify_face(
             id_bytes = id_resp.content
     except Exception as exc:
         logger.error("Failed to download ID image for face match: %s", exc)
-        return {"status": "rejected", "similarity_score": 0.0, "threshold_used": 90.0, "is_match": False, "face_detected_in_id": False, "face_detected_in_selfie": False, "rejection_reason": "Failed to download ID image"}
+        return {
+            "status": "rejected",
+            "similarity_score": 0.0,
+            "threshold_used": 90.0,
+            "is_match": False,
+            "face_detected_in_id": False,
+            "face_detected_in_selfie": False,
+            "rejection_reason": "Failed to download ID image",
+        }
 
     # Download Selfie Image
     try:
@@ -127,13 +134,21 @@ async def verify_face(
             selfie_bytes = selfie_resp.content
     except Exception as exc:
         logger.error("Failed to download Selfie image for face match: %s", exc)
-        return {"status": "rejected", "similarity_score": 0.0, "threshold_used": 90.0, "is_match": False, "face_detected_in_id": True, "face_detected_in_selfie": False, "rejection_reason": "Failed to download selfie image"}
+        return {
+            "status": "rejected",
+            "similarity_score": 0.0,
+            "threshold_used": 90.0,
+            "is_match": False,
+            "face_detected_in_id": True,
+            "face_detected_in_selfie": False,
+            "rejection_reason": "Failed to download selfie image",
+        }
 
     res = await face_service.compare_faces(
         id_image_bytes=id_bytes,
         selfie_bytes=selfie_bytes,
     )
-    
+
     return {
         "status": res.get("status", "rejected"),
         "similarity_score": res.get("similarity", 0.0),

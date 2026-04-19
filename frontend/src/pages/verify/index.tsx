@@ -17,6 +17,22 @@ interface VerifyPageProps {
   onNavigate: (path: string) => void;
 }
 
+interface OcrResult {
+  extractedName?: string;
+  extractedDOB?: string;
+  documentNumber?: string;
+}
+
+interface FaceMatchResult {
+  is_match: boolean;
+  similarity_score?: number;
+}
+
+interface SubmitResponse {
+  submittedAt?: string;
+  status?: string;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -39,7 +55,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   // Step 2: ID Upload
   const [idFile, setIdFile] = useState<File | null>(null);
   const [idPreview, setIdPreview] = useState<string | null>(null);
-  const [ocrResult, setOcrResult] = useState<any>(null);
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
 
   // Step 3: Selfie Capture
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -48,7 +64,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   const [cameraDenied, setCameraDenied] = useState(false);
   const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
-  const [faceMatchResult, setFaceMatchResult] = useState<any>(null);
+  const [faceMatchResult, setFaceMatchResult] = useState<FaceMatchResult | null>(null);
 
   // Step 5: Confirmation
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
@@ -58,18 +74,25 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   useEffect(() => {
     if (!userId) return;
 
+    interface PrefillResponse {
+      full_name: string;
+      email: string;
+      phone: string | null;
+      date_of_birth: string | null;
+    }
+
     let mounted = true;
     const fetchPrefill = async () => {
       setLoading(true);
       setError(null);
-      const res = await fetchApi<any>(`/verification/prefill/${userId}`);
+      const res = await fetchApi<PrefillResponse>(`/verification/prefill/${userId}`);
       if (!mounted) return;
       if (res.success && res.data) {
         setPrefill({
-          fullName: res.data.fullName || "",
+          fullName: res.data.full_name || "",
           email: res.data.email || "",
           phone: res.data.phone || "",
-          dateOfBirth: res.data.dateOfBirth || "",
+          dateOfBirth: res.data.date_of_birth || "",
         });
       } else {
         setError(res.error || "Failed to load prefill data.");
@@ -122,7 +145,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      
+
       const res = await fetch(`${API_BASE}/api/verification/upload-id`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -224,7 +247,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      
+
       const res = await fetch(`${API_BASE}/api/verification/upload-selfie`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -257,10 +280,10 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   const submitVerification = async () => {
     setLoading(true);
     setError(null);
-    const res = await fetchApi<any>("/verification/submit", { method: "POST" });
+    const res = await fetchApi<SubmitResponse>("/verification/submit", { method: "POST" });
     if (res.success && res.data) {
-      setSubmittedAt(res.data.submittedAt);
-      setFinalStatus(res.data.status);
+      setSubmittedAt(res.data.submittedAt ?? null);
+      setFinalStatus(res.data.status ?? null);
       setCurrentStep(5);
     } else {
       setError(res.error || "Failed to submit verification.");
@@ -287,20 +310,18 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
             return (
               <div key={label} className="flex flex-col items-center flex-1 min-w-[80px]">
                 <div
-                  className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm z-10 mb-2 transition-colors ${
-                    isCompleted
-                      ? "bg-teal-500 text-white"
-                      : isCurrent
-                        ? "bg-teal-600 text-white ring-4 ring-teal-100"
-                        : "bg-slate-200 text-slate-400"
-                  }`}
+                  className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm z-10 mb-2 transition-colors ${isCompleted
+                    ? "bg-teal-500 text-white"
+                    : isCurrent
+                      ? "bg-teal-600 text-white ring-4 ring-teal-100"
+                      : "bg-slate-200 text-slate-400"
+                    }`}
                 >
                   {isCompleted ? <Check className="h-4 w-4" /> : stepNum}
                 </div>
                 <span
-                  className={`text-xs font-semibold uppercase tracking-wider ${
-                    isCurrent ? "text-teal-700" : "text-slate-400"
-                  }`}
+                  className={`text-xs font-semibold uppercase tracking-wider ${isCurrent ? "text-teal-700" : "text-slate-400"
+                    }`}
                 >
                   {label}
                 </span>
@@ -382,11 +403,10 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
               </h2>
               <div className="flex gap-4">
                 <label
-                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${
-                    documentType === "passport"
-                      ? "border-teal-500 bg-teal-50 text-teal-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
-                  }`}
+                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${documentType === "passport"
+                    ? "border-teal-500 bg-teal-50 text-teal-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
+                    }`}
                 >
                   <input
                     type="radio"
@@ -400,11 +420,10 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                   <span className="font-bold">Passport</span>
                 </label>
                 <label
-                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${
-                    documentType === "drivers_license"
-                      ? "border-teal-500 bg-teal-50 text-teal-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
-                  }`}
+                  className={`flex-1 flex flex-col items-center justify-center p-6 border-2 rounded-2xl cursor-pointer transition-all ${documentType === "drivers_license"
+                    ? "border-teal-500 bg-teal-50 text-teal-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300"
+                    }`}
                 >
                   <input
                     type="radio"
@@ -645,7 +664,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                   <p className="text-slate-500 mb-6">
                     Similarity Score: <span className="font-bold text-slate-700">{faceMatchResult.similarity_score !== undefined ? faceMatchResult.similarity_score.toFixed(1) : 0}%</span>
                   </p>
-                  
+
                   <div className="flex gap-4 justify-center">
                     {!faceMatchResult.is_match && (
                       <button
@@ -678,7 +697,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
               <h2 className="text-xl font-bold text-slate-800">
                 Review & Submit
               </h2>
-              
+
               <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                   <div>
@@ -687,7 +706,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                   </div>
                   <Check className="h-6 w-6 text-green-500" />
                 </div>
-                
+
                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                   <div>
                     <h4 className="font-bold text-slate-900">Face Match</h4>
@@ -737,30 +756,29 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
           {/* Step 5: Confirmation */}
           {currentStep === 5 && (
             <div className="text-center py-12 animate-in zoom-in-95 duration-500">
-              <div className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                  finalStatus === 'verified' ? 'bg-emerald-100 text-emerald-600' :
-                  finalStatus === 'failed' ? 'bg-red-100 text-red-600' :
+              <div className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-6 ${finalStatus === 'verified' ? 'bg-emerald-100 text-emerald-600' :
+                finalStatus === 'failed' ? 'bg-red-100 text-red-600' :
                   'bg-teal-100 text-teal-600'
-              }`}>
+                }`}>
                 {finalStatus === 'failed' ? <X className="h-10 w-10" /> : <Check className="h-10 w-10" />}
               </div>
               <h2 className="text-3xl font-bold text-slate-900 mb-4">
                 {finalStatus === 'verified' ? 'Verification Complete!' :
-                 finalStatus === 'failed' ? 'Verification Failed' :
-                 'Verification Submitted'}
+                  finalStatus === 'failed' ? 'Verification Failed' :
+                    'Verification Submitted'}
               </h2>
               <p className="text-slate-500 mb-8 max-w-md mx-auto text-lg">
                 {finalStatus === 'verified' ? 'Your identity verification has been automatically approved.' :
-                 finalStatus === 'failed' ? 'Your verification failed to meet the automated criteria.' :
-                 'Your identity verification is currently under manual review. You will be notified once the process is complete.'}
+                  finalStatus === 'failed' ? 'Your verification failed to meet the automated criteria.' :
+                    'Your identity verification is currently under manual review. You will be notified once the process is complete.'}
               </p>
-              
+
               {submittedAt && (
                 <p className="text-sm text-slate-400 mb-8 font-medium">
                   Submitted: {new Date(submittedAt).toLocaleString()}
                 </p>
               )}
-              
+
               <button
                 onClick={() => onNavigate(`/profile/me`)}
                 className="px-8 py-4 bg-slate-900 text-white rounded-full font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20"

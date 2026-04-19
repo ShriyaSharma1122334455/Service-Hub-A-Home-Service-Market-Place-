@@ -34,7 +34,10 @@ def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
 @router.post(
     "/parse-id",
     summary="OCR ID extraction",
-    description="Extracts structured data from an ID document (passport or driver's license) using Google Cloud Vision OCR.",
+    description=(
+        "Extracts structured data from an ID document "
+        "(passport or driver's license) using Google Cloud Vision OCR."
+    ),
 )
 async def parse_id(
     document: UploadFile = File(..., description="ID document image (JPEG/PNG/WebP)"),

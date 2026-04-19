@@ -77,13 +77,13 @@ async def extract_id_data(
     # 1. Call Vision API
     try:
         vision_client = _build_vision_client()
-        image      = vision.Image(content=image_bytes)
-        response   = vision_client.text_detection(image=image)
+        image = vision.Image(content=image_bytes)
+        response = vision_client.text_detection(image=image)
 
         if response.error.message:
             raise RuntimeError(response.error.message)
 
-        full_text  = response.full_text_annotation.text if response.full_text_annotation else ""
+        full_text = response.full_text_annotation.text if response.full_text_annotation else ""
         confidence = _estimate_confidence(response)
 
     except Exception as exc:
@@ -196,7 +196,7 @@ def _parse_passport_mrz(raw_text: str) -> Dict[str, Optional[str]]:
         name_parts = name_field.split("<<")
         if len(name_parts) >= 2:
             surname = name_parts[0].replace("<", " ").strip()
-            given   = name_parts[1].replace("<", " ").strip()
+            given = name_parts[1].replace("<", " ").strip()
             result["full_name"] = f"{given} {surname}".title() if given else surname.title()
         elif name_parts:
             result["full_name"] = name_parts[0].replace("<", " ").strip().title()
@@ -411,10 +411,12 @@ def _parse_drivers_license(raw_text: str) -> Dict[str, Optional[str]]:
 
     # ── Issuing state ─────────────────────────────────────────────────────
     US_STATES = {
-        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
-        "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
-        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN",
-        "TX","UT","VT","VA","WA","WV","WI","WY","DC",
+        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+        "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+        "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+        "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+        "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+        "DC",
     }
     state = re.search(r"(?:STATE|ISS|ISSUING)[:\s]+([A-Z]{2})\b", raw_text, re.IGNORECASE)
     if state and state.group(1).upper() in US_STATES:
@@ -457,11 +459,11 @@ def _estimate_confidence(response) -> float:
     try:
         scores = [
             sym.confidence
-            for page  in response.full_text_annotation.pages
+            for page in response.full_text_annotation.pages
             for block in page.blocks
-            for para  in block.paragraphs
-            for word  in para.words
-            for sym   in word.symbols
+            for para in block.paragraphs
+            for word in para.words
+            for sym in word.symbols
             if sym.confidence > 0
         ]
         return round(sum(scores) / len(scores), 3) if scores else 0.75

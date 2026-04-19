@@ -36,7 +36,7 @@ Fallback: if Rekognition is unavailable → pending status (don't hard-block use
 import io
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -92,8 +92,10 @@ def _compress_image(image_bytes: bytes, max_bytes: int = MAX_IMAGE_BYTES) -> byt
             img.save(buffer, format="JPEG", quality=quality, optimize=True)
             compressed = buffer.getvalue()
             if len(compressed) <= max_bytes:
-                logger.info("Compressed image from %d to %d bytes (quality=%d)",
-                           len(image_bytes), len(compressed), quality)
+                logger.info(
+                    "Compressed image from %d to %d bytes (quality=%d)",
+                    len(image_bytes), len(compressed), quality,
+                )
                 return compressed
 
         # Last resort: resize

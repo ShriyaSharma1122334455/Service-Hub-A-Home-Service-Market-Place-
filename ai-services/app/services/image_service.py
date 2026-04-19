@@ -65,7 +65,7 @@ async def upload_profile_image(file: UploadFile, user_id: str) -> dict:
     try:
         result = cloudinary.uploader.upload(
             contents,
-            folder=f"servicehub/avatars",
+            folder="servicehub/avatars",
             public_id=user_id,
             overwrite=True,
             resource_type="image",

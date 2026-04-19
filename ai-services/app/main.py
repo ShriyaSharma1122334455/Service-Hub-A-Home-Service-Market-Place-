@@ -14,10 +14,10 @@ from app.middleware.timer import TimingMiddleware
 async def lifespan(app: FastAPI):
     print(f"🚀 ServiceHub Verification Service starting on port {settings.PORT}")
     print(f"📋 Environment: {settings.ENV}")
-    print(f"📡 Standardized routes:")
-    print(f"   POST /ai/ocr/parse-id")
-    print(f"   POST /ai/face/match")
-    print(f"   POST /ai/nsopw/check")
+    print("📡 Standardized routes:")
+    print("   POST /ai/ocr/parse-id")
+    print("   POST /ai/face/match")
+    print("   POST /ai/nsopw/check")
     yield
     print("🛑 Verification Service shutting down")
 

@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI – Build & Test
 
 on:
@@ -6,6 +5,10 @@ on:
     branches: ['**']
   pull_request:
     branches: ['**']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────
@@ -18,9 +21,6 @@ jobs:
     env:
       NODE_ENV: test
       PORT: 3000
-      # Use local MongoDB service in CI (no secrets required)
-      MONGO_URI: mongodb://localhost:27017/service_hub_test
-      MONGODB_URI: mongodb://localhost:27017/service_hub_test
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       CLOUDINARY_CLOUD_NAME: ${{ vars.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
@@ -30,6 +30,9 @@ jobs:
       FROM_NAME: ${{ vars.FROM_NAME }}
       SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
       CORS_ORIGIN: http://localhost:5173
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,19 +48,12 @@ jobs:
         run: npm ci
         working-directory: backend
 
-      - name: Wait for MongoDB
-        run: |
-          for i in {1..30}; do
-            if nc -z localhost 27017; then
-              echo "MongoDB is available"; break;
-            fi
-            echo "Waiting for MongoDB... ($i)";
-            sleep 1;
-          done
-        working-directory: backend
-
       - name: Lint
         run: npm run lint --if-present
+        working-directory: backend
+
+      - name: Build
+        run: npm run build --if-present
         working-directory: backend
 
       - name: Run tests
@@ -99,17 +95,17 @@ jobs:
         working-directory: frontend
 
   # ─────────────────────────────────────────
-  # 3. AI Services (Python)
+  # 3. AI Service
   # ─────────────────────────────────────────
   ai-services:
-    name: AI Services CI
+    name: AI Service CI
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -119,6 +115,13 @@ jobs:
         run: pip install -r requirements.txt
         working-directory: ai-services
 
-      - name: Run tests
-        run: python -m pytest tests/ -v
+      - name: Lint
+        run: flake8 .
         working-directory: ai-services
+
+      - name: Run tests
+        run: pytest
+        working-directory: ai-services
+
+  # Visual Damage Assessment CI removed — service directory does not exist in
+  # this repo yet. Re-add this job when visual-damage-assessment-service/ is committed.

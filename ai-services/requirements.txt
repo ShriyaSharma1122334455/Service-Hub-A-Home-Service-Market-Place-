@@ -32,4 +32,4 @@ beautifulsoup4==4.12.3
 #lxml==5.3.0
 
 # ── NSOPW browser automation (primary strategy) ──────────────────────────
-playwright==1.44.0
+#playwright==1.44.0
