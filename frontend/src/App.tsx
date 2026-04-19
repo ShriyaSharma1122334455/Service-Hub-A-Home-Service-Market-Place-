@@ -17,12 +17,6 @@ import { Chatbot } from "./components/Chatbot";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
-interface CategoryService {
-  category: string;
-  description: string;
-  price: string;
-}
-
 const AUTH_STORAGE_KEY = "servicehub-auth";
 const MIGRATION_VERSION = "supabase-v1";
 const MIGRATION_VERSION_KEY = "servicehub-migration-version";

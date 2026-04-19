@@ -210,10 +210,6 @@ export const Register: React.FC<RegisterProps> = ({
     }
   }, [notification]);
 
-  useEffect(() => {
-    setCategoryServices({});
-  }, [role]);
-
   const steps =
     role === UserRole.PROVIDER
       ? ["Account", "Business", "Services"]
