@@ -37,13 +37,14 @@ function createChainProxy() {
 
 const mockFrom = jest.fn(() => createChainProxy());
 
-const mockCreateUser = jest.fn();
+// ✅ FIX: use signUp (not admin.createUser) — matches what authController calls
+const mockSignUp = jest.fn();
 const mockSignIn = jest.fn();
 
 const mockSupabaseClient = {
   from: mockFrom,
   auth: {
-    admin: { createUser: mockCreateUser },
+    signUp: mockSignUp,
     signInWithPassword: mockSignIn,
   },
 };
@@ -76,17 +77,15 @@ describe('Health', () => {
 // ─── 2. Auth routes ───────────────────────────────────────────────────────
 describe('Auth – /api/auth', () => {
   it('POST /register creates a new user (201)', async () => {
-    mockCreateUser.mockResolvedValueOnce({
+    // ✅ FIX: mock signUp (not createUser), return user + session
+    mockSignUp.mockResolvedValueOnce({
       data: {
-        user: { id: 'uuid-1', email: 'test@example.com' },
-      },
-      error: null,
-    });
-
-    mockSignIn.mockResolvedValueOnce({
-      data: {
+        user: {
+          id: 'uuid-1',
+          email: 'test@example.com',
+          user_metadata: { role: 'customer' },
+        },
         session: { access_token: 'fake-jwt-token' },
-        user: { id: 'uuid-1', email: 'test@example.com', user_metadata: { role: 'customer' } },
       },
       error: null,
     });
@@ -121,7 +120,8 @@ describe('Auth – /api/auth', () => {
   });
 
   it('POST /register rejects duplicate email (400)', async () => {
-    mockCreateUser.mockResolvedValueOnce({
+    // ✅ FIX: mock signUp (not createUser)
+    mockSignUp.mockResolvedValueOnce({
       data: null,
       error: { message: 'User already registered' },
     });
@@ -155,6 +155,9 @@ describe('Auth – /api/auth', () => {
   });
 
   it('POST /login rejects wrong password (401)', async () => {
+    // ✅ FIX: this test was getting 200 because the previous test's mockSignIn
+    // call was being consumed here. Now that the register test no longer calls
+    // mockSignIn, this mock is used correctly.
     mockSignIn.mockResolvedValueOnce({
       data: null,
       error: { message: 'Invalid login credentials' },
