@@ -14,14 +14,9 @@ google-cloud-vision==3.7.4
 # ── AWS Rekognition (face matching) ──────────────────────────────────────
 boto3==1.35.0
 
-# ── NSOPW HTML parsing ────────────────────────────────────────────────────
-beautifulsoup4==4.12.3
-lxml==5.3.0
-
-# ── Testing & Linting ─────────────────────────────────────────────────────
+# ── Testing ───────────────────────────────────────────────────────────────
 pytest==8.3.2
 pytest-asyncio==0.24.0
-flake8==7.1.1
 
 # ── Cloudinary (profile image uploads) ───────────────────────────────────
 cloudinary==1.40.0
@@ -31,3 +26,15 @@ python-multipart==0.0.9
 
 # ── Email validation (Pydantic EmailStr) ──────────────────────────────────
 email-validator==2.1.0
+
+# ── NSOPW HTML parsing ────────────────────────────────────────────────────
+beautifulsoup4==4.12.3
+#lxml==5.3.0
+
+# ── NSOPW browser automation (primary strategy) ──────────────────────────
+#playwright==1.44.0
+
+#dependencies for CI
+flake8==6.1.0
+pytest==8.3.2
+pytest-asyncio==0.24.0

@@ -76,6 +76,7 @@ export const getMe = async (req, res) => {
           email: user.email,
           avatar_url: user.avatar_url,
           role: user.role,
+          verificationStatus: provider.verification_status || user.verification_status || 'unverified',
           profile_incomplete: false,
         }
       });
@@ -84,7 +85,7 @@ export const getMe = async (req, res) => {
     // Customer — no provider join needed
     return res.json({
       success: true,
-      data: { type: 'user', ...user, providers: undefined }
+      data: { type: 'user', ...user, verificationStatus: user.verification_status || 'unverified' }
     });
 
   } catch (err) {
@@ -99,7 +100,7 @@ export const getUser = async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role')
+      .select('id, supabase_id, full_name, avatar_url, role, verification_status')
       .eq('id', id)  // id here is the public.users UUID, not supabase_id
       .single();
 
@@ -107,7 +108,7 @@ export const getUser = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: { ...user, verificationStatus: user.verification_status || 'unverified' } });
 
   } catch (err) {
     console.error('Error fetching user:', err);
@@ -119,14 +120,16 @@ export const listUsers = async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role, email')
+      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
       .eq('role', 'customer');
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
 
-    return res.json({ success: true, data: { users } });
+    const mappedUsers = users.map(u => ({ ...u, verificationStatus: u.verification_status || 'unverified' }));
+
+    return res.json({ success: true, data: { users: mappedUsers } });
 
   } catch (err) {
     console.error('Error fetching users:', err);
@@ -134,4 +137,96 @@ export const listUsers = async (req, res) => {
   }
 };
 
-export default { getMe, getUser, listUsers };
+export const updateUserRole = async (req, res) => {
+  try {
+    const supabaseId = req.user?.id;
+    if (!supabaseId) {
+      return res.status(400).json({ success: false, error: 'Authenticated user required' });
+    }
+
+    const { role } = req.body;
+    if (!role) {
+      return res.status(400).json({ success: false, error: 'Role is required' });
+    }
+
+    // Only allow upgrading from customer to provider
+    if (role !== 'provider') {
+      return res.status(400).json({ success: false, error: 'Invalid role transition' });
+    }
+
+    // Get current user to check current role
+    const { data: currentUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('supabase_id', supabaseId)
+      .single();
+
+    if (fetchError || !currentUser) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (currentUser.role !== 'customer') {
+      return res.status(400).json({ success: false, error: 'Only customers can become providers' });
+    }
+
+    // Update user role
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
+      .update({ role: 'provider' })
+      .eq('supabase_id', supabaseId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(400).json({ success: false, error: updateError.message });
+    }
+
+    // Create provider profile
+    const { data: newProvider, error: providerError } = await supabase
+      .from('providers')
+      .insert({
+        user_id: currentUser.id,
+        business_name: updatedUser.full_name || 'New Provider',
+        description: 'Welcome to ServiceHub! Please complete your provider profile.',
+        rating_avg: 0,
+        rating_count: 0
+      })
+      .select()
+      .single();
+
+    if (providerError) {
+      // If provider creation fails, rollback user role change
+      await supabase
+        .from('users')
+        .update({ role: 'customer' })
+        .eq('supabase_id', supabaseId);
+
+      return res.status(500).json({ success: false, error: 'Failed to create provider profile' });
+    }
+
+    // Return updated user data with provider info
+    return res.json({
+      success: true,
+      data: {
+        type: 'provider',
+        id: newProvider.id,
+        business_name: newProvider.business_name,
+        description: newProvider.description,
+        rating_avg: newProvider.rating_avg,
+        rating_count: newProvider.rating_count,
+        service_categories: [],
+        full_name: updatedUser.full_name,
+        email: updatedUser.email,
+        avatar_url: updatedUser.avatar_url,
+        role: updatedUser.role,
+        profile_incomplete: true,
+      }
+    });
+
+  } catch (err) {
+    console.error('Error updating user role:', err);
+    res.status(500).json({ success: false, error: 'Failed to update role' });
+  }
+};
+
+export default { getMe, getUser, listUsers, updateUserRole };

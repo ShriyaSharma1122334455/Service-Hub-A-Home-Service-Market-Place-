@@ -3,9 +3,9 @@ Verification Routes
 ====================
 Matches the API contract from the project proposal Section 8.10:
 
-  POST /ai/verify/document  →  OCR ID extraction
-  POST /ai/verify/face      →  Face matching (selfie vs ID)
-  POST /ai/verify/nsopw     →  NSOPW background check (providers only)
+  POST /ai/verify/document     →  OCR ID extraction
+  POST /ai/verify/face         →  Face matching (selfie vs ID)
+  POST /ai/verify/nsopw/check  →  NSOPW background check (providers only)
 
 Called by the Express backend after Cloudinary uploads complete.
 """
@@ -14,18 +14,26 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.models.schemas import (
-    DocumentVerifyRequest, DocumentVerifyResponse,
-    FaceMatchRequest,      FaceMatchResponse,
-    NSopwCheckRequest,     NSopwCheckResponse,
-    VerificationStatus,
+    DocumentVerifyRequest,
+    FaceMatchRequest, FaceMatchResponse,
 )
 from app.services import ocr_service, face_service, nsopw_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+# ── NSOPW request model ──────────────────────────────────────────────────
+
+class NsopwRequest(BaseModel):
+    firstName: str = Field(..., min_length=1, description="Provider's first name")
+    lastName: str = Field(..., min_length=1, description="Provider's last name")
+    state: Optional[str] = Field(None, description="Two-letter state code, e.g. NJ")
 
 
 # ── Internal API key guard ────────────────────────────────────────────────
@@ -42,7 +50,6 @@ def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
 
 @router.post(
     "/document",
-    response_model=DocumentVerifyResponse,
     summary="OCR ID extraction",
     description="Extracts data from an ID document using OCR. Validates expiration and extracted fields.",
 )
@@ -51,36 +58,35 @@ async def verify_document(
     _: None = Depends(verify_internal_key),
 ):
     """
-    Called from Express after the user uploads their ID to Cloudinary.
-    Runs Google Vision OCR and returns structured fields + verification status.
+    Called from Express after the user uploads their ID to Supabase Storage.
+    Downloads the image via signed URL, runs Google Vision OCR,
+    and returns structured fields + verification status.
     """
+    import httpx
+
     logger.info("OCR request — user=%s doc_type=%s", body.user_id, body.document_type)
 
-    status, extracted, confidence = await ocr_service.extract_id_data(body.image_url)
+    # 1. Download the image from the signed URL
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_resp = await client.get(str(body.image_url))
+            img_resp.raise_for_status()
+            image_bytes = img_resp.content
+    except Exception as exc:
+        logger.error("Failed to download ID image: %s", exc)
+        return {
+            "status": "manual_review",
+            "extractedName": None,
+            "extractedDOB": None,
+            "confidence": 0.0,
+            "error": f"Failed to download image: {str(exc)}",
+        }
 
-    is_expired = ocr_service.is_document_expired(extracted.expiration_date)
+    # 2. Call the OCR service with raw bytes
+    result = await ocr_service.extract_id_data(image_bytes, body.document_type)
 
-    if is_expired:
-        status           = VerificationStatus.REJECTED
-        rejection_reason = "The uploaded ID document has expired. Please upload a current document."
-    elif status == VerificationStatus.REJECTED:
-        rejection_reason = (
-            "Could not extract required fields (name, date of birth) from the document. "
-            "Please upload a clearer, well-lit photo."
-        )
-    elif status == VerificationStatus.MANUAL_REVIEW:
-        rejection_reason = "Document verification service temporarily unavailable."
-    else:
-        rejection_reason = None
-
-    return DocumentVerifyResponse(
-        status=status,
-        extracted_data=extracted if status == VerificationStatus.VERIFIED else None,
-        confidence_score=confidence,
-        rejection_reason=rejection_reason,
-        is_expired=is_expired,
-        document_authentic=confidence >= 0.7 if status == VerificationStatus.VERIFIED else None,
-    )
+    # 3. Return the dict directly — Node.js backend reads extractedName, extractedDOB, etc.
+    return result
 
 
 # ── POST /api/v1/verify/face ──────────────────────────────────────────────
@@ -100,31 +106,88 @@ async def verify_face(
     Uses AWS Rekognition. Threshold: 80% (configurable via FACE_MATCH_THRESHOLD).
     """
     logger.info("Face match request — user=%s", body.user_id)
-    return await face_service.compare_faces(
-        id_image_url=body.id_image_url,
-        selfie_url=body.selfie_url,
+    import httpx
+
+    # Download ID Image
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            id_resp = await client.get(str(body.id_image_url))
+            id_resp.raise_for_status()
+            id_bytes = id_resp.content
+    except Exception as exc:
+        logger.error("Failed to download ID image for face match: %s", exc)
+        return {
+            "status": "rejected",
+            "similarity_score": 0.0,
+            "threshold_used": 90.0,
+            "is_match": False,
+            "face_detected_in_id": False,
+            "face_detected_in_selfie": False,
+            "rejection_reason": "Failed to download ID image",
+        }
+
+    # Download Selfie Image
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            selfie_resp = await client.get(str(body.selfie_url))
+            selfie_resp.raise_for_status()
+            selfie_bytes = selfie_resp.content
+    except Exception as exc:
+        logger.error("Failed to download Selfie image for face match: %s", exc)
+        return {
+            "status": "rejected",
+            "similarity_score": 0.0,
+            "threshold_used": 90.0,
+            "is_match": False,
+            "face_detected_in_id": True,
+            "face_detected_in_selfie": False,
+            "rejection_reason": "Failed to download selfie image",
+        }
+
+    res = await face_service.compare_faces(
+        id_image_bytes=id_bytes,
+        selfie_bytes=selfie_bytes,
     )
 
+    return {
+        "status": res.get("status", "rejected"),
+        "similarity_score": res.get("similarity", 0.0),
+        "threshold_used": 90.0,
+        "is_match": res.get("matched", False),
+        "rejection_reason": res.get("rejectionReason"),
+        "face_detected_in_selfie": res.get("faceDetectedInSelfie", False),
+        "face_detected_in_id": res.get("faceDetectedInId", False)
+    }
 
-# ── POST /api/v1/verify/nsopw ─────────────────────────────────────────────
+
+# ── POST /nsopw/check ─────────────────────────────────────────────────────
 
 @router.post(
-    "/nsopw",
-    response_model=NSopwCheckResponse,
+    "/nsopw/check",
     summary="NSOPW background check (providers only)",
-    description="Performs an NSOPW background check based on the provider's full name and state.",
+    description="Performs an NSOPW background check based on the provider's first name, last name, and optional state.",
 )
 async def check_nsopw(
-    body: NSopwCheckRequest,
-    _: None = Depends(verify_internal_key),
+    body: NsopwRequest,
+    x_internal_key: Optional[str] = Header(None),
 ):
     """
     Searches NSOPW for the provider's name.
-    Falls back to requiring self-declaration if the site is unavailable.
+    Falls back to pending if the site is unavailable.
     Providers only — not called for customers.
+    PII is never logged.
     """
-    logger.info("NSOPW check — user=%s name='%s'", body.user_id, body.full_name)
-    return await nsopw_service.check_nsopw(
-        full_name=body.full_name,
+    # ── Internal API key guard ────────────────────────────────────────────
+    expected_key = getattr(settings, "INTERNAL_API_KEY", None)
+    if not x_internal_key or x_internal_key != expected_key:
+        return JSONResponse(status_code=403, content={"detail": "unauthorized"})
+
+    logger.info("NSOPW check request received (PII redacted)")
+
+    result = await nsopw_service.check_nsopw(
+        first_name=body.firstName,
+        last_name=body.lastName,
         state=body.state,
     )
+
+    return JSONResponse(content=result)

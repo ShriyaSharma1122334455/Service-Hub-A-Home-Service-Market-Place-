@@ -28,6 +28,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   `;
 
+  const getHomePath = () => {
+    return user?.role === UserRole.PROVIDER ? "/dashboard" : "/";
+  };
+
   return (
     <nav className="sticky top-4 z-50 px-4 mb-4">
       <div className="max-w-7xl mx-auto">
@@ -36,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-8">
             <div
               className="flex-shrink-0 flex items-center cursor-pointer group gap-2.5"
-              onClick={() => onNavigate("/")}
+              onClick={() => onNavigate(getHomePath())}
             >
               <div className="h-10 w-10 bg-gradient-to-br from-slate-900 to-slate-700 rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
                 <span className="text-white font-bold text-xl tracking-tighter">
@@ -50,8 +54,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <div className="hidden md:flex items-center space-x-1">
               <span
-                onClick={() => onNavigate("/")}
-                className={navItemClass("/")}
+                onClick={() => onNavigate(getHomePath())}
+                className={navItemClass(getHomePath())}
               >
                 Home
               </span>
@@ -132,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div
               className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
               onClick={() => {
-                onNavigate("/");
+                onNavigate(getHomePath());
                 setIsOpen(false);
               }}
             >
