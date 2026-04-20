@@ -23,3 +23,7 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Google Cloud credentials
+*.json
+Cld_Vis_API/

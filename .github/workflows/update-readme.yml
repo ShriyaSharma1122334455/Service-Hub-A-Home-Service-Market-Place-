@@ -69,9 +69,19 @@ jobs:
             }')
 
           RESPONSE=$(curl -s \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GEMINI_API_KEY" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
+
+          echo "=== Gemini Raw Response ==="
+          echo "$RESPONSE"
+          echo "=== Gemini Raw Response ==="
+
+          ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
+          if [ -n "$ERROR" ]; then
+            echo "Gemini API Error: $ERROR"
+            exit 1
+          fi
 
           ENTRY=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Changelog generation failed."')
           echo "$ENTRY" > /tmp/changelog_entry.txt

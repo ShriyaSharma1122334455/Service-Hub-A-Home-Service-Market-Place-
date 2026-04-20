@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from "react";
+import {
+  VerificationBadge,
+  type VerificationStatusType,
+} from "../components/VerificationBadge";
 import { ArrowLeft, Star, DollarSign, Clock, ExternalLink } from "lucide-react";
 import type { User } from "../../types";
 import { BookingModal } from "../components/BookingModal";
@@ -17,6 +21,7 @@ interface ProviderCard {
   businessName: string;
   ratingAvg: number;
   ratingCount: number;
+  verificationStatus?: string;
   fullName?: string | null;
   avatarUrl?: string | null;
   customPrice?: number | null;
@@ -274,6 +279,15 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                   <h3 className="font-bold text-slate-900 text-base leading-snug truncate">
                     {provider.businessName}
                   </h3>
+                  {provider.verificationStatus && (
+                    <VerificationBadge
+                      status={
+                        (provider.verificationStatus as VerificationStatusType) ||
+                        "unverified"
+                      }
+                      className="mt-0.5"
+                    />
+                  )}
                   {provider.fullName && (
                     <p className="text-xs text-slate-500 truncate">{provider.fullName}</p>
                   )}

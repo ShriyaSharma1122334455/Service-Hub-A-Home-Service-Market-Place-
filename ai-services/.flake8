@@ -1,5 +1,10 @@
 [flake8]
 max-line-length = 120
+exclude =
+    .venv,
+    __pycache__,
+    .git,
+    *.egg-info
 extend-ignore =
     # E221/E272: multiple spaces for alignment — intentional code style
     E221,

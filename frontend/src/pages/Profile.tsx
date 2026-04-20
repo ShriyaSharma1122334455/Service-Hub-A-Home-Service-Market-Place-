@@ -11,14 +11,28 @@ import {
   Star,
   Briefcase,
   MessageSquare,
+  Send,
+  CheckCircle,
 } from "lucide-react";
+import {
+  VerificationBadge,
+  type VerificationStatusType,
+} from "../components/VerificationBadge";
+import { VerificationDetailsModal } from "../components/VerificationDetailsModal";
 
 interface Review {
   id: string;
+  booking_id?: string;
   rating: number;
   comment: string | null;
   created_at: string;
   reviewer: { full_name: string; avatar_url: string | null } | null;
+}
+
+interface CompletedBooking {
+  id: string;
+  created_at: string;
+  service?: { name: string } | null;
 }
 
 interface ProfileProps {
@@ -43,6 +57,18 @@ export const Profile: React.FC<ProfileProps> = ({
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  // Review form state (only for customers viewing a provider profile)
+  const [reviewableBookings, setReviewableBookings] = useState<
+    CompletedBooking[]
+  >([]);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +112,7 @@ export const Profile: React.FC<ProfileProps> = ({
               email,
               avatar_url: (currentUser as { avatar?: string }).avatar,
               role,
+              verificationStatus: "unverified",
             } as BackendUser & BackendProvider,
           });
         } else {
@@ -155,18 +182,98 @@ export const Profile: React.FC<ProfileProps> = ({
     const loadReviews = async () => {
       setReviewsLoading(true);
       try {
-        const res = await fetchApi<{ count: number; data: Review[] }>(`/reviews/${providerId}`);
-        if (!cancelled && res.success && res.data) {
-          const payload = res.data as unknown as { count: number; data: Review[] };
-          setReviews(Array.isArray(payload.data) ? payload.data : []);
+        // fetchApi already unwraps `.data` from the response body, so
+        // res.data IS the reviews array directly (not { count, data: [...] }).
+        const res = await fetchApi<Review[]>(`/reviews/${providerId}`);
+        if (!cancelled && res.success) {
+          setReviews(Array.isArray(res.data) ? res.data : []);
         }
       } finally {
         if (!cancelled) setReviewsLoading(false);
       }
     };
     loadReviews();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [profile]);
+
+  // Fetch the customer's completed bookings for this provider so we can show the review form
+  useEffect(() => {
+    if (!profile || profile.type !== "provider") return;
+    if (currentUser?.role?.toLowerCase() !== "customer") return;
+    if (profileId === "me") return;
+
+    const providerId = String(profile.data.id);
+    let cancelled = false;
+
+    const loadBookings = async () => {
+      // fetchApi already unwraps `.data` from the response body, so
+      // res.data IS the bookings array directly.
+      const res = await fetchApi<CompletedBooking[]>("/bookings");
+      if (cancelled || !res.success) return;
+      const all = Array.isArray(res.data) ? res.data : [];
+      // Keep only completed bookings for this specific provider
+      const eligible = all.filter(
+        (b: CompletedBooking & { provider_id?: string; status?: string }) =>
+          b.status === "completed" &&
+          String(b.provider_id ?? "") === providerId,
+      );
+      if (!cancelled) setReviewableBookings(eligible);
+    };
+    loadBookings();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, currentUser, profileId]);
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (reviewRating === 0) {
+      setReviewError("Please select a star rating.");
+      return;
+    }
+    if (reviewableBookings.length === 0) return;
+
+    setReviewSubmitting(true);
+    setReviewError(null);
+
+    // Use the most recent completed booking (index 0, ordered desc)
+    const bookingId = reviewableBookings[0].id;
+    const res = await fetchApi<Review>("/reviews", {
+      method: "POST",
+      body: JSON.stringify({
+        booking_id: bookingId,
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      }),
+    });
+
+    setReviewSubmitting(false);
+
+    if (res.success && res.data) {
+      setReviewSuccess(true);
+      setReviewRating(0);
+      setReviewComment("");
+      // Prepend new review optimistically so user sees it immediately
+      const newReview = res.data as unknown as Review;
+      setReviews((prev) => [
+        {
+          ...newReview,
+          reviewer: { full_name: "You", avatar_url: null },
+        },
+        ...prev,
+      ]);
+    } else {
+      const msg =
+        (res as { error?: string }).error ?? "Failed to submit review.";
+      if (msg.includes("already reviewed")) {
+        setReviewSuccess(true); // treat as success — just hide the form
+      } else {
+        setReviewError(msg);
+      }
+    }
+  };
 
   const getRoleLabel = (role: string) => {
     switch (role?.toLowerCase()) {
@@ -304,16 +411,26 @@ export const Profile: React.FC<ProfileProps> = ({
               <h1 className="text-3xl font-bold text-slate-900 mb-2">
                 {fullName}
               </h1>
-              <span
-                className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
-              >
-                {isProvider ? (
-                  <Briefcase className="h-4 w-4 mr-1.5" />
-                ) : (
-                  <Shield className="h-4 w-4 mr-1.5" />
-                )}
-                {getRoleLabel(role)}
-              </span>
+              <div className="flex items-center flex-wrap gap-2">
+                <span
+                  className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
+                >
+                  {isProvider ? (
+                    <Briefcase className="h-4 w-4 mr-1.5" />
+                  ) : (
+                    <Shield className="h-4 w-4 mr-1.5" />
+                  )}
+                  {getRoleLabel(role)}
+                </span>
+                <VerificationBadge
+                  status={
+                    ((data as BackendProvider).verificationStatus ||
+                      (data as BackendUser).verificationStatus ||
+                      "unverified") as VerificationStatusType
+                  }
+                  onClick={() => setShowVerificationModal(true)}
+                />
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -367,6 +484,65 @@ export const Profile: React.FC<ProfileProps> = ({
                 </div>
               )}
 
+              {/* Role Switching Section - Only for customers viewing their own profile */}
+              {profileId === "me" && role === "customer" && (
+                <div className="p-6 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-100">
+                  <div className="flex items-start gap-4">
+                    <div className="h-12 w-12 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                      <Briefcase className="h-6 w-6 text-teal-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-slate-900 mb-2">
+                        Become a Service Provider
+                      </h3>
+                      <p className="text-slate-600 mb-4 leading-relaxed">
+                        Join our community of service providers and start
+                        offering your services to customers. You'll get access
+                        to the provider dashboard, booking management, and more.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          if (
+                            !confirm(
+                              "Are you sure you want to become a service provider? This action cannot be undone.",
+                            )
+                          ) {
+                            return;
+                          }
+
+                          try {
+                            const res = await fetchApi("/users/me/role", {
+                              method: "PUT",
+                              body: JSON.stringify({ role: "provider" }),
+                            });
+
+                            if (res.success) {
+                              alert(
+                                "Welcome to ServiceHub as a provider! Your profile has been updated.",
+                              );
+                              window.location.reload(); // Reload to refresh all state
+                            } else {
+                              alert(
+                                `Failed to update role: ${res.error || "Unknown error"}`,
+                              );
+                            }
+                          } catch (error) {
+                            alert(
+                              "An error occurred while updating your role. Please try again.",
+                            );
+                            console.error(error);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-full hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl"
+                      >
+                        <Briefcase className="h-5 w-5" />
+                        Become Provider
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {profileId === "me" && (
                 <div className="p-4 bg-slate-50 rounded-2xl">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
@@ -400,15 +576,22 @@ export const Profile: React.FC<ProfileProps> = ({
                   {!reviewsLoading && reviews.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-8 text-center bg-slate-50 rounded-2xl">
                       <Star className="h-8 w-8 text-slate-200 mb-2" />
-                      <p className="text-slate-500 font-medium text-sm">No reviews yet</p>
-                      <p className="text-slate-400 text-xs mt-1">Reviews appear here after completed bookings.</p>
+                      <p className="text-slate-500 font-medium text-sm">
+                        No reviews yet
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Reviews appear here after completed bookings.
+                      </p>
                     </div>
                   )}
 
                   {!reviewsLoading && reviews.length > 0 && (
                     <div className="space-y-3">
                       {reviews.map((review) => (
-                        <div key={review.id} className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                        <div
+                          key={review.id}
+                          className="p-4 bg-slate-50 rounded-2xl space-y-2"
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               {review.reviewer?.avatar_url ? (
@@ -446,21 +629,167 @@ export const Profile: React.FC<ProfileProps> = ({
                             </p>
                           )}
                           <p className="text-xs text-slate-400">
-                            {new Date(review.created_at).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
+                            {new Date(review.created_at).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              },
+                            )}
                           </p>
                         </div>
                       ))}
                     </div>
                   )}
+
+                  {/* ── Leave a Review form ── */}
+                  {/* Only shown to logged-in customers who have a completed booking with this provider */}
+                  {currentUser?.role?.toLowerCase() === "customer" &&
+                    profileId !== "me" &&
+                    reviewableBookings.length > 0 && (
+                      <div className="mt-6 pt-5 border-t border-slate-100">
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                          <Star className="h-4 w-4 text-amber-400" />
+                          Leave a Review
+                        </h3>
+
+                        {reviewSuccess ? (
+                          <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl">
+                            <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
+                            <p className="text-sm font-semibold text-emerald-700">
+                              Thanks! Your review has been submitted.
+                            </p>
+                          </div>
+                        ) : (
+                          <form
+                            onSubmit={handleReviewSubmit}
+                            className="space-y-4"
+                          >
+                            {/* Star picker */}
+                            <div>
+                              <p className="text-xs text-slate-500 mb-2 font-medium">
+                                Your rating
+                              </p>
+                              <div className="flex items-center gap-1">
+                                {Array.from({ length: 5 }).map((_, i) => {
+                                  const val = i + 1;
+                                  return (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      onClick={() => setReviewRating(val)}
+                                      onMouseEnter={() => setReviewHover(val)}
+                                      onMouseLeave={() => setReviewHover(0)}
+                                      className="p-0.5 transition-transform hover:scale-110 focus:outline-none"
+                                      aria-label={`${val} star${val > 1 ? "s" : ""}`}
+                                    >
+                                      <Star
+                                        size={28}
+                                        className={
+                                          val <= (reviewHover || reviewRating)
+                                            ? "fill-amber-400 text-amber-400"
+                                            : "text-slate-200 fill-slate-200"
+                                        }
+                                      />
+                                    </button>
+                                  );
+                                })}
+                                {reviewRating > 0 && (
+                                  <span className="ml-2 text-sm font-semibold text-slate-500">
+                                    {
+                                      [
+                                        "",
+                                        "Poor",
+                                        "Fair",
+                                        "Good",
+                                        "Very Good",
+                                        "Excellent",
+                                      ][reviewRating]
+                                    }
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Comment */}
+                            <div>
+                              <label className="text-xs text-slate-500 font-medium block mb-1.5">
+                                Comment{" "}
+                                <span className="text-slate-300">
+                                  (optional)
+                                </span>
+                              </label>
+                              <textarea
+                                value={reviewComment}
+                                onChange={(e) =>
+                                  setReviewComment(e.target.value)
+                                }
+                                rows={3}
+                                maxLength={500}
+                                placeholder="Share your experience with this provider…"
+                                className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent resize-none transition"
+                              />
+                              <p className="text-right text-xs text-slate-300 mt-1">
+                                {reviewComment.length}/500
+                              </p>
+                            </div>
+
+                            {/* Error */}
+                            {reviewError && (
+                              <p className="text-xs text-red-500 font-medium">
+                                {reviewError}
+                              </p>
+                            )}
+
+                            {/* Submit */}
+                            <button
+                              type="submit"
+                              disabled={reviewSubmitting || reviewRating === 0}
+                              className="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white text-sm font-bold rounded-full hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                              {reviewSubmitting ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                              {reviewSubmitting
+                                ? "Submitting…"
+                                : "Submit Review"}
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
                 </div>
               )}
+
+              {profileId === "me" &&
+                ["unverified", "pending"].includes(
+                  ((data as BackendProvider).verificationStatus ||
+                    (data as BackendUser).verificationStatus ||
+                    "unverified") as string
+                ) && (
+                  <button
+                    onClick={() => onNavigate("/verify")}
+                    className="w-full py-3 bg-teal-600 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-700 transition-colors"
+                  >
+                    <Shield className="h-4 w-4" />
+                    {((data as BackendProvider).verificationStatus ||
+                      (data as BackendUser).verificationStatus) === "pending"
+                      ? "Complete Verification"
+                      : "Verify Your Identity"}
+                  </button>
+                )}
             </div>
           </div>
         </div>
+
+        <VerificationDetailsModal
+          userId={data.id || profileId}
+          isOpen={showVerificationModal}
+          onClose={() => setShowVerificationModal(false)}
+        />
       </div>
     </div>
   );
