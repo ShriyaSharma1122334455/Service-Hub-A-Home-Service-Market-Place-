@@ -4,7 +4,7 @@
  * The authoritative defense against image-based prompt injection is the
  * strict JSON response schema enforced on the VDA side. This module adds
  * denylist-based scrubbing to the task text and to any model-produced text
- * that is re-used in downstream prompts (Groq catalog ranking).
+ * that is re-used in downstream prompts (Gemma catalog ranking).
  *
  * The cleaning pipeline mirrors visual-damage-assessment/gemini_vision.py:
  *   1. NFKC-normalize so Cyrillic / fullwidth / ligature lookalikes collapse
@@ -85,7 +85,7 @@ const INJECTION_PATTERNS = [
 
 /**
  * Sanitize task input from the end customer before it is embedded in any
- * prompt sent to Gemma or Groq.
+ * prompt sent to Gemma.
  *
  * @param {string} input - Raw user input for task description
  * @param {number} [maxLength=500] - Maximum length after sanitization

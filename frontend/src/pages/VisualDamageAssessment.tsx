@@ -22,6 +22,14 @@ type VdaPayload = {
     estimated_cost_usd: string;
     confidence_score: string;
   };
+  quote: {
+    fair_min_usd: number;
+    recommended_usd: number;
+    ceiling_usd: number;
+    confidence: "low" | "medium" | "high";
+    rationale: string;
+    negotiation_guidance: string;
+  };
   recommended_services: Array<{
     id: string;
     name: string;
@@ -231,6 +239,33 @@ export const VisualDamageAssessment = ({
                 </p>
               </div>
             </div>
+
+            {result.quote && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-4">
+                <h3 className="text-base font-bold text-slate-900">
+                  Negotiation quote guidance
+                </h3>
+                <p className="mt-1 text-sm text-slate-700">
+                  Recommended offer:{" "}
+                  <span className="font-semibold text-emerald-800">
+                    ${result.quote.recommended_usd}
+                  </span>
+                </p>
+                <p className="text-sm text-slate-700">
+                  Fair range: ${result.quote.fair_min_usd} - $
+                  {result.quote.ceiling_usd}
+                </p>
+                <p className="text-xs text-slate-600 mt-2">
+                  Confidence: {result.quote.confidence}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  {result.quote.rationale}
+                </p>
+                <p className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">
+                  {result.quote.negotiation_guidance}
+                </p>
+              </div>
+            )}
 
             {result.recommended_services[0] && (
               <div className="rounded-2xl border-2 border-teal-200/80 bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-5 sm:p-6 shadow-sm shadow-teal-900/5">

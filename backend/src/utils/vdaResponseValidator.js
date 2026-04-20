@@ -5,7 +5,7 @@
  * from corrupting the frontend or causing runtime errors, and HTML-escapes
  * free-text fields so image-based prompt injection that lands in
  * `assessment` or `recommendation` cannot execute as markup on the client
- * or smuggle role-impersonation tokens into the downstream Groq prompt.
+ * or smuggle role-impersonation tokens into the downstream Gemma prompt.
  */
 
 // Maximum field lengths. Kept in sync with the producer-side caps in
@@ -126,7 +126,7 @@ export function validateVdaResponse(vdaResponse) {
     }
 
     // HTML-escape free-text fields so any injected markup in the model's
-    // output becomes inert before it reaches the frontend or the Groq
+    // output becomes inert before it reaches the frontend or the Gemma
     // catalog matcher. Structured fields (cost, confidence) are already
     // format-validated above.
     sanitized[field] = HTML_ESCAPED_FIELDS.has(field) ? escapeHtml(value) : value;

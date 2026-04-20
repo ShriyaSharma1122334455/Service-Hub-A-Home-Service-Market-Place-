@@ -1,6 +1,7 @@
 import { fileTypeFromBuffer } from 'file-type';
 import { matchAssessmentToCatalog } from '../services/catalogMatchmaking.js';
 import { normalizeVdaError } from '../utils/vdaErrorNormalizer.js';
+import { buildNegotiationQuote } from '../utils/quoteEstimator.js';
 import { retryWithBackoff } from '../utils/retryWithBackoff.js';
 import { validateAndSanitizeVdaResponse } from '../utils/vdaResponseValidator.js';
 
@@ -176,17 +177,37 @@ export const assessVisualDamage = async (req, res) => {
       });
     }
 
-    const { assessment, recommendation, estimated_cost_usd, confidence_score } = validatedVda;
+    const {
+      assessment: sanitizedAssessment,
+      recommendation: sanitizedRecommendation,
+      estimated_cost_usd,
+      confidence_score,
+    } = validatedVda;
+
+    // The validator HTML-escapes free-text fields for safe downstream handling.
+    // Decode before returning to clients so users see natural punctuation.
+    const assessment = decodeHtmlEntities(sanitizedAssessment);
+    const recommendation = decodeHtmlEntities(sanitizedRecommendation);
 
     const { recommended_services } = await matchAssessmentToCatalog(
-      { assessment, recommendation },
+      { assessment: sanitizedAssessment, recommendation: sanitizedRecommendation },
       task,
     );
+
+    const quote = buildNegotiationQuote({ estimated_cost_usd, confidence_score });
 
     const job_description = [
       jobSection('Summary', assessment),
       jobSection('Recommendation', recommendation),
       jobSection('Indicative cost (not a quote)', estimated_cost_usd),
+      jobSection(
+        'Negotiation price guidance',
+        [
+          `Suggested offer: $${quote.recommended_usd}`,
+          `Fair range: $${quote.fair_min_usd}-$${quote.ceiling_usd}`,
+          quote.negotiation_guidance,
+        ].join('\n'),
+      ),
       task && jobSection('Customer goal', task),
     ]
       .filter(Boolean)
@@ -201,6 +222,7 @@ export const assessVisualDamage = async (req, res) => {
           estimated_cost_usd,
           confidence_score,
         },
+        quote,
         recommended_services,
         job_description,
       },
@@ -217,6 +239,21 @@ export const assessVisualDamage = async (req, res) => {
 function jobSection(title, body) {
   if (!body || String(body).trim() === '') return '';
   return `${title}:\n${String(body).trim()}`;
+}
+
+/**
+ * Decode a small, known-safe set of HTML entities escaped by vdaResponseValidator.
+ * @param {string} text
+ * @returns {string}
+ */
+function decodeHtmlEntities(text) {
+  if (typeof text !== 'string' || text.length === 0) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'");
 }
 
 export default { assessVisualDamage };

@@ -1,7 +1,7 @@
 /**
  * Tests for catalogMatchmaking.js
  *
- * Mocks: supabase config (DB queries), global.fetch (Groq API).
+ * Mocks: supabase config (DB queries), global.fetch (Gemini API).
  * No real network or database calls are made.
  */
 
@@ -63,7 +63,8 @@ const ROWS = [
 beforeEach(() => {
   jest.clearAllMocks();
   global.fetch = jest.fn();
-  delete process.env.GROQ_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
 });
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -84,7 +85,7 @@ describe('matchAssessmentToCatalog — Supabase failures', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// 2. Heuristic path (no GROQ_API_KEY)
+// 2. Heuristic path (no GEMINI_API_KEY / GOOGLE_API_KEY)
 // ═════════════════════════════════════════════════════════════════════════
 describe('matchAssessmentToCatalog — heuristic ranking', () => {
   beforeEach(() => {
@@ -122,26 +123,26 @@ describe('matchAssessmentToCatalog — heuristic ranking', () => {
     expect(typeof svc.duration_minutes).toBe('number');
   });
 
-  it('does not call global.fetch when GROQ_API_KEY is absent', async () => {
+  it('does not call global.fetch when Gemini key is absent', async () => {
     await matchAssessmentToCatalog({ assessment: 'any damage' });
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// 3. AI ranking path (GROQ_API_KEY set)
+// 3. AI ranking path (Gemini key set)
 // ═════════════════════════════════════════════════════════════════════════
 describe('matchAssessmentToCatalog — AI ranking', () => {
   beforeEach(() => {
-    process.env.GROQ_API_KEY = 'test-groq-key';
+    process.env.GEMINI_API_KEY = 'test-gemini-key';
     mockLimit.mockResolvedValue({ data: ROWS, error: null });
   });
 
-  it('uses AI-ranked IDs when Groq returns a valid response', async () => {
+  it('uses AI-ranked IDs when Gemma returns a valid response', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: '{"service_ids":["1"]}' } }],
+        candidates: [{ content: { parts: [{ text: '{"service_ids":["1"]}' }] } }],
       }),
       text: jest.fn().mockResolvedValue(''),
     });
@@ -155,7 +156,7 @@ describe('matchAssessmentToCatalog — AI ranking', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to heuristics when Groq fetch throws a network error', async () => {
+  it('falls back to heuristics when Gemma fetch throws a network error', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
     const result = await matchAssessmentToCatalog(
@@ -166,7 +167,7 @@ describe('matchAssessmentToCatalog — AI ranking', () => {
     expect(result.recommended_services.length).toBeGreaterThan(0);
   });
 
-  it('falls back to heuristics when Groq returns an HTTP error (429)', async () => {
+  it('falls back to heuristics when Gemma returns an HTTP error (429)', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 429,
@@ -177,11 +178,11 @@ describe('matchAssessmentToCatalog — AI ranking', () => {
     expect(result.recommended_services.length).toBeGreaterThan(0);
   });
 
-  it('falls back to heuristics when Groq response JSON is unparseable', async () => {
+  it('falls back to heuristics when Gemma response JSON is unparseable', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: 'not valid json' } }],
+        candidates: [{ content: { parts: [{ text: 'not valid json' }] } }],
       }),
       text: jest.fn().mockResolvedValue(''),
     });
@@ -190,11 +191,11 @@ describe('matchAssessmentToCatalog — AI ranking', () => {
     expect(result.recommended_services.length).toBeGreaterThan(0);
   });
 
-  it('falls back to heuristics when Groq returns empty service_ids', async () => {
+  it('falls back to heuristics when Gemma returns empty service_ids', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: '{"service_ids":[]}' } }],
+        candidates: [{ content: { parts: [{ text: '{"service_ids":[]}' }] } }],
       }),
       text: jest.fn().mockResolvedValue(''),
     });
@@ -206,11 +207,11 @@ describe('matchAssessmentToCatalog — AI ranking', () => {
     expect(result.recommended_services.length).toBeGreaterThan(0);
   });
 
-  it('strips markdown fences from Groq response before parsing', async () => {
+  it('strips markdown fences from Gemma response before parsing', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({
-        choices: [{ message: { content: '```json\n{"service_ids":["3"]}\n```' } }],
+        candidates: [{ content: { parts: [{ text: '```json\n{"service_ids":["3"]}\n```' }] } }],
       }),
       text: jest.fn().mockResolvedValue(''),
     });

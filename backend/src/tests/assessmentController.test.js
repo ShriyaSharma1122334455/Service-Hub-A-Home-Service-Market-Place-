@@ -218,12 +218,17 @@ describe('assessVisualDamage — success', () => {
     expect(body.data.vda.recommendation).toBe(GOOD_VDA.recommendation);
     expect(body.data.vda.confidence_score).toBe(GOOD_VDA.confidence_score);
     expect(body.data.recommended_services).toEqual(GOOD_CATALOG.recommended_services);
+    expect(body.data.quote).toBeDefined();
+    expect(typeof body.data.quote.recommended_usd).toBe('number');
+    expect(typeof body.data.quote.fair_min_usd).toBe('number');
+    expect(typeof body.data.quote.ceiling_usd).toBe('number');
   });
 
   it('includes job_description in the response', async () => {
     const res = makeRes();
     await assessVisualDamage(makeReq(), res);
     expect(res.json.mock.calls[0][0].data.job_description).toContain(GOOD_VDA.assessment);
+    expect(res.json.mock.calls[0][0].data.job_description).toContain('Negotiation price guidance');
   });
 
   it('uses a default task when none is provided in the request body', async () => {
@@ -247,5 +252,25 @@ describe('assessVisualDamage — success', () => {
     const formData = fetchCall[1].body;
     // FormData.get is available on the Node 18 FormData implementation
     expect(formData.get('task')).toBe('Check for water damage');
+  });
+
+  it('decodes escaped punctuation for client-facing vda text', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      makeVdaResponse({
+        assessment: 'Contractor said &quot;quick fix&quot; is enough.',
+        recommendation: 'Ask for a &#x27;finished&#x27; quote.',
+        estimated_cost_usd: '$100-$200',
+        confidence_score: '0.92',
+      }),
+    );
+
+    const res = makeRes();
+    await assessVisualDamage(makeReq(), res);
+
+    const payload = res.json.mock.calls[0][0].data;
+    expect(payload.vda.assessment).toContain('"quick fix"');
+    expect(payload.vda.recommendation).toContain("'finished'");
+    expect(payload.vda.recommendation).not.toContain('&#x27;');
+    expect(payload.job_description).toContain("'finished'");
   });
 });

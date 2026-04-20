@@ -7,7 +7,7 @@ export const MAX_RECOMMENDED_SERVICES = 3;
 /** Max services sent to the ranking model (keeps prompt size reasonable). */
 const MAX_CATALOG_FOR_AI = 100;
 
-const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** @typedef {{ id: string, name: string, description: string | null, base_price: number, duration_minutes: number, category: { slug: string, name: string } | null }} MatchedService */
 
@@ -120,12 +120,14 @@ function truncateDesc(s, maxLen) {
  * @param {string} task
  * @returns {Promise<string[] | null>}
  */
-async function groqRankServiceIds(candidateRows, assessment, recommendation, task) {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+async function gemmaRankServiceIds(candidateRows, assessment, recommendation, task) {
+  const apiKey =
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim();
   if (!apiKey) return null;
 
   const model =
-    process.env.GROQ_SERVICE_MATCH_MODEL?.trim() || 'llama-3.3-70b-versatile';
+    process.env.GEMMA_SERVICE_MATCH_MODEL?.trim() || 'gemma-4-26b-a4b-it';
 
   const catalogPayload = candidateRows.map((row) => {
     const cat = row.category;
@@ -152,30 +154,33 @@ async function groqRankServiceIds(candidateRows, assessment, recommendation, tas
 
   let response;
   try {
-    response = await fetch(GROQ_CHAT_URL, {
+    response = await fetch(`${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: RANK_SYSTEM_PROMPT },
-          { role: 'user', content: userBlock },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `${RANK_SYSTEM_PROMPT}\n\n${userBlock}` }],
+          },
         ],
-        temperature: 0.2,
-        max_tokens: 512,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 512,
+          responseMimeType: 'application/json',
+        },
       }),
     });
   } catch (err) {
-    console.error('catalogMatchmaking Groq fetch error:', err?.message || err);
+    console.error('catalogMatchmaking Gemma fetch error:', err?.message || err);
     return null;
   }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    console.error('catalogMatchmaking Groq HTTP error:', response.status, errText);
+    console.error('catalogMatchmaking Gemma HTTP error:', response.status, errText);
     return null;
   }
 
@@ -186,7 +191,7 @@ async function groqRankServiceIds(candidateRows, assessment, recommendation, tas
     return null;
   }
 
-  let text = data?.choices?.[0]?.message?.content?.trim() ?? '';
+  let text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
   if (!text) return null;
 
   if (text.startsWith('```')) {
@@ -200,7 +205,7 @@ async function groqRankServiceIds(candidateRows, assessment, recommendation, tas
   try {
     parsed = JSON.parse(text);
   } catch {
-    console.error('catalogMatchmaking Groq JSON parse failed, raw:', text.slice(0, 400));
+    console.error('catalogMatchmaking Gemma JSON parse failed, raw:', text.slice(0, 400));
     return null;
   }
 
@@ -250,7 +255,8 @@ function mapIdsToServices(orderedIds, idToRow, backfill) {
 
 /**
  * Rank catalog services using VDA text + optional user task (read-only Supabase).
- * Uses Groq (GROQ_API_KEY) for AI ordering when configured; otherwise heuristic only.
+ * Uses Gemma via Gemini API (GEMINI_API_KEY / GOOGLE_API_KEY) for AI ordering when configured;
+ * otherwise heuristic only.
  * @param {{ assessment?: string, recommendation?: string }} vda
  * @param {string} [task]
  * @returns {Promise<{ recommended_services: MatchedService[] }>}
@@ -279,7 +285,7 @@ export async function matchAssessmentToCatalog(vda, task = '') {
   const candidates = topCandidatesForAi(rows, corpus);
   const idToRow = new Map(rows.map((r) => [String(r.id), r]));
 
-  const aiIds = await groqRankServiceIds(candidates, assessment, recommendation, task);
+  const aiIds = await gemmaRankServiceIds(candidates, assessment, recommendation, task);
   if (aiIds?.length) {
     const merged = mapIdsToServices(aiIds, idToRow, heuristicList);
     if (merged.length > 0) {
