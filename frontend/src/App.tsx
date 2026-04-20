@@ -409,12 +409,6 @@ const App = () => {
         return <VisualDamageAssessment onNavigate={navigate} />;
       }
       case "/my-bookings":
-        return (
-          <FAQ
-            userRole={user?.role?.toLowerCase() as "customer" | "provider"}
-          />
-        );
-      case "/my-bookings":
         return <ProviderBookings token={getToken()} onNavigate={navigate} />;
       default:
         return (
