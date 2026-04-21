@@ -130,6 +130,12 @@ jobs:
     name: Visual Damage Assessment CI
     runs-on: ubuntu-latest
 
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      VDA_VISION_MODEL: ${{ secrets.VDA_VISION_MODEL }}
+      VDA_SERVICE_API_KEY: ${{ secrets.VDA_SERVICE_API_KEY }}
+      VDA_REQUIRE_AUTH: ${{ secrets.VDA_REQUIRE_AUTH }}
+
     steps:
       - uses: actions/checkout@v4
 
