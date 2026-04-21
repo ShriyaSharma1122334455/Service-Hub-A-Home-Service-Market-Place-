@@ -35,6 +35,45 @@ function createChainProxy() {
   return new Proxy({}, handler);
 }
 
+/** Sequential `{ data, error }` for each awaited PostgREST chain (dashboard tests). */
+let supabaseAwaitQueue = [];
+
+function createQueuedChainProxy() {
+  const handler = {
+    get(target, prop) {
+      if (prop === 'then') {
+        return (resolve) => {
+          const next = supabaseAwaitQueue.shift();
+          resolve(
+            next !== undefined
+              ? next
+              : { data: null, error: { message: 'test: unexpected extra supabase await' } },
+          );
+        };
+      }
+      return jest.fn().mockReturnValue(new Proxy({}, handler));
+    },
+  };
+  return new Proxy({}, handler);
+}
+
+function mockProviderAuth() {
+  setSupabaseClient({
+    auth: {
+      getUser: jest.fn().mockResolvedValue({
+        data: {
+          user: {
+            id: 'auth-provider-1',
+            email: 'provider@test.com',
+            user_metadata: { role: 'provider' },
+          },
+        },
+        error: null,
+      }),
+    },
+  });
+}
+
 const mockFrom = jest.fn(() => createChainProxy());
 
 // ✅ FIX: use signUp (not admin.createUser) — matches what authController calls
@@ -57,7 +96,8 @@ jest.unstable_mockModule('../config/supabase.js', () => ({
 // ── NOW import the app (after mocks are in place) ─────────────────────────
 const { default: app } = await import('../server.js');
 import request from 'supertest';
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { setSupabaseClient, resetSupabaseClient } from '../middleware/authMiddleware.js';
 
 // ── Reset mocks between tests ─────────────────────────────────────────────
 beforeEach(() => {
@@ -209,12 +249,213 @@ describe('Providers – /api/providers', () => {
   });
 });
 
-// ─── 5. Protected routes ──────────────────────────────────────────────────
+// ─── 5. Provider dashboard – GET /api/dashboard/provider ─────────────────
+describe('Provider dashboard – GET /api/dashboard/provider', () => {
+  beforeEach(() => {
+    supabaseAwaitQueue = [];
+    mockFrom.mockImplementation(() => createQueuedChainProxy());
+  });
+
+  afterEach(() => {
+    resetSupabaseClient();
+    mockFrom.mockImplementation(() => createChainProxy());
+  });
+
+  it('returns 403 when JWT role is not provider', async () => {
+    setSupabaseClient({
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: {
+            user: {
+              id: 'auth-customer-1',
+              email: 'c@test.com',
+              user_metadata: { role: 'customer' },
+            },
+          },
+          error: null,
+        }),
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 404 when public.users profile is missing', async () => {
+    mockProviderAuth();
+    supabaseAwaitQueue.push({ data: null, error: null });
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 404 when provider row is missing', async () => {
+    mockProviderAuth();
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      { data: null, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toMatch(/provider profile/i);
+  });
+
+  it('returns 200 with stats, empty breakdown, and empty calendar when there are no bookings', async () => {
+    mockProviderAuth();
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      {
+        data: {
+          id: 'prov-1',
+          business_name: 'Test Co',
+          rating_avg: 4.2,
+        },
+        error: null,
+      },
+      { data: [], error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.provider).toEqual({
+      id: 'prov-1',
+      business_name: 'Test Co',
+      rating_avg: 4.2,
+    });
+    expect(res.body.data.stats).toMatchObject({
+      total_bookings: 0,
+      pending: 0,
+      confirmed: 0,
+      completed: 0,
+      cancelled: 0,
+      total_earnings: 0,
+    });
+    expect(res.body.data.breakdown).toEqual({ pending: [], confirmed: [] });
+    expect(res.body.data.calendar).toEqual([]);
+    expect(supabaseAwaitQueue).toHaveLength(0);
+  });
+
+  it('aggregates stats, breakdown lists, and calendar (excludes cancelled from calendar)', async () => {
+    mockProviderAuth();
+    const bookings = [
+      {
+        id: 'b1',
+        status: 'pending',
+        scheduled_at: '2026-05-10T14:00:00.000Z',
+        total_price: 100,
+        service: { name: 'Cleaning' },
+        customer: { full_name: 'Alex' },
+      },
+      {
+        id: 'b2',
+        status: 'confirmed',
+        scheduled_at: '2026-05-10T16:00:00.000Z',
+        total_price: 80,
+        service: { name: 'Plumbing' },
+        customer: { full_name: 'Blake' },
+      },
+      {
+        id: 'b3',
+        status: 'completed',
+        scheduled_at: '2026-04-01T10:00:00.000Z',
+        total_price: 50.25,
+        service: { name: 'Electrical' },
+        customer: { full_name: 'Casey' },
+      },
+      {
+        id: 'b4',
+        status: 'cancelled',
+        scheduled_at: '2026-05-11T09:00:00.000Z',
+        total_price: 200,
+        service: { name: 'Paint' },
+        customer: { full_name: 'Dana' },
+      },
+    ];
+
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      {
+        data: { id: 'prov-1', business_name: 'Biz', rating_avg: 5 },
+        error: null,
+      },
+      { data: bookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.stats).toMatchObject({
+      total_bookings: 4,
+      pending: 1,
+      confirmed: 1,
+      completed: 1,
+      cancelled: 1,
+      total_earnings: 50.25,
+    });
+
+    expect(res.body.data.breakdown.pending).toHaveLength(1);
+    expect(res.body.data.breakdown.pending[0]).toMatchObject({
+      id: 'b1',
+      status: 'pending',
+      service_name: 'Cleaning',
+      customer_name: 'Alex',
+      total_price: 100,
+    });
+
+    expect(res.body.data.breakdown.confirmed).toHaveLength(1);
+    expect(res.body.data.breakdown.confirmed[0]).toMatchObject({
+      id: 'b2',
+      status: 'confirmed',
+      service_name: 'Plumbing',
+    });
+
+    const cal = res.body.data.calendar;
+    expect(cal).toHaveLength(2);
+    const byDate = Object.fromEntries(cal.map((d) => [d.date, d.items]));
+    expect(byDate['2026-04-01'].map((i) => i.id)).toEqual(['b3']);
+    expect(byDate['2026-05-10'].map((i) => i.id).sort()).toEqual(['b1', 'b2']);
+    expect(cal.some((d) => d.date === '2026-05-11')).toBe(false);
+    expect(supabaseAwaitQueue).toHaveLength(0);
+  });
+
+  it('returns 403 when internal user role is not provider (stale metadata)', async () => {
+    mockProviderAuth();
+    supabaseAwaitQueue.push({ data: { id: 'internal-1', role: 'customer' }, error: null });
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toMatch(/only available for provider/i);
+  });
+});
+
+// ─── 6. Protected routes ──────────────────────────────────────────────────
 describe('Protected route guard', () => {
   const protectedRoutes = [
     { method: 'get', path: '/api/bookings' },
     { method: 'post', path: '/api/bookings' },
     { method: 'get', path: '/api/users/profile' },
+    { method: 'get', path: '/api/dashboard/provider' },
   ];
 
   protectedRoutes.forEach(({ method, path }) => {
@@ -225,7 +466,7 @@ describe('Protected route guard', () => {
   });
 });
 
-// ─── 6. Input validation ──────────────────────────────────────────────────
+// ─── 7. Input validation ──────────────────────────────────────────────────
 describe('Input validation', () => {
   it('POST /api/auth/register rejects missing fields', async () => {
     const res = await request(app).post('/api/auth/register').send({ email: 'x@x.com' });
@@ -239,7 +480,7 @@ describe('Input validation', () => {
   });
 });
 
-// ─── 7. Security headers ──────────────────────────────────────────────────
+// ─── 8. Security headers ──────────────────────────────────────────────────
 describe('Security headers (helmet)', () => {
   it('Response includes X-Content-Type-Options', async () => {
     const res = await request(app).get('/api/health');
@@ -252,7 +493,7 @@ describe('Security headers (helmet)', () => {
   });
 });
 
-// ─── 8. 404 handler ──────────────────────────────────────────────────────
+// ─── 9. 404 handler ──────────────────────────────────────────────────────
 describe('404 handler', () => {
   it('Returns 404 for unknown routes', async () => {
     const res = await request(app).get('/api/nonexistent');
