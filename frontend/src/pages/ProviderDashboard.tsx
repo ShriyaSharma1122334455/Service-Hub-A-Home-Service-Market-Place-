@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { Calendar, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import type { User, Provider } from "../../types";
 import { UserRole } from "../../types";
@@ -212,13 +212,15 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
     user && String(user.role).toUpperCase() === UserRole.PROVIDER;
 
   const [data, setData] = useState<ProviderDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [calendarView, setCalendarView] = useState<"week" | "month">("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [calendarStatuses, setCalendarStatuses] = useState<string[]>(["confirmed"]);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const hasLoadedDashboard = useRef(false);
   const allCalendarStatuses = ["pending", "confirmed", "completed", "cancelled"] as const;
 
   const visibleRange = useMemo(
@@ -230,15 +232,20 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
     [],
   );
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async ({ calendarOnly = false, silent = false } = {}) => {
     if (!isProvider || !token) {
-      setLoading(false);
+      setInitialLoading(false);
+      setCalendarLoading(false);
       setData(null);
+      hasLoadedDashboard.current = false;
       return;
     }
-    if (!silent) {
-      setLoading(true);
+    if (!silent && !calendarOnly) {
+      setInitialLoading(true);
       setError(null);
+    }
+    if (calendarOnly) {
+      setCalendarLoading(true);
     }
     try {
       const params = new URLSearchParams({
@@ -253,30 +260,48 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
       const json = await res.json();
       if (!res.ok || !json.success) {
         setError(json.error || "Could not load dashboard.");
-        setData(null);
+        if (!calendarOnly) {
+          setData(null);
+          hasLoadedDashboard.current = false;
+        }
       } else {
         const next = json.data as ProviderDashboardData;
-        setData(next);
+        setData((prev) => {
+          if (calendarOnly && prev) {
+            return {
+              ...prev,
+              calendar: next.calendar,
+              calendar_meta: next.calendar_meta,
+            };
+          }
+          return next;
+        });
         setLastRefreshedAt(next.calendar_meta?.last_refreshed_at ?? new Date().toISOString());
+        hasLoadedDashboard.current = true;
       }
     } catch {
       if (!silent) {
         setError("Network error. Check your connection and try again.");
+      }
+      if (!calendarOnly) {
         setData(null);
+        hasLoadedDashboard.current = false;
       }
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && !calendarOnly) setInitialLoading(false);
+      if (calendarOnly) setCalendarLoading(false);
     }
   }, [isProvider, token, visibleRange, calendarStatuses, timezone]);
 
   useEffect(() => {
-    void load();
+    const calendarOnly = hasLoadedDashboard.current;
+    void load({ calendarOnly });
   }, [load]);
 
   useEffect(() => {
     if (!isProvider || !token) return undefined;
     const timer = window.setInterval(() => {
-      void load(true);
+      void load({ calendarOnly: true, silent: true });
     }, 60000);
     return () => window.clearInterval(timer);
   }, [isProvider, token, load]);
@@ -439,11 +464,11 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void load()}
-              disabled={loading}
+              onClick={() => void load({ calendarOnly: false })}
+              disabled={initialLoading || calendarLoading}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
             >
-              <Loader2 size={16} className={loading ? "animate-spin" : ""} />
+              <Loader2 size={16} className={initialLoading || calendarLoading ? "animate-spin" : ""} />
               Refresh
             </button>
             <button
@@ -473,7 +498,7 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {loading ? (
+          {initialLoading ? (
             Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : data ? (
             statCards.map((card) => (
@@ -523,7 +548,7 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
           )}
         </div>
 
-        {!loading && data && (
+        {!initialLoading && data && (
           <>
             <div className="grid grid-cols-1 gap-6">
               <BreakdownList
@@ -541,6 +566,7 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
                         <h2 className="text-base font-semibold text-slate-900">Calendar</h2>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Showing times in your local timezone ({timezone})
+                      {calendarLoading ? " · Updating..." : ""}
                     </p>
                   </div>
                 </div>
@@ -660,6 +686,12 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
                 </div>
               </div>
               <div className="p-5">
+                {calendarLoading && (
+                  <div className="mb-3 inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+                    <Loader2 size={14} className="animate-spin" />
+                    Refreshing calendar...
+                  </div>
+                )}
                 {calendarDays.length === 0 ? (
                   <p className="text-sm text-slate-400 text-center py-6">
                     No scheduled bookings on the calendar.
