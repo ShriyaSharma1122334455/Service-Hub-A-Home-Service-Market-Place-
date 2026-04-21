@@ -123,5 +123,27 @@ jobs:
         run: pytest
         working-directory: ai-services
 
-  # Visual Damage Assessment CI removed — service directory does not exist in
-  # this repo yet. Re-add this job when visual-damage-assessment-service/ is committed.
+  # ─────────────────────────────────────────
+  # 4. Visual Damage Assessment
+  # ─────────────────────────────────────────
+  visual-damage-assessment:
+    name: Visual Damage Assessment CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: visual-damage-assessment/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        working-directory: visual-damage-assessment
+
+      - name: Run tests
+        run: pytest tests/ -v
+        working-directory: visual-damage-assessment
