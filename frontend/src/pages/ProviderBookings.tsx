@@ -145,7 +145,7 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => onNavigate("/dashboard/provider")}
+              onClick={() => onNavigate("/dashboard")}
               className="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
             >
               <ArrowLeft size={18} />
