@@ -415,7 +415,6 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
       },
     ];
   }, [data]);
-
   const bookingRows = useMemo(() => {
     if (!data) return [];
     return [...data.breakdown.pending, ...data.breakdown.confirmed].sort((a, b) =>
