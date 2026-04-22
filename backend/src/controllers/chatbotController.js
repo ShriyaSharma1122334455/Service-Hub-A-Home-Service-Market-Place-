@@ -28,7 +28,7 @@ export const getChatbotContext = async (req, res) => {
           .select(`
             id, status, scheduled_at, total_price, notes,
             service:services(name),
-            customer:users(full_name)
+            customer:users!bookings_customer_id_fkey(full_name)
           `)
           .eq('provider_id', providerProfile.id)
           .order('scheduled_at', { ascending: true })

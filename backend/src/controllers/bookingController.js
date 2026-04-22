@@ -10,6 +10,27 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ success: false, error: 'provider_id, service_id and scheduled_at are required' });
     }
 
+    // Basic server-side slot conflict guard.
+    const { data: conflicting, error: conflictError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('provider_id', provider_id)
+      .eq('scheduled_at', scheduled_at)
+      .in('status', ['pending', 'confirmed'])
+      .limit(1);
+
+    if (conflictError) {
+      return res.status(400).json({ success: false, error: conflictError.message });
+    }
+
+    if (Array.isArray(conflicting) && conflicting.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'This slot is no longer available. Please choose another time.',
+        code: 'SLOT_UNAVAILABLE',
+      });
+    }
+
     // Block bookings with unverified providers
     const { data: provider } = await supabase
       .from('providers')
@@ -58,10 +79,13 @@ export const createBooking = async (req, res) => {
 
     // Mark availability slot as booked if provided
     if (availability_id) {
-      await supabase
+      const { error: availabilityError } = await supabase
         .from('availability')
         .update({ is_booked: true })
         .eq('id', availability_id);
+      if (availabilityError) {
+        return res.status(400).json({ success: false, error: availabilityError.message });
+      }
     }
 
     res.status(201).json({ success: true, data: booking });

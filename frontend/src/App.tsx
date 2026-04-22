@@ -389,7 +389,13 @@ const App = () => {
           />
         );
       case "/dashboard":
-        return <ProviderDashboard user={user} onNavigate={navigate} />;
+        return (
+          <ProviderDashboard
+            user={user}
+            token={getToken()}
+            onNavigate={navigate}
+          />
+        );
       case "/verify":
         return <VerifyPage userId={user?.id || ""} onNavigate={navigate} />;
       case "/faq":

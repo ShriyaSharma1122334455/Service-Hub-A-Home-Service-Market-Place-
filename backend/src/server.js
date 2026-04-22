@@ -20,6 +20,7 @@ import verificationRoutes from './routes/verificationRoutes.js';
 // import userRoutes from './routes/userRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import assessmentRoutes from './routes/assessmentRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.use('/api/users', profileRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/assessments', assessmentRoutes);
