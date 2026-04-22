@@ -80,7 +80,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./visual-damage-assessment/.env # reads GROQ_API_KEY
+      - ./visual-damage-assessment/.env    # reads GEMINI_API_KEY, VDA_SERVICE_API_KEY, etc.
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)" ]

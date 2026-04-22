@@ -1,11 +1,51 @@
-.venv
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
 .env
+.env.local
+
+# Python cache and compiled files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+
+# Testing
+.pytest_cache/
+.coverage
+*.coverage
+*.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Database files
 *.db
-*.jpg
-*.png
 *.sqlite3
+
+# Uploaded images (for security - don't commit user data)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
 

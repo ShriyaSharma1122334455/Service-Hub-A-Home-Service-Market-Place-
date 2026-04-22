@@ -9,6 +9,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import { readDamagePrefill, clearDamagePrefill } from "../lib/damagePrefill";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const p = readDamagePrefill();
+    if (!p?.job_description) return;
+    if (p.service_id != null && p.service_id !== serviceId) return;
+    setNotes(p.job_description);
+  }, [serviceId, providerId]);
+
   // ── Fetch slots when date changes ──────────────────────────────────────────
   useEffect(() => {
     if (!selectedDate) return;
@@ -220,6 +228,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         setError(json.error || "Failed to create booking. Please try again.");
         return;
       }
+      clearDamagePrefill();
       onSuccess(json.data.id as string);
     } catch {
       setError("Network error. Please check your connection and try again.");

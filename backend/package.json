@@ -9,8 +9,8 @@
     "start": "node src/server.js",
     "setup": "node src/scripts/setUpEnv.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testEnvironment=node",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testEnvironment=node --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testEnvironment=node --coverage",
     "seed:categories": "node src/scripts/seedCategories.js",
     "seed:users": "node src/scripts/seedUsers.js",
     "seed:providers": "node src/scripts/seedProviders.js",
@@ -25,6 +25,10 @@
   ],
   "author": "Akash",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
     "cloudinary": "^2.9.0",
@@ -33,6 +37,7 @@
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "file-type": "^22.0.1",
     "helmet": "^8.1.0",
     "jose": "^6.2.1",
     "jsonwebtoken": "^9.0.3",

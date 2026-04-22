@@ -37,9 +37,13 @@ wheels/
 Thumbs.db
 
 # Testing
+tests/
 .pytest_cache/
 .coverage
+*.coverage.*
 htmlcov/
+requirements-dev.txt
+pytest.ini
 
 # Git
 .git

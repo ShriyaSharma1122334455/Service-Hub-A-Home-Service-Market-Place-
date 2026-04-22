@@ -45,13 +45,19 @@ Quick health check for the API.
 
 Analyze an image and get a professional damage assessment with cost estimate.
 
-**What it does:** Takes an image and a task description, sends it to Groq's Llama 4 vision model, and returns a structured assessment including damage analysis, recommendations, and estimated cost for professional repair.
+**Authentication:** Requires `X-Service-Token: <VDA_SERVICE_API_KEY>` when `VDA_REQUIRE_AUTH=true` (default). If auth is disabled for local testing (`VDA_REQUIRE_AUTH=false`), this header is not required.
+
+**What it does:** Takes an image and a task description, sends it to Google's Gemma 4 multimodal model (Gemini API / AI Studio), and returns a structured assessment including damage analysis, recommendations, and estimated cost for professional repair.
 
 **How it works:**
 1. Validates the image file (JPEG/PNG, max 10MB)
-2. Encodes the image as base64
-3. Sends both the image and task to the AI model with a professional assessment prompt
-4. Parses the AI response and returns structured data
+2. Verifies actual file content using magic-byte MIME detection (anti-spoofing check)
+3. Pre-processes the image: applies EXIF orientation, flattens transparency, and
+   downscales so the longest edge is at most 1024 px (Lanczos resampling, JPEG
+   quality 90). This preserves damage cues while cutting bandwidth and token cost.
+4. Sends the re-encoded image and the user task to Gemma 4 via the Gemini API
+   with a professional assessment prompt.
+5. Parses and validates the AI response structure before returning it.
 
 **Input (multipart/form-data):**
 
@@ -63,6 +69,7 @@ Analyze an image and get a professional damage assessment with cost estimate.
 **Example:**
 ```bash
 curl -X POST "http://localhost:8000/assess" \
+  -H "X-Service-Token: your_shared_secret" \
   -F "image=@wall_damage.jpg" \
   -F "task=Can I repair this water damage myself or do I need a professional?"
 ```
@@ -82,27 +89,61 @@ curl -X POST "http://localhost:8000/assess" \
 Invalid file type (400):
 ```json
 {
-  "detail": "Invalid file type. Allowed types: JPEG, PNG. Got: image/gif"
+  "detail": "Invalid file type 'image/gif'. Allowed: JPEG, PNG."
 }
 ```
 
 File too large (400):
 ```json
 {
-  "detail": "File size exceeds maximum allowed (10MB). Got: 15.50MB"
+  "detail": "File size 15.50 MB exceeds the 10 MB limit."
 }
 ```
 
-Missing API key (500):
+Unauthorized (401):
 ```json
 {
-  "detail": "GROQ_API_KEY not set in environment or .env"
+  "detail": "Unauthorized"
+}
+```
+
+Service auth misconfiguration (503):
+```json
+{
+  "detail": "Service is not configured for authenticated access."
+}
+```
+
+Task validation error (422):
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "task"],
+      "msg": "String should have at most 500 characters",
+      "type": "string_too_long"
+    }
+  ]
+}
+```
+
+Upstream model/service temporarily unavailable (503):
+```json
+{
+  "detail": "Service temporarily unavailable. Please try again later."
 }
 ```
 
 Invalid response from AI (500):
 ```json
 {
-  "detail": "Failed to parse assessment response. Model did not return valid JSON."
+  "detail": "Model did not return valid JSON. Please try again."
+}
+```
+
+Incomplete model response (500):
+```json
+{
+  "detail": "Incomplete model response. Missing fields: {'confidence_score'}"
 }
 ```

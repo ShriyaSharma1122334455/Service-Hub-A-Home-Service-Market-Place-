@@ -1,0 +1,65 @@
+"""
+Shared fixtures for VDA service tests.
+
+Env vars are set here (before any app module is imported) so that
+module-level constants in main.py (_SERVICE_TOKEN, _REQUIRE_SERVICE_AUTH)
+are initialised with test values.
+"""
+
+import io
+import os
+
+# Must be set before `main` is imported so module-level constants are correct.
+# Use explicit assignment (not setdefault) so CI-provided env vars cannot
+# change test behavior and cause non-deterministic auth/rate-limit failures.
+os.environ["VDA_SERVICE_API_KEY"] = "test-token-abc"
+os.environ["VDA_REQUIRE_AUTH"] = "true"
+os.environ["GEMINI_API_KEY"] = "fake-gemini-key-for-tests"
+os.environ["VDA_ALLOWED_ORIGINS"] = ""
+# Generous rate limit so the normal test suite never trips 429. The dedicated
+# rate-limit test reloads main with a tighter limit.
+os.environ["VDA_ASSESS_RATE_LIMIT"] = "10000/minute"
+os.environ["VDA_DEFAULT_RATE_LIMIT"] = "10000/minute"
+
+import pytest
+from PIL import Image
+from starlette.testclient import TestClient
+
+from main import app
+
+TEST_TOKEN = "test-token-abc"
+
+
+def make_jpeg_bytes() -> bytes:
+    """Return the bytes of a minimal 1×1 pixel JPEG image."""
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color=(100, 149, 237)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def make_png_bytes() -> bytes:
+    """Return the bytes of a minimal 1×1 pixel PNG image."""
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color=(100, 149, 237)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@pytest.fixture(scope="session")
+def client():
+    """Synchronous TestClient wrapping the FastAPI app (session-scoped — fast)."""
+    return TestClient(app)
+
+
+@pytest.fixture(scope="session")
+def auth_headers():
+    return {"X-Service-Token": TEST_TOKEN}
+
+
+@pytest.fixture(scope="session")
+def jpeg_bytes():
+    return make_jpeg_bytes()
+
+
+@pytest.fixture(scope="session")
+def png_bytes():
+    return make_png_bytes()

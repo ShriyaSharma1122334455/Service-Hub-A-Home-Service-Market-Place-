@@ -4,6 +4,7 @@ import {
   type VerificationStatusType,
 } from "../components/VerificationBadge";
 import { ArrowLeft, Star, DollarSign, Clock, ExternalLink } from "lucide-react";
+import type { User } from "../../types";
 import { BookingModal } from "../components/BookingModal";
 
 interface ServiceDetail {
@@ -61,10 +62,13 @@ function normalizeProviderCard(raw: Record<string, unknown>): ProviderCard {
 interface ServiceProvidersProps {
   serviceId: string;
   onNavigate: (path: string) => void;
-  user?: { role?: string } | null;
+  user?: User | null;
   /** Supabase access token — required to open BookingModal */
   token?: string;
 }
+
+/** Only the top matches are listed; the API may return more. */
+const MAX_PROVIDERS_SHOWN = 6;
 
 const CATEGORY_ICONS: Record<string, string> = {
   cleaning: "✨",
@@ -105,19 +109,22 @@ const ProviderSkeleton: React.FC = () => (
 export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   serviceId,
   onNavigate,
-  user,
+  user = null,
   token,
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);
+  const [totalProviderCount, setTotalProviderCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Booking modal state
   const [bookingTarget, setBookingTarget] = useState<{
     providerId: string;
     providerName: string;
   } | null>(null);
+
+  const isCustomer =
+    !!user && String(user.role).toLowerCase() === "customer";
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
@@ -142,13 +149,18 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
           setError(true);
         }
         if (provData.success && Array.isArray(provData.data)) {
-          setProviders(
-            provData.data.map((row: Record<string, unknown>) =>
-              normalizeProviderCard(row),
-            ),
+          const all = provData.data.map((row: Record<string, unknown>) =>
+            normalizeProviderCard(row),
           );
+          setTotalProviderCount(all.length);
+          const ranked = [...all].sort((a, b) => {
+            if (b.ratingAvg !== a.ratingAvg) return b.ratingAvg - a.ratingAvg;
+            return b.ratingCount - a.ratingCount;
+          });
+          setProviders(ranked.slice(0, MAX_PROVIDERS_SHOWN));
         } else {
           setProviders([]);
+          setTotalProviderCount(0);
         }
       } catch {
         if (!signal.aborted) setError(true);
@@ -200,8 +212,21 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
               </h1>
             </div>
             <p className="text-slate-500 font-medium">
-              {providers.length} provider{providers.length !== 1 ? "s" : ""} available
-              {service && (
+              {totalProviderCount > 0 ? (
+                <>
+                  Showing {providers.length} of {totalProviderCount} provider
+                  {totalProviderCount !== 1 ? "s" : ""}
+                  {totalProviderCount > MAX_PROVIDERS_SHOWN && (
+                    <span className="text-slate-400">
+                      {" "}
+                      (top-rated matches)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>No providers available</>
+              )}
+              {service && totalProviderCount > 0 && (
                 <span className="ml-2 text-slate-400">
                   · From ${service.basePrice} · {formatDuration(service.durationMinutes)}
                 </span>
@@ -303,6 +328,7 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
               {/* Action buttons */}
               <div className="flex gap-2 mt-auto">
                 <button
+                  type="button"
                   onClick={() => onNavigate(`/profile/${provider.id}?type=provider`)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-50 text-slate-600 font-semibold text-sm border border-slate-100 hover:bg-slate-100 transition-colors"
                 >
@@ -310,8 +336,17 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                   View Profile
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     if (!user) {
+                      onNavigate("/login");
+                      return;
+                    }
+                    if (!isCustomer) {
+                      onNavigate("/login");
+                      return;
+                    }
+                    if (!token) {
                       onNavigate("/login");
                       return;
                     }
@@ -320,9 +355,13 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
                       providerName: provider.businessName,
                     });
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-teal-600 text-white font-bold text-sm hover:bg-teal-700 transition-colors shadow-md shadow-teal-100 active:scale-[0.98]"
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors shadow-md active:scale-[0.98] ${
+                    isCustomer && token
+                      ? "bg-teal-600 text-white hover:bg-teal-700 shadow-teal-100"
+                      : "bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200 shadow-none"
+                  }`}
                 >
-                  Book
+                  {isCustomer ? "Book" : "Sign in to book"}
                 </button>
               </div>
             </div>
@@ -330,7 +369,6 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
         </div>
       )}
 
-      {/* Booking Modal */}
       {bookingTarget && service && token && (
         <BookingModal
           providerId={bookingTarget.providerId}

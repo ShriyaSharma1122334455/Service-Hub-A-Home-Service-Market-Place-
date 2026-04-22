@@ -16,9 +16,13 @@ FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# Install system dependencies needed for compilation
-RUN apt-get update && apt-get install -y \
-    gcc \
+# System dependencies:
+#   - libmagic1: required at runtime by python-magic for magic-byte MIME
+#     detection. Without it, `import magic` fails at startup and the
+#     anti-spoofing check is silently lost.
+#   - curl: used by the container HEALTHCHECK.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -44,8 +48,7 @@ CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000
 FROM base AS production
 
 # Copy only the application files needed to run — no tests, no dev files
-COPY main.py .
-COPY . .
+COPY main.py gemini_vision.py ./
 
 # Create non-root user for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser

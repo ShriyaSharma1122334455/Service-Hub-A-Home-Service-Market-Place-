@@ -55,4 +55,52 @@ async function fetchApi<T>(
   }
 }
 
+/**
+ * POST multipart/form-data (e.g. visual assessment). Does not set Content-Type
+ * so the browser sets the boundary automatically.
+ */
+export async function postFormData<T>(endpoint: string, formData: FormData) {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const headers: HeadersInit = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const body = data as { error?: string; message?: string };
+      return {
+        success: false as const,
+        error:
+          body.error ||
+          body.message ||
+          `HTTP error ${response.status}`,
+      };
+    }
+
+    const payload = data as { success?: boolean; data?: T };
+    return {
+      success: true as const,
+      data: (payload.data ?? data) as T,
+    };
+  } catch (error) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Network error",
+    };
+  }
+}
+
 export default fetchApi;
