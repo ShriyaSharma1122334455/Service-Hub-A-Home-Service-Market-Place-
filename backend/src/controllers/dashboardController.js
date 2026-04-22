@@ -2,10 +2,50 @@ import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 const BREAKDOWN_LIMIT = 20;
+const CALENDAR_ALLOWED_STATUSES = new Set(['pending', 'confirmed', 'completed', 'cancelled']);
 
 function toDayKey(iso) {
   if (!iso) return null;
   return String(iso).slice(0, 10);
+}
+
+function toTimeKey(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(11, 16);
+}
+
+function safeTimezone(timezone) {
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function getDatePartsInTimezone(iso, timezone) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  if (!lookup.year || !lookup.month || !lookup.day || !lookup.hour || !lookup.minute) {
+    return null;
+  }
+  return {
+    dateKey: `${lookup.year}-${lookup.month}-${lookup.day}`,
+    timeKey: `${lookup.hour}:${lookup.minute}`,
+  };
 }
 
 function mapBookingRow(b) {
@@ -13,18 +53,38 @@ function mapBookingRow(b) {
     id: b.id,
     status: b.status,
     scheduled_at: b.scheduled_at,
+    scheduled_date: toDayKey(b.scheduled_at),
+    scheduled_time: toTimeKey(b.scheduled_at),
     total_price: Number(b.total_price) || 0,
     service_name: b.service?.name ?? null,
     customer_name: b.customer?.full_name ?? null,
   };
 }
 
+function normalizeStatuses(input) {
+  if (!input) return ['confirmed'];
+  const statuses = String(input)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => CALENDAR_ALLOWED_STATUSES.has(s));
+  return statuses.length > 0 ? statuses : ['confirmed'];
+}
+
 /**
  * GET /api/dashboard/provider
- * Aggregated stats, calendar-friendly booking groups, and pending/confirmed lists.
+ * Aggregated stats, confirmed-booking calendar groups, and pending/confirmed lists.
  */
 export const getProviderDashboard = async (req, res) => {
   try {
+    const startDate = req.query.start_date ? String(req.query.start_date) : null;
+    const endDate = req.query.end_date ? String(req.query.end_date) : null;
+    const calendarStatuses = normalizeStatuses(req.query.statuses);
+    const providerTimezone = req.query.timezone
+      ? String(req.query.timezone)
+      : 'UTC';
+    const resolvedTimezone = safeTimezone(providerTimezone);
+    const hasCalendarRange = Boolean(startDate && endDate);
+
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) return profileNotFoundResponse(res);
 
@@ -100,18 +160,32 @@ export const getProviderDashboard = async (req, res) => {
       .map(mapBookingRow)
       .slice(0, BREAKDOWN_LIMIT);
 
+    let calendarBookings = bookings;
+    if (hasCalendarRange) {
+      calendarBookings = bookings.filter((b) => {
+        if (!calendarStatuses.includes(b.status)) return false;
+        const dateParts = getDatePartsInTimezone(b.scheduled_at, resolvedTimezone);
+        if (!dateParts) return false;
+        return dateParts.dateKey >= startDate && dateParts.dateKey <= endDate;
+      });
+    }
+
     const dayMap = new Map();
-    for (const b of bookings) {
-      if (b.status === 'cancelled') continue;
-      const day = toDayKey(b.scheduled_at);
-      if (!day) continue;
+    for (const b of calendarBookings) {
+      if (!calendarStatuses.includes(b.status)) continue;
+      const dateParts = getDatePartsInTimezone(b.scheduled_at, resolvedTimezone);
+      if (!dateParts) continue;
+      const day = dateParts.dateKey;
       if (!dayMap.has(day)) dayMap.set(day, []);
       dayMap.get(day).push({
         id: b.id,
         status: b.status,
         scheduled_at: b.scheduled_at,
+        scheduled_date: day,
+        scheduled_time: dateParts.timeKey,
         total_price: Number(b.total_price) || 0,
         service_name: b.service?.name ?? null,
+        customer_name: b.customer?.full_name ?? null,
       });
     }
 
@@ -145,6 +219,13 @@ export const getProviderDashboard = async (req, res) => {
           confirmed: confirmedList,
         },
         calendar,
+        calendar_meta: {
+          start_date: startDate,
+          end_date: endDate,
+          statuses: calendarStatuses,
+          provider_timezone: resolvedTimezone,
+          last_refreshed_at: new Date().toISOString(),
+        },
       },
     });
   } catch (err) {
@@ -152,5 +233,4 @@ export const getProviderDashboard = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to load provider dashboard' });
   }
 };
-
 export default { getProviderDashboard };

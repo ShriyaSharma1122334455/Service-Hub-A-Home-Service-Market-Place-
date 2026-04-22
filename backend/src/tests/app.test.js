@@ -74,6 +74,23 @@ function mockProviderAuth() {
   });
 }
 
+function mockCustomerAuth() {
+  setSupabaseClient({
+    auth: {
+      getUser: jest.fn().mockResolvedValue({
+        data: {
+          user: {
+            id: 'auth-customer-1',
+            email: 'customer@test.com',
+            user_metadata: { role: 'customer' },
+          },
+        },
+        error: null,
+      }),
+    },
+  });
+}
+
 const mockFrom = jest.fn(() => createChainProxy());
 
 // ✅ FIX: use signUp (not admin.createUser) — matches what authController calls
@@ -351,7 +368,7 @@ describe('Provider dashboard – GET /api/dashboard/provider', () => {
     expect(supabaseAwaitQueue).toHaveLength(0);
   });
 
-  it('aggregates stats, breakdown lists, and calendar (excludes cancelled from calendar)', async () => {
+  it('aggregates stats, breakdown lists, and calendar (includes confirmed only)', async () => {
     mockProviderAuth();
     const bookings = [
       {
@@ -415,6 +432,8 @@ describe('Provider dashboard – GET /api/dashboard/provider', () => {
     expect(res.body.data.breakdown.pending[0]).toMatchObject({
       id: 'b1',
       status: 'pending',
+      scheduled_date: '2026-05-10',
+      scheduled_time: '14:00',
       service_name: 'Cleaning',
       customer_name: 'Alex',
       total_price: 100,
@@ -428,11 +447,134 @@ describe('Provider dashboard – GET /api/dashboard/provider', () => {
     });
 
     const cal = res.body.data.calendar;
-    expect(cal).toHaveLength(2);
+    expect(cal).toHaveLength(1);
     const byDate = Object.fromEntries(cal.map((d) => [d.date, d.items]));
-    expect(byDate['2026-04-01'].map((i) => i.id)).toEqual(['b3']);
-    expect(byDate['2026-05-10'].map((i) => i.id).sort()).toEqual(['b1', 'b2']);
+    expect(byDate['2026-05-10'].map((i) => i.id).sort()).toEqual(['b2']);
+    expect(byDate['2026-05-10'][0]).toMatchObject({
+      customer_name: 'Blake',
+      scheduled_date: '2026-05-10',
+      scheduled_time: '16:00',
+    });
+    expect(cal.some((d) => d.date === '2026-04-01')).toBe(false);
     expect(cal.some((d) => d.date === '2026-05-11')).toBe(false);
+    expect(supabaseAwaitQueue).toHaveLength(0);
+  });
+
+  it('returns date/time fields in both pending and confirmed breakdown rows', async () => {
+    mockProviderAuth();
+    const bookings = [
+      {
+        id: 'p1',
+        status: 'pending',
+        scheduled_at: '2026-06-15T09:30:00.000Z',
+        total_price: 120,
+        service: { name: 'Deep Clean' },
+        customer: { full_name: 'Rory' },
+      },
+      {
+        id: 'c1',
+        status: 'confirmed',
+        scheduled_at: '2026-06-16T13:45:00.000Z',
+        total_price: 95,
+        service: { name: 'Pipe Repair' },
+        customer: { full_name: 'Jordan' },
+      },
+    ];
+
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      {
+        data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.8 },
+        error: null,
+      },
+      { data: bookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.breakdown.pending[0]).toMatchObject({
+      id: 'p1',
+      scheduled_date: '2026-06-15',
+      scheduled_time: '09:30',
+      customer_name: 'Rory',
+      service_name: 'Deep Clean',
+    });
+    expect(res.body.data.breakdown.confirmed[0]).toMatchObject({
+      id: 'c1',
+      scheduled_date: '2026-06-16',
+      scheduled_time: '13:45',
+      customer_name: 'Jordan',
+      service_name: 'Pipe Repair',
+    });
+    expect(supabaseAwaitQueue).toHaveLength(0);
+  });
+
+  it('ignores pending/completed/cancelled bookings in calendar and keeps confirmed', async () => {
+    mockProviderAuth();
+    const bookings = [
+      {
+        id: 'p1',
+        status: 'pending',
+        scheduled_at: '2026-07-01T09:00:00.000Z',
+        total_price: 30,
+        service: { name: 'Pending Job' },
+        customer: { full_name: 'A' },
+      },
+      {
+        id: 'cm1',
+        status: 'completed',
+        scheduled_at: '2026-07-01T10:00:00.000Z',
+        total_price: 50,
+        service: { name: 'Completed Job' },
+        customer: { full_name: 'B' },
+      },
+      {
+        id: 'x1',
+        status: 'cancelled',
+        scheduled_at: '2026-07-01T11:00:00.000Z',
+        total_price: 60,
+        service: { name: 'Cancelled Job' },
+        customer: { full_name: 'C' },
+      },
+      {
+        id: 'c1',
+        status: 'confirmed',
+        scheduled_at: '2026-07-01T12:15:00.000Z',
+        total_price: 70,
+        service: { name: 'Confirmed Job' },
+        customer: { full_name: 'D' },
+      },
+    ];
+
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      {
+        data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.8 },
+        error: null,
+      },
+      { data: bookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.calendar).toHaveLength(1);
+    expect(res.body.data.calendar[0]).toMatchObject({
+      date: '2026-07-01',
+    });
+    expect(res.body.data.calendar[0].items).toHaveLength(1);
+    expect(res.body.data.calendar[0].items[0]).toMatchObject({
+      id: 'c1',
+      status: 'confirmed',
+      customer_name: 'D',
+      scheduled_date: '2026-07-01',
+      scheduled_time: '12:15',
+    });
     expect(supabaseAwaitQueue).toHaveLength(0);
   });
 
@@ -446,6 +588,240 @@ describe('Provider dashboard – GET /api/dashboard/provider', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body.error).toMatch(/only available for provider/i);
+  });
+
+  it('applies calendar range + statuses filters and returns calendar metadata', async () => {
+    mockProviderAuth();
+    const allBookings = [
+      {
+        id: 'in-range-confirmed',
+        status: 'confirmed',
+        scheduled_at: '2026-08-05T12:00:00.000Z',
+        total_price: 90,
+        service: { name: 'Plumbing' },
+        customer: { full_name: 'A' },
+      },
+      {
+        id: 'out-range-confirmed',
+        status: 'confirmed',
+        scheduled_at: '2026-09-01T12:00:00.000Z',
+        total_price: 120,
+        service: { name: 'Electrical' },
+        customer: { full_name: 'B' },
+      },
+      {
+        id: 'in-range-pending',
+        status: 'pending',
+        scheduled_at: '2026-08-06T09:00:00.000Z',
+        total_price: 60,
+        service: { name: 'Cleaning' },
+        customer: { full_name: 'C' },
+      },
+    ];
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      { data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.9 }, error: null },
+      { data: allBookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider?start_date=2026-08-01&end_date=2026-08-31&statuses=pending&timezone=America/New_York')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.calendar_meta).toMatchObject({
+      start_date: '2026-08-01',
+      end_date: '2026-08-31',
+      statuses: ['pending'],
+      provider_timezone: 'America/New_York',
+    });
+    expect(res.body.data.calendar).toHaveLength(1);
+    expect(res.body.data.calendar[0]).toMatchObject({
+      date: '2026-08-06',
+    });
+    expect(res.body.data.calendar[0].items).toHaveLength(1);
+    expect(res.body.data.calendar[0].items[0]).toMatchObject({
+      id: 'in-range-pending',
+      status: 'pending',
+      customer_name: 'C',
+      scheduled_date: '2026-08-06',
+      scheduled_time: '05:00',
+    });
+  });
+
+  it('falls back to confirmed when statuses query contains only unsupported values', async () => {
+    mockProviderAuth();
+    const allBookings = [
+      {
+        id: 'confirmed-1',
+        status: 'confirmed',
+        scheduled_at: '2026-08-05T12:00:00.000Z',
+        total_price: 90,
+        service: { name: 'Plumbing' },
+        customer: { full_name: 'A' },
+      },
+      {
+        id: 'pending-1',
+        status: 'pending',
+        scheduled_at: '2026-08-06T09:00:00.000Z',
+        total_price: 60,
+        service: { name: 'Cleaning' },
+        customer: { full_name: 'C' },
+      },
+    ];
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      { data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.9 }, error: null },
+      { data: allBookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider?start_date=2026-08-01&end_date=2026-08-31&statuses=foo,bar')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.calendar_meta.statuses).toEqual(['confirmed']);
+    expect(res.body.data.calendar).toHaveLength(1);
+    expect(res.body.data.calendar[0].items).toHaveLength(1);
+    expect(res.body.data.calendar[0].items[0].id).toBe('confirmed-1');
+  });
+
+  it('groups calendar days and times using requested timezone', async () => {
+    mockProviderAuth();
+    const bookings = [
+      {
+        id: 'tz-1',
+        status: 'confirmed',
+        scheduled_at: '2026-08-06T00:30:00.000Z',
+        total_price: 70,
+        service: { name: 'Confirmed Job' },
+        customer: { full_name: 'D' },
+      },
+    ];
+
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      { data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.8 }, error: null },
+      { data: bookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider?start_date=2026-08-01&end_date=2026-08-31&statuses=confirmed&timezone=America/New_York')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.calendar_meta.provider_timezone).toBe('America/New_York');
+    expect(res.body.data.calendar).toHaveLength(1);
+    expect(res.body.data.calendar[0]).toMatchObject({ date: '2026-08-05' });
+    expect(res.body.data.calendar[0].items[0]).toMatchObject({
+      id: 'tz-1',
+      scheduled_date: '2026-08-05',
+      scheduled_time: '20:30',
+    });
+  });
+
+  it('applies date range using provider timezone boundaries (not UTC day boundaries)', async () => {
+    mockProviderAuth();
+    const bookings = [
+      {
+        id: 'edge-in-local-day',
+        status: 'confirmed',
+        scheduled_at: '2026-08-06T02:30:00.000Z',
+        total_price: 70,
+        service: { name: 'Confirmed Job' },
+        customer: { full_name: 'D' },
+      },
+    ];
+
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-1', role: 'provider' }, error: null },
+      { data: { id: 'prov-1', business_name: 'Biz', rating_avg: 4.8 }, error: null },
+      { data: bookings, error: null },
+    );
+
+    const res = await request(app)
+      .get('/api/dashboard/provider?start_date=2026-08-05&end_date=2026-08-05&statuses=confirmed&timezone=America/New_York')
+      .set('Authorization', 'Bearer fake-jwt');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.calendar).toHaveLength(1);
+    expect(res.body.data.calendar[0]).toMatchObject({ date: '2026-08-05' });
+    expect(res.body.data.calendar[0].items[0]).toMatchObject({
+      id: 'edge-in-local-day',
+      scheduled_date: '2026-08-05',
+      scheduled_time: '22:30',
+    });
+  });
+});
+
+describe('Bookings – POST /api/bookings', () => {
+  beforeEach(() => {
+    supabaseAwaitQueue = [];
+    mockFrom.mockImplementation(() => createQueuedChainProxy());
+  });
+
+  afterEach(() => {
+    resetSupabaseClient();
+    mockFrom.mockImplementation(() => createChainProxy());
+  });
+
+  it('returns 409 when the requested slot is already booked', async () => {
+    mockCustomerAuth();
+    supabaseAwaitQueue.push(
+      { data: [{ id: 'existing-booking' }], error: null },
+    );
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', 'Bearer fake-jwt')
+      .send({
+        provider_id: 'prov-1',
+        service_id: 'svc-1',
+        scheduled_at: '2026-08-10T10:00:00.000Z',
+      });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('SLOT_UNAVAILABLE');
+  });
+
+  it('creates booking successfully when slot is free', async () => {
+    mockCustomerAuth();
+    supabaseAwaitQueue.push(
+      { data: [], error: null },
+      { data: { verification_status: 'verified' }, error: null },
+      { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
+      { data: { base_price: 125 }, error: null },
+      {
+        data: {
+          id: 'booking-1',
+          provider_id: 'prov-1',
+          service_id: 'svc-1',
+          scheduled_at: '2026-08-10T11:00:00.000Z',
+          total_price: 125,
+          status: 'pending',
+        },
+        error: null,
+      },
+    );
+
+    const res = await request(app)
+      .post('/api/bookings')
+      .set('Authorization', 'Bearer fake-jwt')
+      .send({
+        provider_id: 'prov-1',
+        service_id: 'svc-1',
+        scheduled_at: '2026-08-10T11:00:00.000Z',
+      });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toMatchObject({
+      id: 'booking-1',
+      status: 'pending',
+      total_price: 125,
+    });
   });
 });
 
