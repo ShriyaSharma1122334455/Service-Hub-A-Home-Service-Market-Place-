@@ -29,6 +29,23 @@ interface Review {
   reviewer: { full_name: string; avatar_url: string | null } | null;
 }
 
+interface ProviderService {
+  id: string;
+  name: string;
+  description: string;
+  base_price: number;
+  duration_minutes: number;
+  sub_category?: string;
+}
+
+interface AvailabilitySlot {
+  id: string;
+  date: string;       // "2026-04-25"
+  start_time: string; // "09:00"
+  end_time: string;   // "10:00"
+  is_booked: boolean;
+}
+
 interface CompletedBooking {
   id: string;
   created_at: string;
@@ -69,6 +86,10 @@ export const Profile: React.FC<ProfileProps> = ({
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
+  const [providerServicesLoading, setProviderServicesLoading] = useState(false);
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,6 +247,71 @@ export const Profile: React.FC<ProfileProps> = ({
       cancelled = true;
     };
   }, [profile, currentUser, profileId]);
+
+  // Fetch provider's services and upcoming availability for public profile pages
+  useEffect(() => {
+    if (!profile || profile.type !== "provider" || profileId === "me") return;
+
+    const providerId = profile.data.id;
+    if (!providerId) return;
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+    let cancelled = false;
+
+    const loadServices = async () => {
+      setProviderServicesLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/providers/${providerId}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.success && data.data) {
+          const raw: unknown[] = Array.isArray(data.data.services) ? data.data.services : [];
+          setProviderServices(
+            raw.map((s) => {
+              const svc = s as Record<string, unknown>;
+              return {
+                id: String(svc.id ?? svc._id ?? ""),
+                name: String(svc.name ?? ""),
+                description: String(svc.description ?? ""),
+                base_price: Number(svc.base_price ?? 0),
+                duration_minutes: Number(svc.duration_minutes ?? 0),
+                sub_category: svc.sub_category ? String(svc.sub_category) : undefined,
+              };
+            }),
+          );
+        }
+      } catch {
+        // non-critical
+      } finally {
+        if (!cancelled) setProviderServicesLoading(false);
+      }
+    };
+
+    const loadAvailability = async () => {
+      setAvailabilityLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/availability/${providerId}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.success && Array.isArray(data.data)) {
+          const today = new Date().toISOString().split("T")[0];
+          setAvailabilitySlots(
+            (data.data as AvailabilitySlot[]).filter(
+              (slot) => !slot.is_booked && slot.date >= today,
+            ),
+          );
+        }
+      } catch {
+        // non-critical
+      } finally {
+        if (!cancelled) setAvailabilityLoading(false);
+      }
+    };
+
+    loadServices();
+    loadAvailability();
+    return () => { cancelled = true; };
+  }, [profile, profileId]);
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -761,6 +847,98 @@ export const Profile: React.FC<ProfileProps> = ({
                         )}
                       </div>
                     )}
+                </div>
+              )}
+
+              {/* Services Offered — public provider profiles only */}
+              {isProvider && profileId !== "me" && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-lg">🛠️</span>
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+                      Services Offered
+                    </h2>
+                  </div>
+
+                  {providerServicesLoading && (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="h-6 w-6 text-teal-500 animate-spin" />
+                    </div>
+                  )}
+
+                  {!providerServicesLoading && providerServices.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50 rounded-2xl">
+                      <p className="text-slate-500 font-medium text-sm">No services listed yet</p>
+                    </div>
+                  )}
+
+                  {!providerServicesLoading && providerServices.length > 0 && (
+                    <div className="space-y-3">
+                      {providerServices.map((svc) => (
+                        <div key={svc.id} className="flex items-start justify-between gap-4 p-4 bg-slate-50 rounded-2xl">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-800 text-sm">{svc.name}</p>
+                            {svc.sub_category && (
+                              <p className="text-xs text-teal-600 font-medium mt-0.5">{svc.sub_category}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{svc.description}</p>
+                          </div>
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-sm font-bold text-slate-900">From ${svc.base_price}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {Math.floor(svc.duration_minutes / 60) > 0 ? `${Math.floor(svc.duration_minutes / 60)}h ` : ""}
+                              {svc.duration_minutes % 60 > 0 ? `${svc.duration_minutes % 60}m` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Availability — public provider profiles only */}
+              {isProvider && profileId !== "me" && (
+                <div className="pt-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-lg">📅</span>
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+                      Availability
+                    </h2>
+                  </div>
+
+                  {availabilityLoading && (
+                    <div className="flex justify-center py-6">
+                      <Loader2 className="h-6 w-6 text-teal-500 animate-spin" />
+                    </div>
+                  )}
+
+                  {!availabilityLoading && availabilitySlots.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50 rounded-2xl">
+                      <p className="text-slate-500 font-medium text-sm">No upcoming availability</p>
+                      <p className="text-slate-400 text-xs mt-1">This provider hasn't set future slots yet.</p>
+                    </div>
+                  )}
+
+                  {!availabilityLoading && availabilitySlots.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {availabilitySlots.slice(0, 12).map((slot) => (
+                        <div key={slot.id} className="flex flex-col items-center px-3 py-2 bg-teal-50 border border-teal-100 rounded-xl text-center">
+                          <span className="text-xs font-bold text-teal-800">
+                            {new Date(slot.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <span className="text-xs text-teal-600 font-medium">
+                            {slot.start_time} – {slot.end_time}
+                          </span>
+                        </div>
+                      ))}
+                      {availabilitySlots.length > 12 && (
+                        <div className="flex items-center px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl">
+                          <span className="text-xs text-slate-500 font-medium">+{availabilitySlots.length - 12} more</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
