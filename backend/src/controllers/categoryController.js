@@ -13,7 +13,7 @@ export const getAllCategories = async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    res.json(categories ?? []);
+    res.json({ success: true, data: categories ?? [] });
 
   } catch (err) {
     console.error('Error fetching categories:', err);
