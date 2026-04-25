@@ -53,12 +53,29 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <div className="hidden md:flex items-center space-x-1">
-              <span
-                onClick={() => onNavigate(getHomePath())}
-                className={navItemClass(getHomePath())}
-              >
-                Home
-              </span>
+              {user?.role === UserRole.CUSTOMER ? (
+                <>
+                  <span
+                    onClick={() => onNavigate("/dashboard")}
+                    className={navItemClass("/dashboard")}
+                  >
+                    Dashboard
+                  </span>
+                  <span
+                    onClick={() => onNavigate("/")}
+                    className={navItemClass("/")}
+                  >
+                    Browse Services
+                  </span>
+                </>
+              ) : (
+                <span
+                  onClick={() => onNavigate(getHomePath())}
+                  className={navItemClass(getHomePath())}
+                >
+                  Home
+                </span>
+              )}
               <span
                 onClick={() => onNavigate("/faq")}
                 className={navItemClass("/faq")}
@@ -133,35 +150,27 @@ export const Navbar: React.FC<NavbarProps> = ({
       {isOpen && (
         <div className="md:hidden mt-2 glass-panel rounded-3xl overflow-hidden p-2 absolute left-4 right-4 shadow-xl z-50">
           <div className="space-y-1">
-            <div
-              className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={() => {
-                onNavigate(getHomePath());
-                setIsOpen(false);
-              }}
-            >
-              Home
-            </div>
-            {user?.role === UserRole.PROVIDER && (
+            {user?.role === UserRole.CUSTOMER ? (
+              <>
+                <div
+                  className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => { onNavigate("/dashboard"); setIsOpen(false); }}
+                >
+                  Dashboard
+                </div>
+                <div
+                  className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => { onNavigate("/"); setIsOpen(false); }}
+                >
+                  Browse Services
+                </div>
+              </>
+            ) : (
               <div
                 className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  onNavigate("/users");
-                  setIsOpen(false);
-                }}
+                onClick={() => { onNavigate(getHomePath()); setIsOpen(false); }}
               >
-                Users
-              </div>
-            )}
-            {user?.role === UserRole.CUSTOMER && (
-              <div
-                className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  onNavigate("/providers");
-                  setIsOpen(false);
-                }}
-              >
-                Providers
+                Home
               </div>
             )}
             {user && (

@@ -8,6 +8,7 @@ import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { Profile } from "./pages/Profile";
 import { ProviderDashboard } from "./pages/ProviderDashboard";
+import { CustomerDashboard } from "./pages/CustomerDashboard";
 import { FAQ } from "./pages/FAQ";
 import { VisualDamageAssessment } from "./pages/VisualDamageAssessment";
 import { ServiceProviders } from "./pages/ServiceProviders";
@@ -262,11 +263,9 @@ const App = () => {
         accessToken,
       });
 
-      if (userData.role === UserRole.PROVIDER) {
-        navigate("/dashboard");
-      } else {
-        navigate("/");
-      }
+      // All authenticated users land on /dashboard; the route renders the
+      // role-appropriate view (CustomerDashboard or ProviderDashboard).
+      navigate("/dashboard");
 
       return { success: true };
     } catch (err) {
@@ -389,6 +388,17 @@ const App = () => {
           />
         );
       case "/dashboard":
+        // Route to the role-appropriate dashboard. ProviderDashboard also
+        // performs its own role check internally as a safety net.
+        if (user && String(user.role).toLowerCase() === "customer") {
+          return (
+            <CustomerDashboard
+              user={user}
+              token={getToken()}
+              onNavigate={navigate}
+            />
+          );
+        }
         return (
           <ProviderDashboard
             user={user}

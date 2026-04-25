@@ -5,23 +5,19 @@ export const getAllCategories = async (req, res) => {
   try {
     const { data: categories, error } = await supabase
       .from('categories')
-      .select('*')
+      .select('id, name, slug')
       .eq('is_active', true)
       .order('name', { ascending: true });
 
     if (error) {
-      return res.status(400).json({ success: false, error: error.message });
+      return res.status(500).json({ error: error.message });
     }
 
-    res.json({
-      success: true,
-      count: categories.length,
-      data: categories
-    });
+    res.json(categories ?? []);
 
   } catch (err) {
     console.error('Error fetching categories:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch categories' });
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 };
 

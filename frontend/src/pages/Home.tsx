@@ -40,7 +40,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
     fetch(`${API_BASE}/api/categories`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) setCategories(data.data);
+        if (Array.isArray(data)) setCategories(data);
       })
       .catch(() => {
         // Silently fail — categories still display, just no modal functionality
