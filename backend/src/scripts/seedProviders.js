@@ -1,22 +1,6 @@
 // backend/src/scripts/seedProviders.js
 // NEW FILE
 
-/**
- * Seed script — test providers, provider_services links, availability slots.
- *
- * Run: node --experimental-vm-modules src/scripts/seedProviders.js
- *
- * What it creates:
- *   - 3 Supabase Auth users (provider role)
- *   - 3 rows in public.users
- *   - 3 rows in public.providers
- *   - provider_categories links
- *   - provider_services links (custom price + description per provider)
- *   - availability_slots for next 7 days, 4 slots/day per provider
- *
- * Safe to run multiple times — uses upsert where possible.
- */
-
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -61,7 +45,7 @@ const TEST_PROVIDERS = [
     email: 'clara.clean@servicehub-test.com',
     password: 'TestPass123!',
     fullName: 'Clara Nguyen',
-    businessName: "'Clara's Cleaning Co.'",
+    businessName: "Clara's Cleaning Co.",
     description: 'Eco-friendly deep cleaning and regular maintenance for homes and apartments. Flexible scheduling, pet-safe products.',
     categorySlug: 'cleaning',
     verificationStatus: 'pending',
@@ -129,8 +113,8 @@ async function main() {
 
   const svcByName = Object.fromEntries(allServices.map((s) => [s.name, s.id]));
 
-  // 3. Create each provider
-  for (const def of TEST_PROVIDERS) {
+  await Promise.all(
+  TEST_PROVIDERS.map(async (def) => {
     console.log(`\n👤 Processing: ${def.fullName} (${def.email})`);
 
     // ── 3a. Create Supabase Auth user (skip if already exists) ──
@@ -152,7 +136,7 @@ async function main() {
 
       if (authError) {
         console.error(`   ❌ Auth create failed: ${authError.message}`);
-        continue;
+        return; // was 'continue' — use 'return' inside .map()
       }
       authUserId = newAuth.user.id;
       console.log(`   ✅ Auth user created: ${authUserId}`);
@@ -175,7 +159,7 @@ async function main() {
 
     if (userError) {
       console.error(`   ❌ users upsert failed: ${userError.message}`);
-      continue;
+      return;
     }
     const internalUserId = userRow.id;
     console.log(`   ✅ users row: ${internalUserId}`);
@@ -200,7 +184,7 @@ async function main() {
 
     if (provError) {
       console.error(`   ❌ providers upsert failed: ${provError.message}`);
-      continue;
+      return;
     }
     const providerId = provRow.id;
     console.log(`   ✅ providers row: ${providerId}`);
@@ -220,37 +204,39 @@ async function main() {
     }
 
     // ── 3e. Link provider to their specific services ──
-    for (const svcDef of def.services) {
-      const serviceId = svcByName[svcDef.name];
-      if (!serviceId) {
-        console.warn(`   ⚠️  Service not found: "${svcDef.name}"`);
-        continue;
-      }
-      const { error: psError } = await supabase
-        .from('provider_services')
-        .upsert(
-          {
-            provider_id: providerId,
-            service_id: serviceId,
-            custom_price: svcDef.customPrice,
-            custom_description: svcDef.customDescription,
-            is_active: true,
-          },
-          { onConflict: 'provider_id,service_id' },
-        );
+    // Inner loop also replaced with Promise.all
+    await Promise.all(
+      def.services.map(async (svcDef) => {
+        const serviceId = svcByName[svcDef.name];
+        if (!serviceId) {
+          console.warn(`   ⚠️  Service not found: "${svcDef.name}"`);
+          return;
+        }
+        const { error: psError } = await supabase
+          .from('provider_services')
+          .upsert(
+            {
+              provider_id: providerId,
+              service_id: serviceId,
+              custom_price: svcDef.customPrice,
+              custom_description: svcDef.customDescription,
+              is_active: true,
+            },
+            { onConflict: 'provider_id,service_id' },
+          );
 
-      if (psError) {
-        console.error(`   ❌ provider_services failed for "${svcDef.name}": ${psError.message}`);
-      } else {
-        console.log(`   ✅ provider_services: ${svcDef.name} @ $${svcDef.customPrice}`);
-      }
-    }
+        if (psError) {
+          console.error(`   ❌ provider_services failed for "${svcDef.name}": ${psError.message}`);
+        } else {
+          console.log(`   ✅ provider_services: ${svcDef.name} @ $${svcDef.customPrice}`);
+        }
+      }),
+    );
 
-    // ── 3f. Seed availability slots — next 7 days, 4 slots/day ──
+    // ── 3f. Seed availability slots ──
     const dates = nextNDays(7);
     const slots = dates.flatMap((date) => slotsForDate(date, providerId));
 
-    // Delete old future slots first to avoid duplicates on re-run
     const today = new Date().toISOString().split('T')[0];
     await supabase
       .from('availability_slots')
@@ -267,7 +253,8 @@ async function main() {
     } else {
       console.log(`   ✅ availability_slots: ${slots.length} slots for next 7 days`);
     }
-  }
+  }),
+);
 
   console.log('\n🎉 Provider seed complete.\n');
   console.log('Test credentials:');
