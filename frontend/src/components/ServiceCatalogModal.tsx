@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { X, Clock, DollarSign, ChevronRight, Star, User as UserIcon } from "lucide-react";
+import { X, Clock, DollarSign, ChevronRight, Star, Search, User as UserIcon } from "lucide-react";
 import type { User, Provider } from "../../types";
 
 /** Normalized from Supabase (`id`, `base_price`, …) for UI use */
@@ -79,12 +79,28 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Search state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
+  // Debounce: wait 350ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Re-fetch whenever category or debounced search changes
   useEffect(() => {
     setLoading(true);
     setError(false);
-    fetch(`${API_BASE}/api/services?category=${categoryId}`)
+
+    const url = new URL(`${API_BASE}/api/services`);
+    url.searchParams.set("category", categoryId);
+    if (debouncedSearch) url.searchParams.set("search", debouncedSearch);
+
+    fetch(url.toString())
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data)) {
@@ -95,7 +111,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [categoryId, API_BASE]);
+  }, [categoryId, debouncedSearch, API_BASE]);
 
   // Close on Escape key
   useEffect(() => {
@@ -141,7 +157,7 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
               <p className="text-sm text-slate-500">
                 {loading
                   ? "Loading services…"
-                  : `${services.length} service${services.length !== 1 ? "s" : ""} available`}
+                  : `${services.length} service${services.length !== 1 ? "s" : ""} available${debouncedSearch ? " (filtered)" : ""}`}
               </p>
             </div>
           </div>
@@ -152,6 +168,34 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
           >
             <X size={20} />
           </button>
+        </div>
+
+        {/* Search input */}
+        <div className="px-7 py-3 border-b border-white/60 flex-shrink-0">
+          <div className="relative">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Search in ${categoryName}…`}
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-slate-50 border border-slate-200
+                         focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent
+                         placeholder:text-slate-400 text-slate-800 transition"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                aria-label="Clear search"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Auth notice strip — shown only when logged out and services loaded */}
@@ -184,12 +228,21 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
             </div>
           )}
 
-          {/* Empty state */}
-          {!loading && !error && services.length === 0 && (
+          {/* Empty state — no services in category */}
+          {!loading && !error && services.length === 0 && !debouncedSearch && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <span className="text-4xl mb-3">🔧</span>
               <p className="text-slate-700 font-semibold">No services listed yet</p>
               <p className="text-slate-400 text-sm mt-1">Check back soon — more services are coming!</p>
+            </div>
+          )}
+
+          {/* Empty state — search returned nothing */}
+          {!loading && !error && services.length === 0 && debouncedSearch && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <span className="text-4xl mb-3">🔍</span>
+              <p className="text-slate-700 font-semibold">No results for "{debouncedSearch}"</p>
+              <p className="text-slate-400 text-sm mt-1">Try a different keyword or clear the search.</p>
             </div>
           )}
 

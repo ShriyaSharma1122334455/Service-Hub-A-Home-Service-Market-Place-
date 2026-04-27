@@ -1,84 +1,269 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import User from '../models/User.js';
-import Provider from '../models/Provider.js';
-import Category from '../models/Category.js';
+// backend/src/scripts/seedProviders.js
+// NEW FILE
 
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 dotenv.config();
 
-const seedProviders = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
+// Use the service-role key so we can bypass RLS for seeding
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
 
-    const categories = await Category.find({});
-    if (categories.length === 0) {
-      console.log('❌ No categories found. Please run seedCategories.js first.');
-      process.exit(1);
-    }
+// ─── Provider definitions ─────────────────────────────────────────────────────
 
-    const categoryList = [
-      categories.find(c => c.slug === 'plumbing'),
-      categories.find(c => c.slug === 'electrical'),
-      categories.find(c => c.slug === 'cleaning')
-    ].filter(Boolean);
-    const defaultCategory = categoryList[0] || categories[0];
+const TEST_PROVIDERS = [
+  {
+    email: 'alice.plumber@servicehub-test.com',
+    password: 'TestPass123!',
+    fullName: 'Alice Moreno',
+    businessName: 'Alice Pro Plumbing',
+    description: 'Licensed master plumber with 12 years of experience. Specialising in residential repairs, water heater installs, and drain cleaning.',
+    categorySlug: 'plumbing',
+    verificationStatus: 'verified',
+    services: [
+      { name: 'Leak Detection & Repair', customPrice: 110, customDescription: 'I find and fix leaks fast — same day service available.' },
+      { name: 'Water Heater Installation', customPrice: 320, customDescription: 'Full install including old unit removal. All brands.' },
+    ],
+  },
+  {
+    email: 'bob.sparks@servicehub-test.com',
+    password: 'TestPass123!',
+    fullName: 'Bob Okafor',
+    businessName: 'Sparks Electric Co.',
+    description: 'Certified electrician serving the greater metro area. Panel upgrades, EV charger installs, and full rewires.',
+    categorySlug: 'electrical',
+    verificationStatus: 'verified',
+    services: [
+      { name: 'Outlet Installation', customPrice: 70, customDescription: 'Any room, code-compliant. Free safety check included.' },
+      { name: 'Panel Upgrade', customPrice: 850, customDescription: '200A panel upgrades. Permit pulled and inspected.' },
+    ],
+  },
+  {
+    email: 'clara.clean@servicehub-test.com',
+    password: 'TestPass123!',
+    fullName: 'Clara Nguyen',
+    businessName: "Clara's Cleaning Co.",
+    description: 'Eco-friendly deep cleaning and regular maintenance for homes and apartments. Flexible scheduling, pet-safe products.',
+    categorySlug: 'cleaning',
+    verificationStatus: 'pending',
+    services: [
+      { name: 'Deep Cleaning', customPrice: 140, customDescription: 'Top-to-bottom deep clean. Inside appliances included.' },
+      { name: 'Regular Home Cleaning', customPrice: 75, customDescription: 'Weekly or bi-weekly. Same cleaner every visit.' },
+    ],
+  },
+];
 
-    const providerUsers = await User.find({ role: 'provider' });
-    if (providerUsers.length === 0) {
-      console.log('❌ No provider users found. Please run seedUsers.js first.');
-      process.exit(1);
-    }
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-    await Provider.deleteMany({});
-    console.log('🗑️  Cleared existing providers');
+/** Generate 4 time slots for a given date string "YYYY-MM-DD" */
+function slotsForDate(date, providerId) {
+  const times = [
+    { start: '09:00', end: '10:00' },
+    { start: '11:00', end: '12:00' },
+    { start: '14:00', end: '15:00' },
+    { start: '16:00', end: '17:00' },
+  ];
+  return times.map(({ start, end }) => ({
+    provider_id: providerId,
+    date,
+    start_time: start,
+    end_time: end,
+    is_booked: false,
+  }));
+}
 
-    const businessTemplates = [
-      { businessName: 'Mike Johnson Plumbing', description: 'Professional plumbing services with over 10 years of experience. We handle leak repairs, pipe installation, drain cleaning, and water heater services. Available 24/7 for emergency services.', ratingAvg: 4.8, ratingCount: 42 },
-      { businessName: 'Spark Electric Co.', description: 'Licensed electrical services for residential and commercial properties. Specializing in wiring, outlet installation, panel upgrades, and lighting fixture installation. Safety is our top priority.', ratingAvg: 4.9, ratingCount: 38 },
-      { businessName: 'Clean Pro Services', description: 'Professional cleaning services including deep cleaning, move-in/out cleaning, regular maintenance, and post-construction cleaning. We use eco-friendly products and guarantee satisfaction.', ratingAvg: 4.7, ratingCount: 56 }
-    ];
+/** Next N days as "YYYY-MM-DD" strings, starting tomorrow */
+function nextNDays(n) {
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i + 1);
+    return d.toISOString().split('T')[0];
+  });
+}
 
-    const providers = providerUsers.map((user, index) => {
-      const template = businessTemplates[index] || {
-        businessName: `${user.fullName} Services`,
-        description: 'Professional home services. Quality and reliability guaranteed.',
-        ratingAvg: 4.5,
-        ratingCount: 10
-      };
-      const category = categoryList[index % categoryList.length] || defaultCategory;
-      return {
-        userId: user._id,
-        businessName: template.businessName,
-        description: template.description,
-        serviceCategories: category ? [category._id] : [],
-        documents: { idDocument: null, selfie: null },
-        verification: {
-          idVerified: true,
-          faceMatched: true,
-          nsopwChecked: true,
-          selfDeclared: true,
-          verifiedAt: new Date(),
-          rejectionReason: null
-        },
-        ratingAvg: template.ratingAvg,
-        ratingCount: template.ratingCount,
-        isActive: true
-      };
-    });
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-    const inserted = await Provider.insertMany(providers);
-    console.log(`✅ Inserted ${inserted.length} providers:`);
-    inserted.forEach(provider => {
-      console.log(`   - ${provider.businessName} (Rating: ${provider.ratingAvg})`);
-    });
+async function main() {
+  console.log('🌱 Starting provider seed…\n');
 
-    console.log('\n🎉 Provider seeding completed successfully!');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error seeding providers:', error);
+  // 1. Fetch all categories so we can look up by slug
+  const { data: categories, error: catError } = await supabase
+    .from('categories')
+    .select('id, slug');
+
+  if (catError || !categories?.length) {
+    console.error('❌ Could not load categories — run seedServices.js first.');
     process.exit(1);
   }
-};
 
-seedProviders();
+  const catBySlug = Object.fromEntries(categories.map((c) => [c.slug, c.id]));
+
+  // 2. Fetch all platform services so we can link providers to them
+  const { data: allServices, error: svcError } = await supabase
+    .from('services')
+    .select('id, name');
+
+  if (svcError || !allServices?.length) {
+    console.error('❌ Could not load services — run seedServices.js first.');
+    process.exit(1);
+  }
+
+  const svcByName = Object.fromEntries(allServices.map((s) => [s.name, s.id]));
+
+  await Promise.all(
+  TEST_PROVIDERS.map(async (def) => {
+    console.log(`\n👤 Processing: ${def.fullName} (${def.email})`);
+
+    // ── 3a. Create Supabase Auth user (skip if already exists) ──
+    let authUserId;
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const existing = existingUsers?.users?.find((u) => u.email === def.email);
+
+    if (existing) {
+      authUserId = existing.id;
+      console.log(`   Auth user already exists: ${authUserId}`);
+    } else {
+      const { data: newAuth, error: authError } =
+        await supabase.auth.admin.createUser({
+          email: def.email,
+          password: def.password,
+          email_confirm: true,
+          user_metadata: { full_name: def.fullName, role: 'provider' },
+        });
+
+      if (authError) {
+        console.error(`   ❌ Auth create failed: ${authError.message}`);
+        return; // was 'continue' — use 'return' inside .map()
+      }
+      authUserId = newAuth.user.id;
+      console.log(`   ✅ Auth user created: ${authUserId}`);
+    }
+
+    // ── 3b. Upsert public.users row ──
+    const { data: userRow, error: userError } = await supabase
+      .from('users')
+      .upsert(
+        {
+          supabase_id: authUserId,
+          email: def.email,
+          full_name: def.fullName,
+          role: 'provider',
+        },
+        { onConflict: 'supabase_id' },
+      )
+      .select('id')
+      .single();
+
+    if (userError) {
+      console.error(`   ❌ users upsert failed: ${userError.message}`);
+      return;
+    }
+    const internalUserId = userRow.id;
+    console.log(`   ✅ users row: ${internalUserId}`);
+
+    // ── 3c. Upsert public.providers row ──
+    const { data: provRow, error: provError } = await supabase
+      .from('providers')
+      .upsert(
+        {
+          user_id: internalUserId,
+          business_name: def.businessName,
+          description: def.description,
+          is_active: true,
+          verification_status: def.verificationStatus,
+          rating_avg: 0,
+          rating_count: 0,
+        },
+        { onConflict: 'user_id' },
+      )
+      .select('id')
+      .single();
+
+    if (provError) {
+      console.error(`   ❌ providers upsert failed: ${provError.message}`);
+      return;
+    }
+    const providerId = provRow.id;
+    console.log(`   ✅ providers row: ${providerId}`);
+
+    // ── 3d. Link provider to category ──
+    const categoryId = catBySlug[def.categorySlug];
+    if (categoryId) {
+      await supabase
+        .from('provider_categories')
+        .upsert(
+          { provider_id: providerId, category_id: categoryId },
+          { onConflict: 'provider_id,category_id' },
+        );
+      console.log(`   ✅ provider_categories linked: ${def.categorySlug}`);
+    } else {
+      console.warn(`   ⚠️  Category slug not found: ${def.categorySlug}`);
+    }
+
+    // ── 3e. Link provider to their specific services ──
+    // Inner loop also replaced with Promise.all
+    await Promise.all(
+      def.services.map(async (svcDef) => {
+        const serviceId = svcByName[svcDef.name];
+        if (!serviceId) {
+          console.warn(`   ⚠️  Service not found: "${svcDef.name}"`);
+          return;
+        }
+        const { error: psError } = await supabase
+          .from('provider_services')
+          .upsert(
+            {
+              provider_id: providerId,
+              service_id: serviceId,
+              custom_price: svcDef.customPrice,
+              custom_description: svcDef.customDescription,
+              is_active: true,
+            },
+            { onConflict: 'provider_id,service_id' },
+          );
+
+        if (psError) {
+          console.error(`   ❌ provider_services failed for "${svcDef.name}": ${psError.message}`);
+        } else {
+          console.log(`   ✅ provider_services: ${svcDef.name} @ $${svcDef.customPrice}`);
+        }
+      }),
+    );
+
+    // ── 3f. Seed availability slots ──
+    const dates = nextNDays(7);
+    const slots = dates.flatMap((date) => slotsForDate(date, providerId));
+
+    const today = new Date().toISOString().split('T')[0];
+    await supabase
+      .from('availability_slots')
+      .delete()
+      .eq('provider_id', providerId)
+      .gte('date', today);
+
+    const { error: slotError } = await supabase
+      .from('availability_slots')
+      .insert(slots);
+
+    if (slotError) {
+      console.error(`   ❌ availability_slots failed: ${slotError.message}`);
+    } else {
+      console.log(`   ✅ availability_slots: ${slots.length} slots for next 7 days`);
+    }
+  }),
+);
+
+  console.log('\n🎉 Provider seed complete.\n');
+  console.log('Test credentials:');
+  TEST_PROVIDERS.forEach((p) =>
+    console.log(`  ${p.email} / TestPass123!  (${p.categorySlug})`),
+  );
+}
+
+main().catch((err) => {
+  console.error('Seed failed:', err);
+  process.exit(1);
+});

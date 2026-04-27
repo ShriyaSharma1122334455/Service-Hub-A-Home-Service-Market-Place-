@@ -13,6 +13,7 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testEnvironment=node --coverage",
     "seed:categories": "node src/scripts/seedCategories.js",
     "seed:users": "node src/scripts/seedUsers.js",
+    "seed:services": "node src/scripts/seedServices.js",
     "seed:providers": "node src/scripts/seedProviders.js",
     "seed:all": "npm run seed:categories && npm run seed:users && npm run seed:providers",
     "lint": "eslint src"
