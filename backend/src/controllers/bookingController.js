@@ -107,7 +107,8 @@ export const listBookings = async (req, res) => {
       .select(`
         *,
         service:services(name, base_price),
-        provider:providers(business_name, rating_avg)
+        provider:providers(business_name, rating_avg),
+        customer:users(full_name, email)
       `)
       .order('created_at', { ascending: false });
 

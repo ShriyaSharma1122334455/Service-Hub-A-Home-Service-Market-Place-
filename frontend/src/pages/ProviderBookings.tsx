@@ -8,6 +8,7 @@ import {
   Calendar,
   Clock,
   User,
+  Search,
   AlertCircle,
 } from "lucide-react";
 
@@ -69,6 +70,7 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [actionLoading, setActionLoading] = useState<
     Record<string, "accept" | "reject" | null>
   >({});
@@ -138,8 +140,20 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
     }
   }
 
-  const filtered =
-    filter === "all" ? bookings : bookings.filter((b) => b.status === filter);
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const hasSearch = normalizedSearch.length > 0;
+
+  const filtered = bookings.filter((booking) => {
+    const matchesStatus = filter === "all" || booking.status === filter;
+    if (!matchesStatus) return false;
+
+    if (!hasSearch) return true;
+
+    const customerLabel =
+      booking.customer?.full_name || booking.customer?.email || "";
+    return customerLabel.toLowerCase().includes(normalizedSearch);
+  });
 
   const counts = FILTERS.reduce<Record<string, number>>((acc, f) => {
     acc[f] =
@@ -147,6 +161,17 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
     return acc;
   }, {});
 
+  const statusLabel = filter === "all" ? "" : `${filter} `;
+  const emptyTitle = hasSearch
+    ? `No ${statusLabel}bookings match "${searchQuery.trim()}"`
+    : `No ${statusLabel}bookings`;
+  const emptyDescription = hasSearch
+    ? "Try a different customer name."
+    : filter === "pending"
+      ? "No pending requests right now."
+      : "Nothing to show here.";
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
       <div className="max-w-3xl mx-auto">
@@ -177,6 +202,23 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
           </button>
         </div>
 
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search
+            size={16}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by customer name"
+            aria-label="Search bookings by customer name"
+            className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-teal-400 focus:ring-4 focus:ring-teal-100"
+          />
+        </div>
+
+        {/* Filter tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-5 no-scrollbar">
           {FILTERS.map((f) => (
             <button
@@ -221,12 +263,10 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <span className="text-5xl mb-4">📭</span>
             <p className="text-slate-700 font-semibold">
-              No {filter === "all" ? "" : filter} bookings
+              {emptyTitle}
             </p>
             <p className="text-slate-400 text-sm mt-1">
-              {filter === "pending"
-                ? "No pending requests right now."
-                : "Nothing to show here."}
+              {emptyDescription}
             </p>
           </div>
         ) : (
