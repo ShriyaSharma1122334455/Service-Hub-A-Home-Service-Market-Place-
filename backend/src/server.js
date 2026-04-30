@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import  { checkSupabaseConnection } from './config/supabase.js';
 import { validateVdaServiceConfig } from './config/vdaServiceConfig.js';
+import { startReminderCron } from './services/reminderService.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
@@ -29,6 +30,7 @@ const app = express();
 if (process.env.NODE_ENV !== 'test') {
   checkSupabaseConnection();
   validateVdaServiceConfig();
+  startReminderCron();
 }
 
 // Rate limiting

@@ -84,4 +84,54 @@ export const sendBookingConfirmation = async (userEmail, bookingDetails) => {
   });
 };
 
-export default { sendEmail, sendWelcomeEmail, sendBookingConfirmation };
+/**
+ * Send 24-hour booking reminder email (SER-125)
+ */
+export const sendBookingReminderEmail = async ({
+  to, customerName, serviceName, providerName, scheduledAt, address
+}) => {
+  const dateStr = new Date(scheduledAt).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+  const timeStr = new Date(scheduledAt).toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px;">
+      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+        <div style="background:#0d9488;padding:24px 32px;">
+          <h1 style="color:#fff;margin:0;font-size:22px;">⏰ Booking Reminder</h1>
+          <p style="color:#ccfbf1;margin:4px 0 0;">Your appointment is tomorrow</p>
+        </div>
+        <div style="padding:32px;">
+          <p style="font-size:16px;color:#334155;">Hi <strong>${customerName}</strong>,</p>
+          <p style="color:#475569;">This is a reminder that you have a service appointment scheduled for <strong>tomorrow</strong>.</p>
+          <div style="background:#f8fafc;border-left:4px solid #0d9488;border-radius:8px;padding:20px;margin:24px 0;">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Service</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${serviceName}</td></tr>
+              <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Provider</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${providerName}</td></tr>
+              <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Date</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${dateStr}</td></tr>
+              <tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Time</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${timeStr}</td></tr>
+              ${address ? `<tr><td style="padding:6px 0;color:#64748b;font-size:14px;">Address</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${address}</td></tr>` : ''}
+            </table>
+          </div>
+          <p style="color:#475569;font-size:14px;">Please make sure someone is available at the address during this time.</p>
+          <p style="color:#94a3b8;font-size:13px;margin-top:32px;">— The ServiceHub Team</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return await sendEmail({
+    to,
+    subject: `Reminder: ${serviceName} appointment tomorrow at ${timeStr}`,
+    html,
+    text: `Hi ${customerName}, reminder: ${serviceName} with ${providerName} is tomorrow (${dateStr} at ${timeStr})${address ? ' at ' + address : ''}.`
+  });
+};
+
+export default { sendEmail, sendWelcomeEmail, sendBookingConfirmation, sendBookingReminderEmail };
