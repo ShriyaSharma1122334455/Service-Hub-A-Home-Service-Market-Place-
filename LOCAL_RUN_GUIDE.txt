@@ -1,0 +1,328 @@
+================================================================
+ ServiceHub — Local Dev Setup & Manual Feature Testing Guide
+ Last updated: April 30, 2026
+ Author: Deep Talreja (dt443@njit.edu)
+================================================================
+
+PREREQUISITES
+-------------
+- Node.js v18+ (check: node --version)
+- npm v9+ (check: npm --version)
+- Git
+- VS Code (recommended: install ESLint + Tailwind CSS IntelliSense extensions)
+
+
+STEP 1 — CLONE / PULL LATEST
+-----------------------------
+If you already have the repo cloned:
+
+  cd /Users/deep_anmol/Desktop/ServiceHub_Deep/ServiceHub_Shriya
+  git checkout main
+  git pull origin main
+
+If cloning fresh:
+
+  git clone https://github.com/ShriyaSharma1122334455/Service-Hub-A-Home-Service-Market-Place-
+  cd Service-Hub-A-Home-Service-Market-Place-
+
+
+STEP 2 — BACKEND SETUP
+-----------------------
+2a. Install dependencies:
+
+  cd backend
+  npm install
+
+2b. Create the .env file:
+
+  Copy backend/.env.example to backend/.env
+  Fill in the actual values (ask Shriya for Supabase credentials):
+
+    NODE_ENV=development
+    PORT=3000
+    SUPABASE_URL=https://<project>.supabase.co
+    SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
+    JWT_SECRET=any-random-string-for-local-dev
+    CORS_ORIGIN=http://localhost:5173
+
+  Optional (only if testing email/image features):
+    RESEND_API_KEY=...
+    CLOUDINARY_CLOUD_NAME=...
+    CLOUDINARY_API_KEY=...
+    CLOUDINARY_API_SECRET=...
+
+2c. Start the backend:
+
+  npm run dev
+
+  Expected output: "Server is running on port 3000" + "Supabase connected"
+  Backend runs at: http://localhost:3000
+
+
+STEP 3 — FRONTEND SETUP
+------------------------
+Open a new terminal tab.
+
+3a. Install dependencies:
+
+  cd frontend
+  npm install
+
+3b. Create the .env file:
+
+  Copy frontend/.env.example to frontend/.env
+  Fill in the actual values:
+
+    VITE_SUPABASE_URL=https://<project>.supabase.co
+    VITE_SUPABASE_ANON_KEY=<anon_key>
+    VITE_API_BASE_URL=http://localhost:3000
+
+3c. Start the frontend:
+
+  npm run dev
+
+  Expected output: "Local: http://localhost:5173/"
+  Frontend runs at: http://localhost:5173
+
+
+STEP 4 — OPEN IN VS CODE
+-------------------------
+  From the repo root:
+    code .
+
+  Recommended workspace layout:
+  - Open 2 terminals: one for backend (npm run dev), one for frontend (npm run dev)
+  - Keep browser DevTools open (F12) → Network tab to watch API calls
+
+
+================================================================
+ MANUAL FEATURE TESTING CHECKLIST
+================================================================
+
+TEST ACCOUNTS
+-------------
+  Customer: deep_user1@yopmail.com / TestPass123!
+  Provider: deep_plumber@yopmail.com / TestPass123!
+
+
+FEATURE 1 — AUTH (Login / Register / Logout)
+---------------------------------------------
+URL: http://localhost:5173
+
+1. Click "Login" → enter customer credentials → verify redirect to home
+2. Check localStorage in DevTools → Application → localStorage:
+   key: servicehub-auth should have { email, role, accessToken }
+3. Refresh the page → user should still be logged in (session persistence)
+4. Click Logout → verify localStorage entry is cleared
+5. Register a new account:
+   - Click "Register" → fill form with new email
+   - Choose role "Customer" or "Provider"
+   - Submit → should redirect to home
+6. Try login with wrong password → should show error message
+7. Test rate limiting: try 10+ failed logins → should get locked out message
+
+
+FEATURE 2 — HOME PAGE & SERVICE CATALOG
+-----------------------------------------
+URL: http://localhost:5173/#/
+
+1. Verify 4 category cards appear: Cleaning, Plumbing, Electrical, Pest Control
+2. Click any category card → should navigate to service list for that category
+   URL pattern: /#/book/<serviceId>
+3. Verify the service list page shows:
+   - Service name
+   - Price
+   - Provider name
+   - Rating
+4. Click "View Profile" on any provider card → should open provider profile
+
+
+FEATURE 3 — SERVICE PROVIDERS PAGE
+--------------------------------------
+URL: http://localhost:5173/#/book/<serviceId>
+
+Test UUIDs:
+  Cleaning: 2be5a06d-4818-4fe5-9bfc-c664e5540456
+  Plumbing (Drain): c7c72cd1-b811-423c-a555-27a91cf2ec07
+  Pest Control: 4e29444f-cacf-4d2a-8998-d5458a6480c4
+
+1. Open: http://localhost:5173/#/book/2be5a06d-4818-4fe5-9bfc-c664e5540456
+2. Verify provider cards load (name, rating, price)
+3. Click "Book Now" on a provider → should open booking flow
+4. Click "View Profile" → should open provider profile page
+
+
+FEATURE 4 — PROVIDER PROFILE & REVIEWS
+-----------------------------------------
+Test provider UUIDs:
+  Deep Clean Pro:        58239207-aec2-4d80-955a-bc450d78a903
+  Deep Plumber Services: e70895b3-c86f-4f43-b63a-7229126a109d
+
+URL: http://localhost:5173/#/profile/<uuid>?type=provider
+
+1. Open: http://localhost:5173/#/profile/58239207-aec2-4d80-955a-bc450d78a903?type=provider
+2. Verify:
+   - Provider name, bio, rating displayed at top
+   - Average star rating shown (computed from all reviews)
+   - Reviews section lists past reviews (star, reviewer name, comment, date)
+   - Empty state shown if no reviews yet
+3. Log in as customer (deep_user1@yopmail.com)
+4. Re-open the provider profile
+5. If customer has a completed booking with this provider:
+   - "Leave a Review" form should appear
+   - Select 1-5 stars → write a comment → click Submit
+   - Review should appear in the list immediately
+   - Average rating at top should update
+
+
+FEATURE 5 — BOOKING FLOW (as Customer)
+-----------------------------------------
+1. Log in as: deep_user1@yopmail.com
+2. Go to: http://localhost:5173/#/
+3. Click a category → browse providers → click "Book Now"
+4. Select a date and time slot
+5. Click Confirm → verify booking confirmation page loads
+6. Check DevTools Network tab: POST /api/bookings should return 201
+7. Go to My Bookings (if link available) → booking should appear as "Requested"
+
+
+FEATURE 6 — PROVIDER DASHBOARD (as Provider)
+----------------------------------------------
+1. Log in as: deep_plumber@yopmail.com
+2. Navigate to: http://localhost:5173/#/dashboard
+3. Verify:
+   - Stats cards (total bookings, pending, confirmed)
+   - Calendar showing booked days
+   - Pending bookings list with Accept/Reject buttons
+4. Accept a pending booking → status should change to "Confirmed"
+5. Reject a booking → status should change to "Cancelled"
+6. Check: http://localhost:5173/#/my-bookings for full booking list
+
+
+FEATURE 7 — CUSTOMER DASHBOARD
+---------------------------------
+1. Log in as: deep_user1@yopmail.com
+2. Navigate to: http://localhost:5173/#/dashboard (or click Dashboard link)
+3. Verify:
+   - Booking statistics (upcoming, completed, cancelled)
+   - Appointment schedule / recent bookings
+   - Search/filter bookings
+
+
+FEATURE 8 — AI CHATBOT
+------------------------
+1. Log in as any user
+2. Click the chatbot bubble (bottom-right corner of any page)
+3. Test queries:
+   - "What are my orders?" → should list real bookings from database
+   - "Show me my bookings" → same
+   - "What services do you offer?" → should list service categories
+   - "FAQ: how do I book?" → should give FAQ answer
+4. Verify responses reference real data (not dummy text)
+
+
+FEATURE 9 — VISUAL DAMAGE ASSESSMENT (AI Service)
+----------------------------------------------------
+Note: Requires Docker to run the AI service.
+
+  cd visual-damage-assessment
+  docker-compose up
+
+  Then test via provider profile → damage assessment upload feature
+  Service runs at: http://localhost:8000
+
+
+FEATURE 10 — AI IDENTITY VERIFICATION (Provider Registration)
+---------------------------------------------------------------
+1. Register as a new Provider
+2. During onboarding, upload a government ID image
+3. System should run OCR/Vision API validation
+4. Verify verified badge appears on provider profile after approval
+
+
+================================================================
+ COMMON ERRORS & FIXES
+================================================================
+
+Error: "Network Error" on API calls
+  → Backend not running. Make sure `npm run dev` is active in /backend
+
+Error: "Failed to fetch" / CORS error
+  → Check CORS_ORIGIN in backend/.env matches http://localhost:5173
+
+Error: "Supabase connection failed"
+  → Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend/.env
+
+Error: Login rate limited
+  → Wait 15 mins OR use Supabase direct auth:
+    curl -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+      -H "apikey: $SUPABASE_ANON_KEY" \
+      -d '{"email":"deep_user1@yopmail.com","password":"TestPass123!"}'
+
+Error: "0 providers available" on service page
+  → Known issue: provider_services junction table may be empty in DB
+    Ask Shriya to check the provider_services table seeding
+
+Error: Frontend blank page
+  → Check browser console (F12). Usually means .env values are missing.
+
+Error: TypeScript build error
+  → Run `npm run build` in /frontend to see full error
+  → Run `npx eslint src` to catch lint errors
+
+
+================================================================
+ RUNNING TESTS
+================================================================
+
+Backend tests:
+  cd backend && npm test
+
+Frontend type check:
+  cd frontend && npx tsc --noEmit
+
+Frontend lint:
+  cd frontend && npx eslint src
+
+AI service tests:
+  cd visual-damage-assessment && python -m pytest
+
+
+================================================================
+ API ENDPOINTS QUICK REFERENCE
+================================================================
+
+Auth:
+  POST /api/auth/register
+  POST /api/auth/login
+  POST /api/auth/logout
+
+Services:
+  GET  /api/services
+  GET  /api/services?category=Cleaning
+
+Providers:
+  GET  /api/providers
+  GET  /api/providers/:id
+  GET  /api/providers/by-service/:serviceId
+  GET  /api/providers/search?q=<name>&status=<status>
+
+Bookings:
+  GET  /api/bookings          (customer: their bookings)
+  POST /api/bookings          (create booking)
+  PATCH /api/bookings/:id     (update status)
+
+Reviews:
+  GET  /api/reviews/:providerId
+  POST /api/reviews
+
+Dashboard:
+  GET  /api/dashboard/provider
+  GET  /api/dashboard/customer
+
+Chatbot:
+  GET  /api/chatbot/context
+
+Profile:
+  GET  /api/profile/:id
+  PATCH /api/profile/:id
