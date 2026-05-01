@@ -59,7 +59,7 @@ router.post('/send-reminder/:bookingId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Booking not found' });
     }
 
-    const customerEmail = booking.customer?.email;
+    const customerEmail = req.query.to || booking.customer?.email;
     if (!customerEmail) {
       return res.status(400).json({ success: false, error: 'No customer email on this booking' });
     }
