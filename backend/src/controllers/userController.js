@@ -249,7 +249,7 @@ export const updateUserRole = async (req, res) => {
 
 // ── Validation helpers (server-side) ─────────────────────────────────────
 
-const FULL_NAME_RE = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+const FULL_NAME_RE = /^[a-zA-ZÀ-ÿ\s'-]+$/;
 const PHONE_RE = /^(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/;
 
 function validateProfileUpdate({ full_name, phone, bio }) {
@@ -349,8 +349,12 @@ export const updateUserProfile = async (req, res) => {
       .eq('supabase_id', supabaseId)
       .single();
 
-    if (fetchErr || !updatedUser) {
+    if (fetchErr) {
       return res.json({ success: true, message: 'Profile updated successfully', data: null });
+    }
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
     return res.json({

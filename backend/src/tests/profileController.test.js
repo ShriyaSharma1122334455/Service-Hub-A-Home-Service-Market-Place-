@@ -13,32 +13,15 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
 // ── Mock Supabase module ──────────────────────────────────────────────────
 // We mock the default export from config/supabase.js which is the client.
 // jest.unstable_mockModule works with ESM.
-const mockSelect = jest.fn();
-const mockUpdate = jest.fn();
-const mockEq = jest.fn();
-const mockSingle = jest.fn();
-
-// Chain builder: each method returns an object with the next method
-const buildChain = () => {
-  const chain = {
-    update: jest.fn(() => chain),
-    select: jest.fn(() => chain),
-    eq: jest.fn(() => chain),
-    single: mockSingle,
-  };
-  mockUpdate.mockReturnValue(chain);
-  return chain;
-};
-
 let supabaseMock;
 
 jest.unstable_mockModule('../config/supabase.js', () => {
   supabaseMock = {
     from: jest.fn(() => ({
-      update: mockUpdate,
-      select: mockSelect,
-      eq: mockEq,
-      single: mockSingle,
+      update: jest.fn(),
+      select: jest.fn(),
+      eq: jest.fn(),
+      single: jest.fn(),
     })),
   };
   return { default: supabaseMock };
@@ -195,11 +178,11 @@ describe('updateUserProfile controller', () => {
   // ── DB error handling ─────────────────────────────────────────────────────
 
   test('returns 500 when Supabase update returns an error', async () => {
+    // The controller awaits .from().update().eq() — no .single() on update chains.
+    // eq() must return a Promise so the destructured { error } is visible.
     const errChain = {
       update: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      single: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB failure' } }),
+      eq: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB failure' } }),
     };
     supabaseMock.from = jest.fn().mockReturnValue(errChain);
 
@@ -210,13 +193,20 @@ describe('updateUserProfile controller', () => {
   });
 
   test('returns 404 when Supabase returns no data and no error', async () => {
-    const nullChain = {
+    // Call 1: coreData update succeeds (no error).
+    // Call 2: re-fetch SELECT returns { data: null, error: null } → controller returns 404.
+    const updateSuccessChain = {
       update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const fetchNullChain = {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: null, error: null }),
     };
-    supabaseMock.from = jest.fn().mockReturnValue(nullChain);
+    supabaseMock.from = jest.fn()
+      .mockReturnValueOnce(updateSuccessChain)
+      .mockReturnValueOnce(fetchNullChain);
 
     const res = mockRes();
     await updateUserProfile(mockReq({ full_name: 'Valid Name' }), res);

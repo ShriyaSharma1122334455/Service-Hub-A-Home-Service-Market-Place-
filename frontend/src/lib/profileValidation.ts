@@ -12,7 +12,7 @@ export type EditProfileFormData = {
   bio: string;
 };
 
-const FULL_NAME_RE = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+const FULL_NAME_RE = /^[a-zA-ZÀ-ÿ\s'-]+$/;
 const PHONE_RE = /^(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/;
 
 export function validateFullName(name: string): ValidationResult {
