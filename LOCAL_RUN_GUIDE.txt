@@ -1,0 +1,220 @@
+================================================================================
+  SERVICEHUB — LOCAL RUN & MANUAL TESTING GUIDE
+  Last updated: Apr 30, 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+STEP 1 — OPEN PROJECT IN VSCODE
+--------------------------------------------------------------------------------
+
+1. Open VSCode
+2. File > Open Folder > select:
+   /Users/deep_anmol/Desktop/ServiceHub_Deep/ServiceHub_Shriya
+
+--------------------------------------------------------------------------------
+STEP 2 — OPEN TWO TERMINALS IN VSCODE (Terminal > New Terminal, split it)
+--------------------------------------------------------------------------------
+
+TERMINAL 1 — Backend
+---------------------
+  cd backend
+  npm install          (only needed first time or after pulling new changes)
+  npm run dev
+
+  Expected output:
+    🔔 Booking reminder cron started (runs every 15 min)
+    🚀 Server is running on port 3000
+    ✅ Supabase connected successfully
+
+  Backend URL: http://localhost:3000
+
+
+TERMINAL 2 — Frontend
+----------------------
+  cd frontend
+  npm install          (only needed first time or after pulling new changes)
+  npm run dev
+
+  Expected output:
+    VITE ready in ~500ms
+    ➜ Local: http://localhost:5173/
+
+  Frontend URL: http://localhost:5173
+
+
+--------------------------------------------------------------------------------
+STEP 3 — TEST ACCOUNTS & CREDENTIALS
+--------------------------------------------------------------------------------
+
+All accounts use password: TestPass123!
+
+CUSTOMER ACCOUNTS
+  deep_user1@yopmail.com    TestPass123!    (primary test customer)
+  deep_user2@yopmail.com    TestPass123!    (secondary customer)
+
+PROVIDER ACCOUNTS (log in as provider to manage bookings)
+  deep_plumber@yopmail.com      TestPass123!    → Deep Plumber Services
+  deep_cleaner@yopmail.com      TestPass123!    → Deep Clean Pro
+  deep_electrical@yopmail.com   TestPass123!    → Deep Electrical Solutions
+  deep_pest@yopmail.com         TestPass123!    → Deep Pest Control
+
+GENERIC TEST ACCOUNTS (from seed data, limited data)
+  user@test.com         TestPass123!    Customer
+  provider@test.com     TestPass123!    Provider
+
+
+--------------------------------------------------------------------------------
+STEP 4 — MANUAL FEATURE TESTING CHECKLIST
+--------------------------------------------------------------------------------
+
+Open http://localhost:5173 in your browser for all tests below.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 1 — Browse Services by Category
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Go to http://localhost:5173
+2. You should see category cards (Plumbing, Cleaning, Electrical, Pest Control…)
+3. Click any category — should show a list of providers for that category
+4. Each provider card should show: name, rating, price, description
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 2 — Provider Profile & Reviews (with Pagination)  [SER-83]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Direct URL:
+  http://localhost:5173/#/profile/58239207-aec2-4d80-955a-bc450d78a903?type=provider
+
+(This is Deep Clean Pro — 16 reviews seeded, avg 4.31 stars)
+
+1. Page loads showing provider details and list of services offered
+2. Scroll to Reviews section — should show 5 reviews and header "16 Reviews"
+3. Pagination footer visible: "← Prev  |  Page 1 of 4  |  Next →"
+4. Click Next → — loads reviews 6-10
+5. Click Next → again — loads reviews 11-15
+6. Click Next → again — loads review 16 (last page)
+7. Click Prev ← — goes back to page 3
+8. On page 1, Prev button should be disabled (greyed out)
+9. On last page, Next button should be disabled
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 3 — Service-Level Reviews on Browse Page  [SER-82]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Direct URL (Drain Cleaning service — 15 seeded reviews):
+  http://localhost:5173/#/book/c7c72cd1-b811-423c-a555-27a91cf2ec07
+
+1. Page shows list of providers offering Drain Cleaning
+2. Scroll to bottom — "What customers say" section appears
+3. Should show avg rating badge (e.g. ★ 4.3) and count ("15 reviews")
+4. Review cards in a 2-column grid: reviewer name, stars, comment, date
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 4 — Book a Service
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in as customer: deep_user1@yopmail.com / TestPass123!
+2. Browse to any category and pick a provider
+3. Click "Book Now"
+4. Fill in: date/time (pick tomorrow), address, notes
+5. Submit — should see booking confirmation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 5 — Submit a Review
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in as customer: deep_user1@yopmail.com / TestPass123!
+2. Go to My Bookings — find a completed booking
+3. Click "Leave a Review" on a completed booking
+4. Give a star rating + comment, submit
+5. Review should appear immediately on that provider's profile page
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 6 — Provider Dashboard (manage bookings)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in as provider: deep_plumber@yopmail.com / TestPass123!
+2. Go to Dashboard
+3. Should see incoming bookings with customer details
+4. Accept or reject a pending booking — status should update
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 7 — Chatbot
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in as customer: deep_user1@yopmail.com / TestPass123!
+2. Click the chat icon (bottom-right)
+3. Ask: "What are my upcoming bookings?"
+4. Bot should respond with real booking data from your account
+5. Ask: "What services do you offer?" — should list categories
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 8 — 24hr Booking Reminder Email  [SER-125]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+In Terminal 1 (backend must be running), paste this in a new terminal tab:
+
+  curl -X POST "http://localhost:3000/api/test/send-reminder/d84d5ec0-880f-4934-a727-3768a4726ba8?to=ad2386@njit.edu"
+
+Expected response: {"success":true,"emailId":"..."}
+
+Check inbox at: ad2386@njit.edu
+Email subject: "Reminder: <Service Name> appointment tomorrow at <time>"
+
+NOTE: Resend free tier only delivers to the registered account email (ad2386@njit.edu).
+      In production with a verified domain, it would go to the actual customer's email.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 9 — Customer Booking History
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log in as deep_user1@yopmail.com
+2. Go to My Bookings
+3. Should show past and upcoming bookings with status labels
+4. Pagination should work if more than one page
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 10 — Auth (Register / Login / Logout)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Log out if logged in
+2. Register a new customer account with any email
+3. Log out
+4. Log back in with same credentials — should work
+5. Try wrong password — should show error
+6. Try logging in as a provider with provider credentials
+
+
+--------------------------------------------------------------------------------
+STEP 5 — QUICK API HEALTH CHECKS (optional, in any terminal)
+--------------------------------------------------------------------------------
+
+# Backend alive?
+curl http://localhost:3000/api/health
+
+# Paginated provider reviews (Deep Clean Pro, page 1 of 4)
+curl "http://localhost:3000/api/reviews/58239207-aec2-4d80-955a-bc450d78a903?page=1&limit=5"
+
+# Service-level reviews (Drain Cleaning)
+curl "http://localhost:3000/api/reviews/service/c7c72cd1-b811-423c-a555-27a91cf2ec07"
+
+# Cron reminder check (uses real 24hr window — returns sent:0 unless booking exists ~24hr out)
+curl -X POST http://localhost:3000/api/test/trigger-reminders
+
+# Force-send reminder email to your inbox
+curl -X POST "http://localhost:3000/api/test/send-reminder/d84d5ec0-880f-4934-a727-3768a4726ba8?to=ad2386@njit.edu"
+
+
+--------------------------------------------------------------------------------
+KEY URLS REFERENCE
+--------------------------------------------------------------------------------
+
+Frontend home:          http://localhost:5173
+Backend health:         http://localhost:3000/api/health
+
+Deep Clean Pro profile: http://localhost:5173/#/profile/58239207-aec2-4d80-955a-bc450d78a903?type=provider
+Drain Cleaning browse:  http://localhost:5173/#/book/c7c72cd1-b811-423c-a555-27a91cf2ec07
+Deep Clean browse:      http://localhost:5173/#/book/2be5a06d-4818-4fe5-9bfc-c664e5540456
+
+
+--------------------------------------------------------------------------------
+NOTES
+--------------------------------------------------------------------------------
+
+- If backend shows old behavior after git pull: kill the terminal and re-run npm run dev
+- Seed reviews (only needed once, already done):
+    cd backend && npm run seed:reviews
+- Node version required: >= 18
+- Both servers must be running at the same time for the site to work
+
+================================================================================
