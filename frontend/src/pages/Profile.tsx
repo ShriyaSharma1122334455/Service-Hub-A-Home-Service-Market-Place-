@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Send,
   CheckCircle,
+  Pencil,
 } from "lucide-react";
 import {
   VerificationBadge,
@@ -493,30 +494,41 @@ export const Profile: React.FC<ProfileProps> = ({
               </div>
             </div>
 
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">
-                {fullName}
-              </h1>
-              <div className="flex items-center flex-wrap gap-2">
-                <span
-                  className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
-                >
-                  {isProvider ? (
-                    <Briefcase className="h-4 w-4 mr-1.5" />
-                  ) : (
-                    <Shield className="h-4 w-4 mr-1.5" />
-                  )}
-                  {getRoleLabel(role)}
-                </span>
-                <VerificationBadge
-                  status={
-                    ((data as BackendProvider).verificationStatus ||
-                      (data as BackendUser).verificationStatus ||
-                      "unverified") as VerificationStatusType
-                  }
-                  onClick={() => setShowVerificationModal(true)}
-                />
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                  {fullName}
+                </h1>
+                <div className="flex items-center flex-wrap gap-2">
+                  <span
+                    className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold ${getRoleBadgeColor(role)}`}
+                  >
+                    {isProvider ? (
+                      <Briefcase className="h-4 w-4 mr-1.5" />
+                    ) : (
+                      <Shield className="h-4 w-4 mr-1.5" />
+                    )}
+                    {getRoleLabel(role)}
+                  </span>
+                  <VerificationBadge
+                    status={
+                      ((data as BackendProvider).verificationStatus ||
+                        (data as BackendUser).verificationStatus ||
+                        "unverified") as VerificationStatusType
+                    }
+                    onClick={() => setShowVerificationModal(true)}
+                  />
+                </div>
               </div>
+              {profileId === "me" && (
+                <button
+                  onClick={() => onNavigate("/profile/edit")}
+                  aria-label="Edit profile"
+                  className="p-2 rounded-full text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors flex-shrink-0"
+                >
+                  <Pencil className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
             <div className="space-y-4">

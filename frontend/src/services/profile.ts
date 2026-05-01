@@ -7,6 +7,7 @@ export type BackendUser = {
   supabase_id: string;
   full_name: string;
   email?: string;
+  phone?: string;
   avatarUrl?: string;
   role: string;
   bio?: string;
@@ -30,6 +31,7 @@ export type BackendProvider = {
   full_name?: string;
   business_name?: string;
   email?: string;
+  phone?: string;
   avatarUrl?: string;
   role?: string;
   bio?: string;
@@ -70,5 +72,16 @@ export const profileService = {
     const res = await fetchApi<{ providers: BackendProvider[] }>('/providers');
     if (!res.success) return { success: false, error: res.error };
     return { success: true, data: res.data?.providers ?? [] };
+  },
+
+  async updateUserProfile(data: {
+    full_name?: string;
+    phone?: string;
+    bio?: string;
+  }): Promise<ApiResponse<BackendUser>> {
+    return fetchApi<BackendUser>('/users/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 };

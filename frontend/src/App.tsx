@@ -17,6 +17,7 @@ import { ProviderBookings } from "./pages/ProviderBookings";
 import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
 import { VerifyPage } from "./pages/verify";
+import { EditProfile } from "./pages/EditProfile";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
@@ -157,7 +158,9 @@ const App = () => {
     }
   }, [authRestored, basePath, isAuthenticated, user]);
 
-  const profileIdMatch = basePath.match(/^\/profile\/(.+)$/);
+  const isEditProfile = basePath === "/profile/edit";
+
+  const profileIdMatch = !isEditProfile ? basePath.match(/^\/profile\/(.+)$/) : null;
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
 
   const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
@@ -336,6 +339,20 @@ const App = () => {
   const renderContent = () => {
     if (isProtectedPath && !isAuthenticated) {
       return null;
+    }
+
+    if (isEditProfile) {
+      return (
+        <EditProfile
+          onNavigate={navigate}
+          currentUser={user}
+          onProfileUpdate={(newName) => {
+            setUser((prev) => prev ? { ...prev, name: newName } : prev);
+            const stored = loadStoredAuth();
+            if (stored) saveAuth({ ...stored, name: newName });
+          }}
+        />
+      );
     }
 
     if (profileId) {
