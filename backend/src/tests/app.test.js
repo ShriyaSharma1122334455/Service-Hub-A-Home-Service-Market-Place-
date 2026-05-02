@@ -769,6 +769,8 @@ describe('Bookings – POST /api/bookings', () => {
   it('returns 409 when the requested slot is already booked', async () => {
     mockCustomerAuth();
     supabaseAwaitQueue.push(
+      { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
+      { data: { verification_status: 'verified', user_id: 'provider-user-1' }, error: null },
       { data: [{ id: 'existing-booking' }], error: null },
     );
 
@@ -789,9 +791,9 @@ describe('Bookings – POST /api/bookings', () => {
   it('creates booking successfully when slot is free', async () => {
     mockCustomerAuth();
     supabaseAwaitQueue.push(
-      { data: [], error: null },
-      { data: { verification_status: 'verified' }, error: null },
       { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
+      { data: { verification_status: 'verified', user_id: 'provider-user-1' }, error: null },
+      { data: [], error: null },
       { data: { base_price: 125 }, error: null },
       {
         data: {

@@ -41,6 +41,12 @@ const loginLimiter = rateLimit({
   message: { success: false, error: 'Too many login attempts' }
 });
 
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, error: 'Too many registration attempts' }
+});
+
 app.use(helmet());
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -50,6 +56,7 @@ app.use(compression());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRoutes);

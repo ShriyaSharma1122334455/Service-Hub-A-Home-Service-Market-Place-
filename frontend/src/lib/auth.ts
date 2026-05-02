@@ -7,17 +7,54 @@ export const signUpWithRole = async (
   fullName?: string,
   phone?: string
 ) => {
-  // store role in user_metadata (lowercase expected by backend)
-  return supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { role: role || 'customer',
-        phone: phone || null,
-        full_name: fullName || email.split("@")[0],
+  void phone;
+
+  try {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+    const response = await fetch(`${apiBase}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        fullName: fullName || email.split("@")[0],
+        role: role || "customer",
+      }),
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (!response.ok || !json?.success) {
+      return {
+        data: null,
+        error: {
+          message: json?.error || "Registration failed",
+        },
+      };
+    }
+
+    return {
+      data: {
+        user: json.data?.user || null,
+        session: json.data?.token
+          ? { access_token: json.data.token }
+          : null,
+        emailConfirmationRequired:
+          json.data?.emailConfirmationRequired === true,
       },
-    },
-  });
+      error: null,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: {
+        message:
+          err instanceof Error
+            ? err.message
+            : "Registration failed. Please try again.",
+      },
+    };
+  }
 }
 
 export const signIn = async (

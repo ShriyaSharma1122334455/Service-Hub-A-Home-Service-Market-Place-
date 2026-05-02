@@ -136,6 +136,10 @@ export const getUser = async (req, res) => {
 
 export const listUsers = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
     const { data: users, error } = await supabase
       .from('users')
       .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
@@ -222,9 +226,20 @@ export const updateUserRole = async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to create provider profile' });
     }
 
+    let warning = null;
+    const { error: authUpdateError } = await supabase.auth.admin.updateUserById(supabaseId, {
+      user_metadata: { role: 'provider' }
+    });
+
+    if (authUpdateError) {
+      console.error('Failed to sync Supabase auth role metadata:', authUpdateError);
+      warning = 'Role updated, but session metadata could not be refreshed. Please refresh your session.';
+    }
+
     // Return updated user data with provider info
     return res.json({
       success: true,
+      ...(warning ? { warning } : {}),
       data: {
         type: 'provider',
         id: newProvider.id,

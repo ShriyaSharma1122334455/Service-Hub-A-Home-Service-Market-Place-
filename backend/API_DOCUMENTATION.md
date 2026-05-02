@@ -374,7 +374,7 @@ Returns bookings filtered automatically by the authenticated user's role:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `status` | string | Filter: `pending`, `accepted`, `rejected`, `completed` |
+| `status` | string | Filter: `pending`, `confirmed`, `cancelled`, `completed` |
 | `page` | number | Page number (default: 1) |
 | `limit` | number | Results per page (default: 10) |
 
@@ -392,7 +392,7 @@ Returns bookings filtered automatically by the authenticated user's role:
 
 > 🔒 Authentication required — `provider` role (own bookings only)
 
-Changes booking status from `pending` → `accepted`.
+Changes booking status from `pending` → `confirmed`.
 
 ---
 
@@ -401,7 +401,7 @@ Changes booking status from `pending` → `accepted`.
 
 > 🔒 Authentication required — `provider` role (own bookings only)
 
-Changes booking status from `pending` → `rejected`.
+Changes booking status from `pending` or `confirmed` → `cancelled`.
 
 **Body (optional):**
 ```json
@@ -421,7 +421,7 @@ POST /bookings → status: pending
           |                       |
    PUT .../accept          PUT .../reject
           |                       |
-   status: accepted        status: rejected
+   status: confirmed       status: cancelled
           |
    (Future sprint)
           |

@@ -112,15 +112,47 @@ export const createService = async (req, res) => {
 
 export const updateService = async (req, res) => {
   try {
+    // req.user.id is Supabase Auth UUID; providers.user_id is public.users.id (integer FK).
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
+
+    const { data: providerProfile, error: providerError } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', internalUser.id)
+      .maybeSingle();
+
+    if (providerError) {
+      return res.status(400).json({ success: false, error: providerError.message });
+    }
+    if (!providerProfile) {
+      return res.status(403).json({ success: false, error: 'Provider profile not found' });
+    }
+
+    const { name, description, base_price, duration_minutes, sub_category, is_active } = req.body;
+    const updatePayload = {
+      name,
+      description,
+      base_price,
+      duration_minutes,
+      sub_category,
+      is_active,
+      updated_at: new Date()
+    };
+
     const { data: service, error } = await supabase
       .from('services')
-      .update({ ...req.body, updated_at: new Date() })
+      .update(updatePayload)
       .eq('id', req.params.id)
+      .eq('provider_id', providerProfile.id)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error || !service) {
-      return res.status(404).json({ success: false, error: 'Service not found' });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    if (!service) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
     res.json({ success: true, data: service });
@@ -133,18 +165,36 @@ export const updateService = async (req, res) => {
 
 export const deleteService = async (req, res) => {
   try {
+    // req.user.id is Supabase Auth UUID; providers.user_id is public.users.id (integer FK).
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
+
+    const { data: providerProfile, error: providerError } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', internalUser.id)
+      .maybeSingle();
+
+    if (providerError) {
+      return res.status(400).json({ success: false, error: providerError.message });
+    }
+    if (!providerProfile) {
+      return res.status(403).json({ success: false, error: 'Provider profile not found' });
+    }
+
     // .select() makes PostgREST return deleted rows; plain .delete() succeeds with 0 rows.
     const { data, error } = await supabase
       .from('services')
       .delete()
       .eq('id', req.params.id)
+      .eq('provider_id', providerProfile.id)
       .select('id');
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
     if (!data?.length) {
-      return res.status(404).json({ success: false, error: 'Service not found' });
+      return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
     res.json({ success: true, message: 'Service deleted' });

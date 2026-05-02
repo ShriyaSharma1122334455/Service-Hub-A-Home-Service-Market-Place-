@@ -4,7 +4,7 @@ import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.
 // POST /api/reviews
 export const createReview = async (req, res) => {
   try {
-    const { booking_id, rating, comment } = req.body;
+    const { booking_id, provider_id, rating, comment } = req.body;
 
     if (!booking_id || !rating) {
       return res.status(400).json({ success: false, error: 'booking_id and rating are required' });
@@ -31,6 +31,11 @@ export const createReview = async (req, res) => {
 
     if (booking.status !== 'completed') {
       return res.status(400).json({ success: false, error: 'Can only review completed bookings' });
+    }
+
+    const requestedProviderId = req.params.providerId || provider_id;
+    if (requestedProviderId && booking.provider_id !== requestedProviderId) {
+      return res.status(400).json({ success: false, error: 'Provider does not match booking' });
     }
 
     // INSERT directly and let the UNIQUE constraint on booking_id catch duplicates atomically
@@ -92,22 +97,11 @@ export const getProviderReviews = async (req, res) => {
 // Called internally — not a route handler
 const updateProviderRating = async (providerId) => {
   try {
-    const { data: reviews } = await supabase
-      .from('reviews')
-      .select('rating')
-      .eq('provider_id', providerId);
+    const { error } = await supabase.rpc('recalculate_provider_rating', { provider_id: providerId });
 
-    if (!reviews || reviews.length === 0) return;
-
-    const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-
-    await supabase
-      .from('providers')
-      .update({
-        rating_avg:   Math.round(avg * 100) / 100, // 2 decimal places
-        rating_count: reviews.length
-      })
-      .eq('id', providerId);
+    if (error) {
+      console.error('updateProviderRating rpc error:', error);
+    }
 
   } catch (err) {
     console.error('updateProviderRating error:', err);

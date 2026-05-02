@@ -1,5 +1,6 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
+import { BOOKING_STATUS } from '../constants/bookingStatus.js';
 
 export const createBooking = async (req, res) => {
   try {
@@ -10,13 +11,36 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ success: false, error: 'provider_id, service_id and scheduled_at are required' });
     }
 
+    if (new Date(scheduled_at) <= new Date()) {
+      return res.status(400).json({ success: false, error: 'Booking must be scheduled in the future' });
+    }
+
+    // Get internal customer id
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
+
+    // Block bookings with unverified providers
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('verification_status, user_id')
+      .eq('id', provider_id)
+      .single();
+
+    if (!provider || provider.verification_status !== 'verified') {
+      return res.status(403).json({ success: false, error: 'Bookings are only allowed with verified providers' });
+    }
+
+    if (provider.user_id === internalUser.id) {
+      return res.status(400).json({ success: false, error: 'You cannot book your own services' });
+    }
+
     // Basic server-side slot conflict guard.
     const { data: conflicting, error: conflictError } = await supabase
       .from('bookings')
       .select('id')
       .eq('provider_id', provider_id)
       .eq('scheduled_at', scheduled_at)
-      .in('status', ['pending', 'confirmed'])
+      .in('status', [BOOKING_STATUS.PENDING, BOOKING_STATUS.CONFIRMED])
       .limit(1);
 
     if (conflictError) {
@@ -30,21 +54,6 @@ export const createBooking = async (req, res) => {
         code: 'SLOT_UNAVAILABLE',
       });
     }
-
-    // Block bookings with unverified providers
-    const { data: provider } = await supabase
-      .from('providers')
-      .select('verification_status')
-      .eq('id', provider_id)
-      .single();
-
-    if (!provider || provider.verification_status !== 'verified') {
-      return res.status(403).json({ success: false, error: 'Bookings are only allowed with verified providers' });
-    }
-
-    // Get internal customer id
-    const internalUser = await getInternalUser(req.user.id);
-    if (!internalUser) return profileNotFoundResponse(res);
 
     // Get service price
     const { data: service } = await supabase
@@ -63,8 +72,8 @@ export const createBooking = async (req, res) => {
         scheduled_at,
         notes:            notes || null,
         total_price:      service?.base_price || 0,
-        status:           'pending',
-        payment_status:   'pending',
+        status:           BOOKING_STATUS.PENDING,
+        payment_status:   BOOKING_STATUS.PENDING,
         address_street:   address_street || null,
         address_city:     address_city   || null,
         address_state:    address_state  || null,
@@ -102,6 +111,10 @@ export const listBookings = async (req, res) => {
     const internalUser = await getInternalUser(req.user.id);
     if (!internalUser) return profileNotFoundResponse(res);
 
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+    const offset = (page - 1) * limit;
+
     let query = supabase
       .from('bookings')
       .select(`
@@ -109,7 +122,7 @@ export const listBookings = async (req, res) => {
         service:services(name, base_price),
         provider:providers(business_name, rating_avg),
         customer:users(full_name, email)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
     // Filter by role — replaces your old filter object
@@ -129,13 +142,20 @@ export const listBookings = async (req, res) => {
       query = query.eq('customer_id', internalUser.id);
     }
 
-    const { data: bookings, error } = await query;
+    const { data: bookings, error, count } = await query.range(offset, offset + limit - 1);
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
 
-    res.json({ success: true, count: bookings.length, data: bookings });
+    res.json({
+      success: true,
+      count: bookings.length,
+      page,
+      limit,
+      ...(typeof count === 'number' ? { total: count } : {}),
+      data: bookings
+    });
 
   } catch (err) {
     console.error('List bookings error:', err);
@@ -148,7 +168,24 @@ export const getBooking = async (req, res) => {
     const { data: booking, error } = await supabase
       .from('bookings')
       .select(`
-        *,
+        id,
+        customer_id,
+        provider_id,
+        service_id,
+        availability_id,
+        scheduled_at,
+        notes,
+        total_price,
+        status,
+        payment_status,
+        cancellation_reason,
+        completed_at,
+        address_street,
+        address_city,
+        address_state,
+        address_zip,
+        created_at,
+        updated_at,
         service:services(name, base_price, description),
         provider:providers(business_name, rating_avg, description)
       `)
@@ -159,7 +196,51 @@ export const getBooking = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Booking not found' });
     }
 
-    res.json({ success: true, data: booking });
+    const internalUser = await getInternalUser(req.user.id);
+    if (!internalUser) return profileNotFoundResponse(res);
+
+    const { data: provider } = await supabase
+      .from('providers')
+      .select('id')
+      .eq('user_id', internalUser.id)
+      .single();
+
+    const isCustomer = booking.customer_id === internalUser.id;
+    const isProvider = provider?.id === booking.provider_id;
+    const isAdmin = internalUser.role === 'admin';
+
+    if (!isCustomer && !isProvider && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+
+    const customerBooking = {
+      id: booking.id,
+      provider_id: booking.provider_id,
+      service_id: booking.service_id,
+      availability_id: booking.availability_id,
+      scheduled_at: booking.scheduled_at,
+      notes: booking.notes,
+      total_price: booking.total_price,
+      status: booking.status,
+      payment_status: booking.payment_status,
+      cancellation_reason: booking.cancellation_reason,
+      completed_at: booking.completed_at,
+      address_street: booking.address_street,
+      address_city: booking.address_city,
+      address_state: booking.address_state,
+      address_zip: booking.address_zip,
+      created_at: booking.created_at,
+      updated_at: booking.updated_at,
+      service: booking.service,
+      provider: booking.provider
+    };
+
+    const privilegedBooking = {
+      ...customerBooking,
+      customer_id: booking.customer_id
+    };
+
+    res.json({ success: true, data: isCustomer && !isAdmin ? customerBooking : privilegedBooking });
 
   } catch (err) {
     console.error('Get booking error:', err);
@@ -202,13 +283,18 @@ export const acceptBooking = async (req, res) => {
 
     const { data: booking, error } = await supabase
       .from('bookings')
-      .update({ status: 'confirmed' })
+      .update({ status: BOOKING_STATUS.CONFIRMED })
       .eq('id', req.params.id)
+      .eq('status', BOOKING_STATUS.PENDING)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error || !booking) {
-      return res.status(400).json({ success: false, error: error?.message || 'Failed to update booking' });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    if (!booking) {
+      return res.status(409).json({ success: false, error: 'Booking is no longer pending' });
     }
 
     res.json({ success: true, data: booking });
@@ -252,14 +338,14 @@ export const rejectBooking = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized to reject this booking' });
     }
 
-    if (existing.status !== 'pending' && existing.status !== 'confirmed') {
+    if (existing.status !== BOOKING_STATUS.PENDING && existing.status !== BOOKING_STATUS.CONFIRMED) {
       return res.status(400).json({ success: false, error: `Cannot reject a booking with status '${existing.status}'` });
     }
 
     const { data: booking, error } = await supabase
       .from('bookings')
       .update({
-        status: 'cancelled',
+        status: BOOKING_STATUS.CANCELLED,
         cancellation_reason: req.body.reason || 'Rejected by provider'
       })
       .eq('id', req.params.id)
@@ -311,22 +397,27 @@ export const completeBooking = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized to complete this booking' });
     }
 
-    if (existing.status !== 'confirmed') {
+    if (existing.status !== BOOKING_STATUS.CONFIRMED) {
       return res.status(400).json({ success: false, error: 'Can only complete confirmed bookings' });
     }
 
     const { data: booking, error } = await supabase
       .from('bookings')
       .update({
-        status: 'completed',
+        status: BOOKING_STATUS.COMPLETED,
         completed_at: new Date().toISOString(),
       })
       .eq('id', req.params.id)
+      .eq('status', BOOKING_STATUS.CONFIRMED)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error || !booking) {
-      return res.status(400).json({ success: false, error: error?.message || 'Failed to update booking' });
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    if (!booking) {
+      return res.status(409).json({ success: false, error: 'Booking is no longer confirmed' });
     }
 
     res.json({ success: true, data: booking });
