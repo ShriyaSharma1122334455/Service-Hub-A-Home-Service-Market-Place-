@@ -34,23 +34,13 @@ This file tracks every QA-identified bug fix applied to this branch. Each entry 
 
 ---
 
-## MED-05 · No email notification on booking accept/reject/complete ✅
-**Files:**  
-- `backend/src/utils/emailService.js` *(new)*  
-- `backend/src/controllers/bookingController.js`
+## MED-05 · No email notification on booking accept/reject/complete ⏪ REVERTED
+**Status:** Reverted on 2026-05-02.  
+`emailService.js` deleted, `resend` uninstalled, fire-and-forget blocks removed from `bookingController.js`.
 
-**Before:**
-- `acceptBooking()`, `rejectBooking()`, and `completeBooking()` performed status transitions silently — the customer received no notification.
-
-**Fix:**
-- Created `emailService.js` wrapping the Resend SDK with three exported helpers:
-  - `sendBookingConfirmation(booking, email)` — called after `acceptBooking`
-  - `sendBookingCancellation(booking, email)` — called after `rejectBooking`
-  - `sendBookingCompletion(booking, email)` — called after `completeBooking`
-- Each controller function sends the HTTP response first, then fires the email asynchronously (fire-and-forget). Email failures are logged via `logger.error` and never surface to the API caller.
-- Customer email is fetched from `public.users` by `customer_id` after the status update.
-- Requires: `RESEND_API_KEY` env var; optional `EMAIL_FROM` (defaults to `ServiceHub <noreply@servicehub.app>`).
-- **Dependency added:** `resend` (npm).
+**Original intent:**
+- Add fire-and-forget Resend emails after `acceptBooking`, `rejectBooking`, and `completeBooking`.
+- Reason for revert: to be re-implemented via a different approach (see future fix).
 
 ---
 
