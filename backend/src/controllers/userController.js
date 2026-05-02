@@ -1,5 +1,6 @@
 import supabase from '../config/supabase.js';
 import { PROFILE_NOT_FOUND_MESSAGE } from '../utils/internalUser.js';
+import logger from '../utils/logger.js';
 
 export const getMe = async (req, res) => {
   try {
@@ -107,7 +108,7 @@ export const getMe = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error fetching me:', err);
+    logger.error({ err }, 'Error fetching me');
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
   }
 };
@@ -129,7 +130,7 @@ export const getUser = async (req, res) => {
     res.json({ success: true, data: { ...user, verificationStatus: user.verification_status || 'unverified' } });
 
   } catch (err) {
-    console.error('Error fetching user:', err);
+    logger.error({ err }, 'Error fetching user');
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
   }
 };
@@ -140,10 +141,25 @@ export const listUsers = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden' });
     }
 
-    const { data: users, error } = await supabase
+    const page  = Math.max(parseInt(req.query.page,  10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+    const offset = (page - 1) * limit;
+
+    // Accept an optional role filter; if omitted, return all users (admin view)
+    const { role: roleFilter } = req.query;
+
+    let query = supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
-      .eq('role', 'customer');
+      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status', { count: 'exact' })
+      .order('created_at', { ascending: false });
+
+    if (roleFilter) {
+      query = query.eq('role', roleFilter);
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: users, error, count } = await query;
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
@@ -151,10 +167,16 @@ export const listUsers = async (req, res) => {
 
     const mappedUsers = users.map(u => ({ ...u, verificationStatus: u.verification_status || 'unverified' }));
 
-    return res.json({ success: true, data: { users: mappedUsers } });
+    return res.json({
+      success: true,
+      page,
+      limit,
+      ...(typeof count === 'number' ? { total: count } : {}),
+      data: { users: mappedUsers },
+    });
 
   } catch (err) {
-    console.error('Error fetching users:', err);
+    logger.error({ err }, 'Error fetching users');
     res.status(500).json({ success: false, error: 'Failed to fetch users' });
   }
 };
@@ -232,7 +254,7 @@ export const updateUserRole = async (req, res) => {
     });
 
     if (authUpdateError) {
-      console.error('Failed to sync Supabase auth role metadata:', authUpdateError);
+      logger.error({ err: authUpdateError }, 'Failed to sync Supabase auth role metadata');
       warning = 'Role updated, but session metadata could not be refreshed. Please refresh your session.';
     }
 
@@ -257,7 +279,7 @@ export const updateUserRole = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error updating user role:', err);
+    logger.error({ err }, 'Error updating user role');
     res.status(500).json({ success: false, error: 'Failed to update role' });
   }
 };
@@ -326,7 +348,7 @@ export const updateUserProfile = async (req, res) => {
         .eq('supabase_id', supabaseId);
 
       if (coreErr) {
-        console.error('Profile core update error:', coreErr);
+        logger.error({ err: coreErr }, 'Profile core update error');
         return res.status(500).json({ success: false, error: 'Failed to update profile' });
       }
     }
@@ -344,7 +366,7 @@ export const updateUserProfile = async (req, res) => {
           // Column does not exist yet
           extColumnsMissing = true;
         } else {
-          console.error('Profile extended update error:', extErr);
+          logger.error({ err: extErr }, 'Profile extended update error');
         }
       }
     }
@@ -379,7 +401,7 @@ export const updateUserProfile = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error updating user profile:', err);
+    logger.error({ err }, 'Error updating user profile');
     res.status(500).json({ success: false, error: 'Failed to update profile' });
   }
 };

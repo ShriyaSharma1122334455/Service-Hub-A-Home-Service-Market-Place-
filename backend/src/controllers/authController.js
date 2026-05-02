@@ -1,4 +1,5 @@
 import supabase from '../config/supabase.js';
+import logger from '../utils/logger.js';
 
 export const register = async (req, res) => {
   try {
@@ -23,6 +24,12 @@ if (!passwordRegex.test(password)) {
 
     const roleLower = ['customer', 'provider'].includes(role) ? role : 'customer';
 
+    // Normalize: trim edges, collapse internal runs of whitespace, title-case each word
+    const normalizedName = fullName
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+
     // Step 1 — create user in auth.users
     // DB trigger automatically creates the public.users row
     const { data, error } = await supabase.auth.signUp({
@@ -31,7 +38,7 @@ if (!passwordRegex.test(password)) {
       email_confirm: true,
       user_metadata: {
         role: roleLower,
-        full_name: fullName.trim()
+        full_name: normalizedName,
       }
     });
 
@@ -64,7 +71,7 @@ if (!passwordRegex.test(password)) {
     });
 
      } catch (err) {
-    console.error('Register error:', err);
+    logger.error({ err }, 'Register error');
     return res.status(500).json({ success: false, error: 'Failed to register' });
   }
 };
@@ -106,7 +113,7 @@ export const login = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Login error:', err);
+    logger.error({ err }, 'Login error');
     return res.status(500).json({ success: false, error: 'Failed to login' });
   }
 };

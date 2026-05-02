@@ -1,5 +1,6 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
+import logger from '../utils/logger.js';
 
 // POST /api/reviews
 export const createReview = async (req, res) => {
@@ -64,7 +65,7 @@ export const createReview = async (req, res) => {
     return res.status(201).json({ success: true, data: review });
 
   } catch (err) {
-    console.error('createReview error:', err);
+    logger.error({ err }, 'createReview error');
     res.status(500).json({ success: false, error: 'Failed to create review' });
   }
 };
@@ -88,7 +89,7 @@ export const getProviderReviews = async (req, res) => {
     return res.json({ success: true, count: reviews.length, data: reviews });
 
   } catch (err) {
-    console.error('getProviderReviews error:', err);
+    logger.error({ err }, 'getProviderReviews error');
     res.status(500).json({ success: false, error: 'Failed to fetch reviews' });
   }
 };
@@ -100,11 +101,11 @@ const updateProviderRating = async (providerId) => {
     const { error } = await supabase.rpc('recalculate_provider_rating', { provider_id: providerId });
 
     if (error) {
-      console.error('updateProviderRating rpc error:', error);
+      logger.error({ err: error }, 'updateProviderRating rpc error');
     }
 
   } catch (err) {
-    console.error('updateProviderRating error:', err);
+    logger.error({ err }, 'updateProviderRating error');
   }
 };
 

@@ -1,6 +1,12 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 import { BOOKING_STATUS } from '../constants/bookingStatus.js';
+import logger from '../utils/logger.js';
+import {
+  sendBookingConfirmation,
+  sendBookingCancellation,
+  sendBookingCompletion,
+} from '../utils/emailService.js';
 
 export const createBooking = async (req, res) => {
   try {
@@ -22,7 +28,7 @@ export const createBooking = async (req, res) => {
     // Block bookings with unverified providers
     const { data: provider } = await supabase
       .from('providers')
-      .select('verification_status, user_id')
+      .select('id, verification_status, user_id')
       .eq('id', provider_id)
       .single();
 
@@ -55,12 +61,16 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Get service price
+    // Get service and validate it belongs to the specified provider
     const { data: service } = await supabase
       .from('services')
-      .select('base_price')
+      .select('base_price, provider_id')
       .eq('id', service_id)
       .single();
+
+    if (service && service.provider_id !== provider.id) {
+      return res.status(400).json({ success: false, error: 'Service does not belong to the specified provider' });
+    }
 
     const { data: booking, error } = await supabase
       .from('bookings')
@@ -100,7 +110,7 @@ export const createBooking = async (req, res) => {
     res.status(201).json({ success: true, data: booking });
 
   } catch (err) {
-    console.error('Create booking error:', err);
+    logger.error({ err }, 'Create booking error');
     res.status(500).json({ success: false, error: 'Failed to create booking' });
   }
 };
@@ -158,7 +168,7 @@ export const listBookings = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('List bookings error:', err);
+    logger.error({ err }, 'List bookings error');
     res.status(500).json({ success: false, error: 'Failed to list bookings' });
   }
 };
@@ -243,7 +253,7 @@ export const getBooking = async (req, res) => {
     res.json({ success: true, data: isCustomer && !isAdmin ? customerBooking : privilegedBooking });
 
   } catch (err) {
-    console.error('Get booking error:', err);
+    logger.error({ err }, 'Get booking error');
     res.status(500).json({ success: false, error: 'Failed to fetch booking' });
   }
 };
@@ -299,8 +309,22 @@ export const acceptBooking = async (req, res) => {
 
     res.json({ success: true, data: booking });
 
+    // Fire-and-forget confirmation email to customer
+    supabase
+      .from('users')
+      .select('email')
+      .eq('id', booking.customer_id)
+      .single()
+      .then(({ data: customer }) => {
+        if (customer?.email) {
+          sendBookingConfirmation(booking, customer.email).catch(emailErr =>
+            logger.error({ err: emailErr }, 'Failed to send booking confirmation email')
+          );
+        }
+      });
+
   } catch (err) {
-    console.error('Accept booking error:', err);
+    logger.error({ err }, 'Accept booking error');
     res.status(500).json({ success: false, error: 'Failed to accept booking' });
   }
 };
@@ -358,8 +382,22 @@ export const rejectBooking = async (req, res) => {
 
     res.json({ success: true, data: booking });
 
+    // Fire-and-forget cancellation email to customer
+    supabase
+      .from('users')
+      .select('email')
+      .eq('id', booking.customer_id)
+      .single()
+      .then(({ data: customer }) => {
+        if (customer?.email) {
+          sendBookingCancellation(booking, customer.email).catch(emailErr =>
+            logger.error({ err: emailErr }, 'Failed to send booking cancellation email')
+          );
+        }
+      });
+
   } catch (err) {
-    console.error('Reject booking error:', err);
+    logger.error({ err }, 'Reject booking error');
     res.status(500).json({ success: false, error: 'Failed to reject booking' });
   }
 };
@@ -422,8 +460,22 @@ export const completeBooking = async (req, res) => {
 
     res.json({ success: true, data: booking });
 
+    // Fire-and-forget completion email to customer
+    supabase
+      .from('users')
+      .select('email')
+      .eq('id', booking.customer_id)
+      .single()
+      .then(({ data: customer }) => {
+        if (customer?.email) {
+          sendBookingCompletion(booking, customer.email).catch(emailErr =>
+            logger.error({ err: emailErr }, 'Failed to send booking completion email')
+          );
+        }
+      });
+
   } catch (err) {
-    console.error('Complete booking error:', err);
+    logger.error({ err }, 'Complete booking error');
     res.status(500).json({ success: false, error: 'Failed to complete booking' });
   }
 };

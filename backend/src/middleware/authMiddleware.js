@@ -12,7 +12,7 @@
  *    same region), but always returns up-to-date session validity (revoked
  *    tokens are caught immediately, unlike local JWT verification).
  *
- * Required .env:
+ * Required .env (backend only — never use VITE_-prefixed vars here):
  *   SUPABASE_URL              (e.g. https://xxx.supabase.co)
  *   SUPABASE_SERVICE_ROLE_KEY (sb_secret_* or legacy eyJ... service role key)
  *
@@ -30,12 +30,16 @@ let _adminClient = null;
 
 function getAdminClient() {
   if (!_adminClient) {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceKey) {
-      throw new Error(
-        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or their VITE_ counterparts) must be set in .env'
-      );
+    // VITE_ prefixes are Vite's client-side env mechanism and are bundled into
+    // the browser bundle. They must NEVER be used for backend secrets — any
+    // variable prefixed VITE_ is visible to all browser users.
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl) {
+      throw new Error('SUPABASE_URL must be set in .env');
+    }
+    if (!serviceKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY must be set in .env');
     }
     _adminClient = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },

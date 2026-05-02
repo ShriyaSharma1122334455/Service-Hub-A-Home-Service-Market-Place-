@@ -39,8 +39,15 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Auth guard — redirect before making an authenticated API call
   useEffect(() => {
-    if (!bookingId) return;
+    if (!token?.trim()) {
+      onNavigate('/login');
+    }
+  }, [token, onNavigate]);
+
+  useEffect(() => {
+    if (!bookingId || !token?.trim()) return;
     let cancelled = false;
 
     async function load() {

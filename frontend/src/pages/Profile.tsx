@@ -74,6 +74,13 @@ export const Profile: React.FC<ProfileProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (!notification) return;
+    const t = setTimeout(() => setNotification(null), 5000);
+    return () => clearTimeout(t);
+  }, [notification]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
   // Review form state (only for customers viewing a provider profile)
@@ -454,6 +461,26 @@ export const Profile: React.FC<ProfileProps> = ({
   const serviceCategory = (data as BackendProvider).serviceCategory;
 
   return (
+    <>
+    {notification && (
+      <div
+        className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-semibold transition-all ${
+          notification.type === "success"
+            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+            : "bg-red-50 border-red-200 text-red-800"
+        }`}
+        role="alert"
+      >
+        <span>{notification.message}</span>
+        <button
+          onClick={() => setNotification(null)}
+          className="ml-2 text-current opacity-60 hover:opacity-100 transition-opacity"
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    )}
     <div className="min-h-[calc(100vh-140px)] py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <button
@@ -615,19 +642,22 @@ export const Profile: React.FC<ProfileProps> = ({
                             });
 
                             if (res.success) {
-                              alert(
-                                "Welcome to ServiceHub as a provider! Your profile has been updated.",
-                              );
-                              window.location.reload(); // Reload to refresh all state
+                              setNotification({
+                                message: "Welcome to ServiceHub as a provider! Your profile has been updated.",
+                                type: "success",
+                              });
+                              setTimeout(() => window.location.reload(), 1500);
                             } else {
-                              alert(
-                                `Failed to update role: ${res.error || "Unknown error"}`,
-                              );
+                              setNotification({
+                                message: `Failed to update role: ${res.error || "Unknown error"}`,
+                                type: "error",
+                              });
                             }
                           } catch (error) {
-                            alert(
-                              "An error occurred while updating your role. Please try again.",
-                            );
+                            setNotification({
+                              message: "An error occurred while updating your role. Please try again.",
+                              type: "error",
+                            });
                             console.error(error);
                           }
                         }}
@@ -982,5 +1012,6 @@ export const Profile: React.FC<ProfileProps> = ({
         />
       </div>
     </div>
+    </>
   );
 };
