@@ -8,10 +8,72 @@
  * - URL validation (prevents misconfiguration)
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { validateVdaAuthConfig, validateVdaServiceConfig } from '../config/vdaServiceConfig.js';
 import { normalizeVdaError } from '../utils/vdaErrorNormalizer.js';
 import { retryWithBackoff } from '../utils/retryWithBackoff.js';
 import { validateVdaResponse, validateAndSanitizeVdaResponse } from '../utils/vdaResponseValidator.js';
+
+describe('VDA Security - Startup Configuration', () => {
+  const envKeys = ['NODE_ENV', 'VDA_SERVICE_URL', 'VDA_SERVICE_API_KEY', 'VDA_REQUIRE_AUTH'];
+  let savedEnv;
+  let exitSpy;
+  let consoleErrorSpy;
+  let consoleWarnSpy;
+  let consoleLogSpy;
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit:${code}`);
+    });
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    for (const key of envKeys) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+    exitSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+    consoleLogSpy.mockRestore();
+  });
+
+  it('exits startup when VDA_SERVICE_URL is configured without VDA_SERVICE_API_KEY', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.VDA_SERVICE_URL = 'https://vda.test';
+    delete process.env.VDA_SERVICE_API_KEY;
+
+    expect(() => validateVdaServiceConfig()).toThrow('process.exit:1');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '❌ VDA_SERVICE_API_KEY is required when VDA_SERVICE_URL is configured',
+    );
+  });
+
+  it('exits startup when VDA_REQUIRE_AUTH has an invalid value', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.VDA_REQUIRE_AUTH = 'maybe';
+
+    expect(() => validateVdaAuthConfig()).toThrow('process.exit:1');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('❌ Invalid VDA_REQUIRE_AUTH value:', 'maybe');
+  });
+
+  it('exits startup when VDA auth is disabled in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.VDA_REQUIRE_AUTH = 'false';
+
+    expect(() => validateVdaAuthConfig()).toThrow('process.exit:1');
+    expect(consoleWarnSpy).toHaveBeenCalledWith('⚠️  VDA_REQUIRE_AUTH is set to false');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('❌ Disabling authentication in production is not recommended');
+  });
+});
 
 describe('VDA Security - Error Normalization', () => {
   it('should normalize 500 server errors to generic message', () => {

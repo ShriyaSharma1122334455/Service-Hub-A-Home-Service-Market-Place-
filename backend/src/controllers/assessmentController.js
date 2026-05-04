@@ -4,9 +4,11 @@ import { normalizeVdaError } from '../utils/vdaErrorNormalizer.js';
 import { buildNegotiationQuote } from '../utils/quoteEstimator.js';
 import { retryWithBackoff } from '../utils/retryWithBackoff.js';
 import { validateAndSanitizeVdaResponse } from '../utils/vdaResponseValidator.js';
+import { sanitizeTaskInput } from '../utils/promptSanitizer.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const TASK_MAX_LENGTH = 500;
+const DEFAULT_TASK = 'I want an expert visual assessment for my goal.';
 
 /**
  * POST /api/assessments/visual
@@ -71,17 +73,19 @@ export const assessVisualDamage = async (req, res) => {
       });
     }
 
-    const task =
+    const rawTask =
       typeof req.body?.task === 'string' && req.body.task.trim()
         ? req.body.task.trim()
-        : 'I want an expert visual assessment for my goal.';
+        : DEFAULT_TASK;
 
-    if (task.length > TASK_MAX_LENGTH) {
+    if (rawTask.length > TASK_MAX_LENGTH) {
       return res.status(400).json({
         success: false,
         error: `Task description too long. Maximum ${TASK_MAX_LENGTH} characters allowed.`,
       });
     }
+
+    const task = sanitizeTaskInput(rawTask, TASK_MAX_LENGTH) || DEFAULT_TASK;
 
     const ext = mime === 'image/png' ? 'png' : 'jpg';
     const filename = `upload.${ext}`;
