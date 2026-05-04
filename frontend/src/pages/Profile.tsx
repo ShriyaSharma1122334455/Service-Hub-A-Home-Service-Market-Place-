@@ -19,6 +19,7 @@ import {
   VerificationBadge,
   type VerificationStatusType,
 } from "../components/VerificationBadge";
+import { supabase } from "../lib/supabase";
 import { VerificationDetailsModal } from "../components/VerificationDetailsModal";
 
 interface Review {
@@ -631,20 +632,20 @@ export const Profile: React.FC<ProfileProps> = ({
                             });
 
                             if (res.success) {
-                              alert(
-                                "Welcome to ServiceHub as a provider! Your profile has been updated.",
-                              );
-                              window.location.reload(); // Reload to refresh all state
+                              // refresh the Supabase session so the new JWT carries
+                              
+                              if ((res as { requiresReauth?: boolean }).requiresReauth) {
+                                await supabase.auth.refreshSession();
+                              }
+                              window.location.reload();
                             } else {
                               alert(
-                                `Failed to update role: ${res.error || "Unknown error"}`,
+                                `Failed to update role: ${(res as { error?: string }).error ?? "Unknown error"}`,
                               );
                             }
                           } catch (error) {
-                            alert(
-                              "An error occurred while updating your role. Please try again.",
-                            );
-                            console.error(error);
+                            console.error("Role upgrade failed:", error);
+                            alert("An error occurred while updating your role. Please try again.");
                           }
                         }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-full hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl"

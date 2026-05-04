@@ -1,13 +1,16 @@
 import express from 'express';
 import { getMe, getUser, listUsers, updateUserRole, updateUserProfile } from '../controllers/userController.js';
-import { authenticate } from '../middleware/authMiddleware.js';
+import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/me', authenticate, getMe);
-router.put('/me', authenticate, updateUserProfile);
+// Own profile — any authenticated role
+router.get('/me',      authenticate, getMe);
+router.put('/me',      authenticate, updateUserProfile);
 router.put('/me/role', authenticate, updateUserRole);
-router.get('/:id', authenticate, getUser);
-router.get('/', authenticate, listUsers);
+
+// Admin-only routes
+router.get('/:id', authenticate, requireRole('admin'), getUser);
+router.get('/',    authenticate, requireRole('admin'), listUsers);
 
 export default router;
