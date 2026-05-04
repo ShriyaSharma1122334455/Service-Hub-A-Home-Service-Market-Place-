@@ -1,26 +1,6 @@
-/**
- * backend/tests/app.test.js
- * Smoke tests + code quality checks for ServiceHub backend (Supabase)
- *
- * These tests exercise the Express routes WITHOUT hitting a real Supabase
- * instance.  The Supabase client module is mocked via jest.unstable_mockModule
- * so that every `supabase.from(...)` and `supabase.auth.*` call returns
- * predictable data.
- *
- * Run: npm test
- */
-
 import { jest } from '@jest/globals';
 
-// ── Mock Supabase BEFORE any app code is imported ─────────────────────────
-// jest.unstable_mockModule works with native ESM (--experimental-vm-modules).
-
-// Build a Proxy-based chainable mock that handles any supabase query chain.
-// Every chained method (.select, .eq, .order, .limit, .range, .single, etc.)
-// returns the same proxy. When awaited, it resolves to { data: [], error: null }.
-// Individual tests can override the response via mockFromResult.
-let mockFromResult = { data: [], error: null };
-
+let mockFromResult = { data: [], error: null }; 
 function createChainProxy() {
   const handler = {
     get(target, prop) {
@@ -212,18 +192,16 @@ describe('Auth – /api/auth', () => {
   });
 
   it('POST /login rejects wrong password (401)', async () => {
-    // ✅ FIX: this test was getting 200 because the previous test's mockSignIn
-    // call was being consumed here. Now that the register test no longer calls
-    // mockSignIn, this mock is used correctly.
     mockSignIn.mockResolvedValueOnce({
-      data: null,
+      data: {
+        user: null,
+        session: null,
+      },
       error: { message: 'Invalid login credentials' },
     });
-
     const res = await request(app)
       .post('/api/auth/login')
       .send({ email: 'test@example.com', password: 'WrongPass!' });
-
     expect(res.statusCode).toBe(401);
   });
 
@@ -788,17 +766,18 @@ describe('Bookings – POST /api/bookings', () => {
 
   it('creates booking successfully when slot is free', async () => {
     mockCustomerAuth();
+
     supabaseAwaitQueue.push(
       { data: [], error: null },
-      { data: { verification_status: 'verified' }, error: null },
+      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'prov-user-uuid' }, error: null },
       { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
-      { data: { base_price: 125 }, error: null },
+      { data: { id: 'svc-1', base_price: 125, provider_id: 'prov-1', is_active: true }, error: null },
       {
         data: {
           id: 'booking-1',
           provider_id: 'prov-1',
           service_id: 'svc-1',
-          scheduled_at: '2026-08-10T11:00:00.000Z',
+          scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
           total_price: 125,
           status: 'pending',
         },
@@ -810,9 +789,9 @@ describe('Bookings – POST /api/bookings', () => {
       .post('/api/bookings')
       .set('Authorization', 'Bearer fake-jwt')
       .send({
-        provider_id: 'prov-1',
-        service_id: 'svc-1',
-        scheduled_at: '2026-08-10T11:00:00.000Z',
+        provider_id:  'prov-1',
+        service_id:   'svc-1',
+        scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       });
 
     expect(res.statusCode).toBe(201);

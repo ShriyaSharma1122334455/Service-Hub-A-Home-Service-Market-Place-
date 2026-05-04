@@ -5,8 +5,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import  { checkSupabaseConnection } from './config/supabase.js';
-import { validateVdaAuthConfig, validateVdaServiceConfig } from './config/vdaServiceConfig.js';
+import { checkSupabaseConnection } from './config/supabase.js';
+import { validateVdaServiceConfig } from './config/vdaServiceConfig.js';
 import { startReminderCron } from './services/reminderService.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
@@ -18,10 +18,9 @@ import chatbotRoutes from './routes/chatbotRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
-// import userRoutes from './routes/userRoutes.js';
-import testRoutes from './routes/testRoutes.js';
-import assessmentRoutes from './routes/assessmentRoutes.js';
-import dashboardRoutes from './routes/dashboardRoutes.js';
+import testRoutes        from './routes/testRoutes.js';
+import assessmentRoutes  from './routes/assessmentRoutes.js';
+import dashboardRoutes   from './routes/dashboardRoutes.js';
 
 dotenv.config();
 
@@ -34,98 +33,76 @@ if (process.env.NODE_ENV !== 'test') {
   startReminderCron();
 }
 
-// Rate limiting
-
+// ── Rate limiters ─────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { success: false, error: 'Too many login attempts' }
+  windowMs:       15 * 60 * 1000,   // 15 minutes
+  max:            10,
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { success: false, error: 'Too many login attempts. Please try again in 15 minutes.' },
 });
 
+const registerLimiter = rateLimit({
+  windowMs:       60 * 60 * 1000,   // 1 hour
+  max:            5,
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { success: false, error: 'Too many registration attempts. Please try again in an hour.' },
+});
+
+// ── Security & utility middleware ─────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  credentials: true
+  origin:      process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true,
 }));
 app.use(compression());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/auth/login', loginLimiter);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/users', profileRoutes);
-app.use('/api/services', serviceRoutes);
-app.use('/api/providers', providerRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/assessments', assessmentRoutes);
-app.use('/api/complaints', complaintRoutes);
+// ── Rate-limit auth endpoints ─────────────────────────────────────────────
+app.use('/api/auth/login',    loginLimiter);
+app.use('/api/auth/register', registerLimiter);   // ← A-09: new
+
+// ── API routes ────────────────────────────────────────────────────────────
+app.use('/api/auth',         authRoutes);
+app.use('/api/categories',   categoryRoutes);
+app.use('/api/users',        profileRoutes);
+app.use('/api/services',     serviceRoutes);
+app.use('/api/providers',    providerRoutes);
+app.use('/api/bookings',     bookingRoutes);
+app.use('/api/dashboard',    dashboardRoutes);
+app.use('/api/chatbot',      chatbotRoutes);
+app.use('/api/reviews',      reviewRoutes);
+app.use('/api/assessments',  assessmentRoutes);
+app.use('/api/complaints',   complaintRoutes);
 app.use('/api/verification', verificationRoutes);
-// Mount test routes in development only — never in production
+
+// Test routes — development only, never exposed in production
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/test', testRoutes);
 }
-// app.use('/api/users', userRoutes);
 
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to ServiceHub API',
-    version: '1.0.0',
-    status: 'running'
-  });
+// ── Utility endpoints ─────────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.json({ message: 'Welcome to ServiceHub API', version: '1.0.0', status: 'running' });
 });
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    database: 'supabase'  // ✅ CHANGED: removed mongoose.connection.readyState check
-  });
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Prefixed health check — used by tests and external monitors
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  });
-});
+// ── Global error handler ──────────────────────────────────────────────────
+app.use((err, _req, res, _next) => {
+  const isDev = process.env.NODE_ENV !== 'production';
+  console.error('Unhandled error:', err);
 
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Cannot ${req.method} ${req.path}`
-  });
-});
-
-app.use((err, req, res, _next) => {
-  console.error('❌ Error:', err);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    success: false,
+    error:   isDev ? err.message : 'Internal Server Error',
+    ...(isDev && { stack: err.stack }),
   });
-});
-
-const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`\n🚀 Server is running on port ${PORT}`);
-    console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🌐 API URL: http://localhost:${PORT}`);
-    console.log(`💚 Health Check: http://localhost:${PORT}/health\n`);
-  });
-}
-
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  if (process.env.NODE_ENV !== 'test') {
-    process.exit(1);
-  }
 });
 
 export default app;

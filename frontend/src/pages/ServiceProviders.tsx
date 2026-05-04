@@ -7,6 +7,14 @@ import { ArrowLeft, Star, DollarSign, Clock, ExternalLink } from "lucide-react";
 import type { User } from "../../types";
 import { BookingModal } from "../components/BookingModal";
 
+interface ServiceReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  reviewer: { full_name: string; avatar_url: string | null } | null;
+}
+
 interface ServiceDetail {
   id: string;
   name: string;
@@ -123,6 +131,11 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
     providerName: string;
   } | null>(null);
 
+  const [serviceReviews, setServiceReviews] = useState<ServiceReview[]>([]);
+  const [serviceReviewsAvg, setServiceReviewsAvg] = useState(0);
+  const [serviceReviewsCount, setServiceReviewsCount] = useState(0);
+  const [serviceReviewsLoading, setServiceReviewsLoading] = useState(false);
+
   const isCustomer =
     !!user && String(user.role).toLowerCase() === "customer";
 
@@ -171,6 +184,29 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
     load();
     return () => controller.abort();
+  }, [serviceId, API_BASE]);
+
+  // Fetch aggregate reviews for this service (SER-82)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadServiceReviews() {
+      setServiceReviewsLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/reviews/service/${serviceId}?limit=5`);
+        const data = await res.json();
+        if (cancelled || !data.success) return;
+        const payload = data.data ?? {};
+        setServiceReviews(Array.isArray(payload.reviews) ? payload.reviews : []);
+        setServiceReviewsAvg(payload.avgRating ?? 0);
+        setServiceReviewsCount(payload.count ?? 0);
+      } catch {
+        // non-fatal — section just won't render
+      } finally {
+        if (!cancelled) setServiceReviewsLoading(false);
+      }
+    }
+    loadServiceReviews();
+    return () => { cancelled = true; };
   }, [serviceId, API_BASE]);
 
   const categorySlug = service?.categorySlug ?? "";
@@ -366,6 +402,70 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── What customers say (SER-82 service-level reviews) ── */}
+      {(serviceReviewsLoading || serviceReviewsCount > 0) && (
+        <div className="mt-8 pb-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-slate-700 flex items-center gap-2">
+              <Star size={16} className="fill-amber-400 text-amber-400" />
+              What customers say
+            </h2>
+            {serviceReviewsCount > 0 && (
+              <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                <span className="font-bold text-slate-800">{serviceReviewsAvg.toFixed(1)}</span>
+                <div className="flex items-center gap-0.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      size={11}
+                      className={i < Math.round(serviceReviewsAvg) ? "fill-amber-400 text-amber-400" : "fill-slate-200 text-slate-200"}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs">({serviceReviewsCount} review{serviceReviewsCount !== 1 ? "s" : ""})</span>
+              </div>
+            )}
+          </div>
+
+          {serviceReviewsLoading && (
+            <div className="flex justify-center py-6">
+              <div className="h-5 w-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!serviceReviewsLoading && serviceReviews.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {serviceReviews.map((review) => (
+                <div key={review.id} className="glass-panel rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-700">
+                      {review.reviewer?.full_name ?? "Customer"}
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          size={11}
+                          className={i < review.rating ? "fill-amber-400 text-amber-400" : "fill-slate-200 text-slate-200"}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {review.comment && (
+                    <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">
+                      {review.comment}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-400">
+                    {new Date(review.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

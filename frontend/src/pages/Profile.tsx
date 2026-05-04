@@ -19,6 +19,7 @@ import {
   VerificationBadge,
   type VerificationStatusType,
 } from "../components/VerificationBadge";
+import { supabase } from "../lib/supabase";
 import { VerificationDetailsModal } from "../components/VerificationDetailsModal";
 
 interface Review {
@@ -75,6 +76,10 @@ export const Profile: React.FC<ProfileProps> = ({
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  const [reviewsTotalCount, setReviewsTotalCount] = useState(0);
+  const REVIEWS_PER_PAGE = 5;
 
   // Review form state (only for customers viewing a provider profile)
   const [reviewableBookings, setReviewableBookings] = useState<
@@ -194,7 +199,12 @@ export const Profile: React.FC<ProfileProps> = ({
     };
   }, [profileId, initialType, currentUser, currentUser?.email]);
 
-  // Fetch reviews when a provider profile loads
+  // Reset to page 1 whenever the provider changes
+  useEffect(() => {
+    setReviewsPage(1);
+  }, [profileId]);
+
+  // Fetch reviews when a provider profile loads or page changes
   useEffect(() => {
     if (!profile || profile.type !== "provider") return;
     const providerId = profile.data.id;
@@ -204,21 +214,25 @@ export const Profile: React.FC<ProfileProps> = ({
     const loadReviews = async () => {
       setReviewsLoading(true);
       try {
-        // fetchApi already unwraps `.data` from the response body, so
-        // res.data IS the reviews array directly (not { count, data: [...] }).
-        const res = await fetchApi<Review[]>(`/reviews/${providerId}`);
-        if (!cancelled && res.success) {
-          setReviews(Array.isArray(res.data) ? res.data : []);
+        // Backend returns { reviews, count, totalPages, page } under .data
+        const res = await fetchApi<{
+          reviews: Review[];
+          count: number;
+          totalPages: number;
+          page: number;
+        }>(`/reviews/${providerId}?page=${reviewsPage}&limit=${REVIEWS_PER_PAGE}`);
+        if (!cancelled && res.success && res.data) {
+          setReviews(Array.isArray(res.data.reviews) ? res.data.reviews : []);
+          setReviewsTotalPages(res.data.totalPages ?? 1);
+          setReviewsTotalCount(res.data.count ?? 0);
         }
       } finally {
         if (!cancelled) setReviewsLoading(false);
       }
     };
     loadReviews();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile]);
+    return () => { cancelled = true; };
+  }, [profile, reviewsPage]);
 
   // Fetch the customer's completed bookings for this provider so we can show the review form
   useEffect(() => {
@@ -342,14 +356,17 @@ export const Profile: React.FC<ProfileProps> = ({
       setReviewSuccess(true);
       setReviewRating(0);
       setReviewComment("");
-      // Prepend new review optimistically so user sees it immediately
+      // Go back to page 1 so the new review is visible immediately
+      setReviewsPage(1);
+      setReviewsTotalCount(prev => prev + 1);
       const newReview = res.data as unknown as Review;
+      // Only prepend if already on page 1 (useEffect will re-fetch on page change anyway)
       setReviews((prev) => [
         {
           ...newReview,
           reviewer: { full_name: "You", avatar_url: null },
         },
-        ...prev,
+        ...prev.slice(0, REVIEWS_PER_PAGE - 1),
       ]);
     } else {
       const msg =
@@ -615,20 +632,20 @@ export const Profile: React.FC<ProfileProps> = ({
                             });
 
                             if (res.success) {
-                              alert(
-                                "Welcome to ServiceHub as a provider! Your profile has been updated.",
-                              );
-                              window.location.reload(); // Reload to refresh all state
+                              // refresh the Supabase session so the new JWT carries
+                              
+                              if ((res as { requiresReauth?: boolean }).requiresReauth) {
+                                await supabase.auth.refreshSession();
+                              }
+                              window.location.reload();
                             } else {
                               alert(
-                                `Failed to update role: ${res.error || "Unknown error"}`,
+                                `Failed to update role: ${(res as { error?: string }).error ?? "Unknown error"}`,
                               );
                             }
                           } catch (error) {
-                            alert(
-                              "An error occurred while updating your role. Please try again.",
-                            );
-                            console.error(error);
+                            console.error("Role upgrade failed:", error);
+                            alert("An error occurred while updating your role. Please try again.");
                           }
                         }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-full hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl"
@@ -657,9 +674,9 @@ export const Profile: React.FC<ProfileProps> = ({
                     <MessageSquare className="h-5 w-5 text-slate-400" />
                     <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
                       Reviews
-                      {reviews.length > 0 && (
+                      {reviewsTotalCount > 0 && (
                         <span className="ml-2 normal-case font-semibold text-slate-500">
-                          ({reviews.length})
+                          ({reviewsTotalCount})
                         </span>
                       )}
                     </h2>
@@ -684,7 +701,7 @@ export const Profile: React.FC<ProfileProps> = ({
                   )}
 
                   {!reviewsLoading && reviews.length > 0 && (
-                    <div className="space-y-3">
+                    <div className="space-y-3" key={`reviews-page-${reviewsPage}`}>
                       {reviews.map((review) => (
                         <div
                           key={review.id}
@@ -738,6 +755,29 @@ export const Profile: React.FC<ProfileProps> = ({
                           </p>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* ── Pagination controls ── */}
+                  {reviewsTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+                      <button
+                        disabled={reviewsPage <= 1 || reviewsLoading}
+                        onClick={() => setReviewsPage(p => p - 1)}
+                        className="px-4 py-1.5 text-sm font-semibold rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        ← Prev
+                      </button>
+                      <span className="text-xs text-slate-400 font-medium">
+                        Page {reviewsPage} of {reviewsTotalPages}
+                      </span>
+                      <button
+                        disabled={reviewsPage >= reviewsTotalPages || reviewsLoading}
+                        onClick={() => setReviewsPage(p => p + 1)}
+                        className="px-4 py-1.5 text-sm font-semibold rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Next →
+                      </button>
                     </div>
                   )}
 
