@@ -18,6 +18,7 @@ import { SupportModal } from "./components/SupportModal";
 import { Chatbot } from "./components/Chatbot";
 import { VerifyPage } from "./pages/verify";
 import { EditProfile } from "./pages/EditProfile";
+import { BrowseServices } from "./pages/BrowseServices";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
@@ -414,6 +415,14 @@ const App = () => {
     switch (basePath) {
       case "/":
         return <Home onNavigate={navigate} user={user} />;
+      case "/browse-services":
+        return (
+          <BrowseServices
+            user={user}
+            token={getToken()}
+            onNavigate={navigate}
+          />
+        );
       case "/login":
         return (
           <Login

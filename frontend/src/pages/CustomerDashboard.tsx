@@ -150,7 +150,7 @@ export const CustomerDashboard: FC<CustomerDashboardProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onNavigate("/")}
+              onClick={() => onNavigate("/browse-services")}
               className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors shadow-sm"
             >
               Browse services
@@ -203,7 +203,7 @@ export const CustomerDashboard: FC<CustomerDashboardProps> = ({
                 </p>
                 <button
                   type="button"
-                  onClick={() => onNavigate("/")}
+                  onClick={() => onNavigate("/browse-services")}
                   className="mt-5 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-colors shadow-sm"
                 >
                   Find a service

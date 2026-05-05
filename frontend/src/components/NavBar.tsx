@@ -62,8 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Dashboard
                   </span>
                   <span
-                    onClick={() => onNavigate("/")}
-                    className={navItemClass("/")}
+                    onClick={() => onNavigate("/browse-services")}
+                    className={navItemClass("/browse-services")}
                   >
                     Browse Services
                   </span>
@@ -160,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
                 <div
                   className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-                  onClick={() => { onNavigate("/"); setIsOpen(false); }}
+                  onClick={() => { onNavigate("/browse-services"); setIsOpen(false); }}
                 >
                   Browse Services
                 </div>
