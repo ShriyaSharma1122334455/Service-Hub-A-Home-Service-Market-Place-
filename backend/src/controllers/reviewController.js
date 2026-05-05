@@ -64,23 +64,11 @@ export const createReview = async (req, res) => {
   }
 };
 
-// GET /api/reviews/:providerId?page=1&limit=5
+// GET /api/reviews/:providerId
 export const getProviderReviews = async (req, res) => {
   try {
     const { providerId } = req.params;
-    const page  = Math.max(1, parseInt(req.query.page)  || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 5));
-    const offset = (page - 1) * limit;
 
-    // Total count (cheap head-only request)
-    const { count, error: countErr } = await supabase
-      .from('reviews')
-      .select('*', { count: 'exact', head: true })
-      .eq('provider_id', providerId);
-
-    if (countErr) return res.status(400).json({ success: false, error: countErr.message });
-
-    // Page of reviews
     const { data: reviews, error } = await supabase
       .from('reviews')
       .select(`
@@ -88,69 +76,15 @@ export const getProviderReviews = async (req, res) => {
         reviewer:users(full_name, avatar_url)
       `)
       .eq('provider_id', providerId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
 
     if (error) return res.status(400).json({ success: false, error: error.message });
 
-    const totalPages = Math.ceil((count || 0) / limit);
-
-    // Return under .data so fetchApi keeps the pagination envelope intact
-    return res.json({
-      success: true,
-      data: { reviews, count: count || 0, totalPages, page },
-    });
+    return res.json({ success: true, count: reviews.length, data: reviews });
 
   } catch (err) {
     console.error('getProviderReviews error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch reviews' });
-  }
-};
-
-// GET /api/reviews/service/:serviceId?limit=10
-export const getServiceReviews = async (req, res) => {
-  try {
-    const { serviceId } = req.params;
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
-
-    // Resolve booking IDs that belong to this service
-    const { data: bookings, error: bErr } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('service_id', serviceId);
-
-    if (bErr) return res.status(400).json({ success: false, error: bErr.message });
-
-    if (!bookings?.length) {
-      return res.json({ success: true, data: { reviews: [], count: 0, avgRating: 0 } });
-    }
-
-    const bookingIds = bookings.map(b => b.id);
-
-    const { data: reviews, count, error } = await supabase
-      .from('reviews')
-      .select(`
-        id, rating, comment, created_at,
-        reviewer:users(full_name, avatar_url)
-      `, { count: 'exact' })
-      .in('booking_id', bookingIds)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) return res.status(400).json({ success: false, error: error.message });
-
-    const avgRating = reviews?.length
-      ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) * 10) / 10
-      : 0;
-
-    return res.json({
-      success: true,
-      data: { reviews: reviews || [], count: count || 0, avgRating },
-    });
-
-  } catch (err) {
-    console.error('getServiceReviews error:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch service reviews' });
   }
 };
 

@@ -75,10 +75,6 @@ export const Profile: React.FC<ProfileProps> = ({
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [reviewsPage, setReviewsPage] = useState(1);
-  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
-  const [reviewsTotalCount, setReviewsTotalCount] = useState(0);
-  const REVIEWS_PER_PAGE = 5;
 
   // Review form state (only for customers viewing a provider profile)
   const [reviewableBookings, setReviewableBookings] = useState<
@@ -202,12 +198,7 @@ export const Profile: React.FC<ProfileProps> = ({
     };
   }, [profileId, initialType, currentUser, currentUser?.email]);
 
-  // Reset to page 1 whenever the provider changes
-  useEffect(() => {
-    setReviewsPage(1);
-  }, [profileId]);
-
-  // Fetch reviews when a provider profile loads or page changes
+  // Fetch reviews when a provider profile loads
   useEffect(() => {
     if (!profile || profile.type !== "provider") return;
     const providerId = profile.data.id;
@@ -374,13 +365,12 @@ export const Profile: React.FC<ProfileProps> = ({
       setReviewsPage(1);
       setReviewsTotalCount((prev) => prev + 1);
       const newReview = res.data as unknown as Review;
-      // Only prepend if already on page 1 (useEffect will re-fetch on page change anyway)
       setReviews((prev) => [
         {
           ...newReview,
           reviewer: { full_name: "You", avatar_url: null },
         },
-        ...prev.slice(0, REVIEWS_PER_PAGE - 1),
+        ...prev,
       ]);
     } else {
       const msg =
@@ -693,9 +683,9 @@ export const Profile: React.FC<ProfileProps> = ({
                     <MessageSquare className="h-5 w-5 text-slate-400" />
                     <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
                       Reviews
-                      {reviewsTotalCount > 0 && (
+                      {reviews.length > 0 && (
                         <span className="ml-2 normal-case font-semibold text-slate-500">
-                          ({reviewsTotalCount})
+                          ({reviews.length})
                         </span>
                       )}
                     </h2>
