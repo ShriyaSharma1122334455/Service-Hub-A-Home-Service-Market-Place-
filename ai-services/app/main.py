@@ -5,13 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 from app.routes import health, profile
 from app.routes import ocr_routes, face_routes, nsopw_routes
-# Legacy verification routes kept for backward compatibility
 from app.routes import verification as legacy_verification
 from app.middleware.timer import TimingMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

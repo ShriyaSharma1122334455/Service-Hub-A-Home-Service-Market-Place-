@@ -91,7 +91,11 @@ async def test_mime_ocr_accepts_png():
     """MIME: OCR endpoint accepts PNG magic bytes."""
     _mock_ocr = {"status": "verified", "extractedName": "Jane Doe", "confidence": 0.9}
     # PNG signature + minimal IHDR chunk so magic detects it as image/png
-    _png = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde" + b"\x00" * 30
+    _png = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        + b"\x00" * 30
+    )
     with patch.object(settings, "ENV", "production"), \
          patch.object(settings, "INTERNAL_API_KEY", TEST_KEY), \
          patch("app.services.ocr_service.extract_id_data",
