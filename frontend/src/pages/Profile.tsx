@@ -6,7 +6,6 @@ import {
   User as UserIcon,
   Mail,
   Shield,
-  ArrowLeft,
   Loader2,
   Star,
   Briefcase,

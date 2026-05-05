@@ -128,10 +128,16 @@ describe('Auth – /api/auth', () => {
     });
 
     const res = await request(app).post('/api/auth/register').send({
-      email: 'test@example.com',
-      password: 'Password123!',
+      email: 'newuser@example.com',
+      password: 'ValidPass1!',
       fullName: 'Test User',
-      role: 'customer',
+      phone: '1234567890',
+      dob: '1990-06-15',
+      street: '123 Main St',
+      city: 'New York',
+      state: 'NY',
+      zip: '10001',
+      role: 'customer'
     });
 
     expect(res.statusCode).toBe(201);
@@ -153,7 +159,7 @@ describe('Auth – /api/auth', () => {
       .post('/api/auth/register')
       .send({ email: 'test@example.com', password: '123', fullName: 'Test' });
     expect(res.statusCode).toBe(400);
-    expect(res.body).toHaveProperty('error');
+    expect(res.body).toHaveProperty('message');
   });
 
   it('POST /register rejects duplicate email (400)', async () => {
@@ -826,7 +832,7 @@ describe('Input validation', () => {
   it('POST /api/auth/register rejects missing fields', async () => {
     const res = await request(app).post('/api/auth/register').send({ email: 'x@x.com' });
     expect(res.statusCode).toBe(400);
-    expect(res.body).toHaveProperty('error');
+    expect(res.body).toHaveProperty('message');
   });
 
   it('Responses include Content-Type: application/json', async () => {

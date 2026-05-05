@@ -18,7 +18,7 @@ export const register = async (req, res) => {
     if (!email || !password || !fullName) {
       return res.status(400).json({
         success: false,
-        error: 'email, password and fullName are required'
+        message: 'email, password and fullName are required'
       });
     }
 
@@ -59,7 +59,7 @@ export const register = async (req, res) => {
     if (!passwordRegex.test(password)) {
       return res.status(400).json({
         success: false,
-        error:
+        message:
           'Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 special character'
       });
     }
@@ -85,12 +85,12 @@ export const register = async (req, res) => {
       if (error.message?.toLowerCase().includes('already')) {
         return res.status(400).json({
           success: false,
-          error: 'Email already registered'
+          message: 'Email already registered'
         });
       }
       return res.status(400).json({
         success: false,
-        error: error.message
+        message: error.message
       });
     }
 
@@ -111,7 +111,7 @@ export const register = async (req, res) => {
     if (userUpdateError || !newUser) {
       return res.status(500).json({
         success: false,
-        error: userUpdateError?.message || 'Failed to update user record'
+        message: userUpdateError?.message || 'Failed to update user record'
       });
     }
 
@@ -151,7 +151,7 @@ export const register = async (req, res) => {
         console.error('Provider insert error:', providerError.message);
         return res.status(500).json({
           success: false,
-          error: 'Failed to create provider profile'
+          message: 'Failed to create provider profile'
         });
       }
     }
@@ -170,7 +170,7 @@ export const register = async (req, res) => {
     });
   } catch (err) {
     console.error('Register error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to register' });
+    return res.status(500).json({ success: false, message: 'Failed to register' });
   }
 };
 
@@ -182,7 +182,7 @@ export const login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        error: 'Email and password are required'
+        message: 'Email and password are required'
       });
     }
 
@@ -194,7 +194,7 @@ export const login = async (req, res) => {
     if (error) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid credentials'
+        message: 'Invalid credentials'
       });
     }
 
@@ -212,6 +212,6 @@ export const login = async (req, res) => {
 
   } catch (err) {
     console.error('Login error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to login' });
+    return res.status(500).json({ success: false, message: 'Failed to login' });
   }
 };
