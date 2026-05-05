@@ -98,7 +98,6 @@ export const CustomerDashboard: FC<CustomerDashboardProps> = ({
       })
       .catch(() => setError("Network error. Please check your connection."))
       .finally(() => setStatsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, retryKey]);
 
   // Upcoming bookings — fetched on mount and explicit retry only
@@ -116,7 +115,6 @@ export const CustomerDashboard: FC<CustomerDashboardProps> = ({
       })
       .catch(() => { setError("Network error. Please check your connection."); setBookings([]); })
       .finally(() => setBookingsLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, retryKey]);
 
   const handleRetry = () => { setError(null); setRetryKey((k) => k + 1); };

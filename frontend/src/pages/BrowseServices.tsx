@@ -63,6 +63,7 @@ export const BrowseServices: React.FC<BrowseServicesProps> = ({
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (activeCategoryId !== "all") url += `&category=${activeCategoryId}`;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch(url)
       .then((res) => res.json())
