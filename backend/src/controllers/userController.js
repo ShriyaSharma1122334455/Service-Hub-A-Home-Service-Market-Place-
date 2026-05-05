@@ -1,5 +1,6 @@
 import supabase from '../config/supabase.js';
 import { PROFILE_NOT_FOUND_MESSAGE } from '../utils/internalUser.js';
+import logger from '../utils/logger.js';
 
 // getMe
 
@@ -106,7 +107,7 @@ export const getMe = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error fetching me:', err);
+    logger.error({ err }, 'Error fetching me');
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
   }
 };
@@ -133,7 +134,7 @@ export const getUser = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error fetching user:', err);
+    logger.error({ err }, 'Error fetching user');
     res.status(500).json({ success: false, error: 'Failed to fetch profile' });
   }
 };
@@ -142,10 +143,24 @@ export const getUser = async (req, res) => {
 
 export const listUsers = async (req, res) => {
   try {
-    const { data: users, error } = await supabase
+    const { role, page = 1, limit = 20 } = req.query;
+
+    let query = supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
-      .eq('role', 'customer');
+      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status');
+
+    if (role) {
+      query = query.eq('role', role);
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+    const from = (pageNum - 1) * limitNum;
+    const to = from + limitNum - 1;
+
+    query = query.range(from, to);
+
+    const { data: users, error } = await query;
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
@@ -159,7 +174,7 @@ export const listUsers = async (req, res) => {
     return res.json({ success: true, data: { users: mappedUsers } });
 
   } catch (err) {
-    console.error('Error fetching users:', err);
+    logger.error({ err }, 'Error fetching users');
     res.status(500).json({ success: false, error: 'Failed to fetch users' });
   }
 };
@@ -239,10 +254,7 @@ export const updateUserRole = async (req, res) => {
 
     if (authUpdateError) {
       
-      console.error(
-        'Warning: Failed to sync Supabase auth metadata after role upgrade:',
-        authUpdateError.message,
-      );
+      logger.warn({ err: authUpdateError }, 'Failed to sync Supabase auth metadata after role upgrade');
     }
 
     return res.json({
@@ -265,7 +277,7 @@ export const updateUserRole = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error updating user role:', err);
+    logger.error({ err }, 'Error updating user role');
     res.status(500).json({ success: false, error: 'Failed to update role' });
   }
 };
@@ -334,7 +346,7 @@ export const updateUserProfile = async (req, res) => {
         .eq('supabase_id', supabaseId);
 
       if (coreErr) {
-        console.error('Profile core update error:', coreErr);
+        logger.error({ err: coreErr }, 'Profile core update error');
         return res.status(500).json({ success: false, error: 'Failed to update profile' });
       }
     }
@@ -352,7 +364,7 @@ export const updateUserProfile = async (req, res) => {
           // Column does not exist yet
           extColumnsMissing = true;
         } else {
-          console.error('Profile extended update error:', extErr);
+          logger.error({ err: extErr }, 'Profile extended update error');
         }
       }
     }
@@ -387,7 +399,7 @@ export const updateUserProfile = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error updating user profile:', err);
+    logger.error({ err }, 'Error updating user profile');
     res.status(500).json({ success: false, error: 'Failed to update profile' });
   }
 };

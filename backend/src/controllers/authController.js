@@ -22,6 +22,13 @@ export const register = async (req, res) => {
       });
     }
 
+    const normalizedFullName = fullName
+      .trim()
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
     const normalizedPhone = String(phone || '').replace(/\D/g, '');
     if (normalizedPhone.length < 10 || normalizedPhone.length > 15) {
       return res.status(400).json({
@@ -74,7 +81,7 @@ export const register = async (req, res) => {
       options: {
         data: {
           role: roleLower,
-          full_name: fullName.trim(),
+          full_name: normalizedFullName,
           phone: phone || null,
           dob: dobIso,
         },
@@ -98,7 +105,7 @@ export const register = async (req, res) => {
     const { data: newUser, error: userUpdateError } = await supabase
       .from('users')
       .update({
-        full_name: fullName.trim(),
+        full_name: normalizedFullName,
         email: email.toLowerCase().trim(),
         role: roleLower,
         phone: phone || null,
@@ -141,7 +148,7 @@ export const register = async (req, res) => {
         .from('providers')
         .insert({
           user_id: newUser.id,
-          business_name: fullName.trim(),
+          business_name: normalizedFullName,
           description: 'Welcome to ServiceHub! Please complete your provider profile.',
           rating_avg: 0,
           rating_count: 0,

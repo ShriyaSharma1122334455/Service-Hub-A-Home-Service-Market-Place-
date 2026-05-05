@@ -21,63 +21,12 @@ import { EditProfile } from "./pages/EditProfile";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
-const AUTH_STORAGE_KEY = "servicehub-auth";
-const MIGRATION_VERSION = "supabase-v1";
-const MIGRATION_VERSION_KEY = "servicehub-migration-version";
-
-type StoredAuth = {
-  id?: string;
-  email: string;
-  role: UserRole;
-  name: string;
-  avatar?: string;
-  accessToken?: string;
-};
-
-const loadStoredAuth = (): StoredAuth | null => {
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredAuth;
-    if (parsed?.email && parsed?.role) return parsed;
-  } catch {
-    /* ignore */
-  }
-  return null;
-};
-
-const saveAuth = (auth: StoredAuth) => {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
-};
-
-const clearAuth = () => {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-};
-
 const App = () => {
-  const storedVersion = localStorage.getItem(MIGRATION_VERSION_KEY);
-  if (storedVersion !== MIGRATION_VERSION) {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.setItem(MIGRATION_VERSION_KEY, MIGRATION_VERSION);
-  }
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-  const [user, setUser] = useState<User | Provider | null>(() => {
-    const stored = loadStoredAuth();
-    if (stored) {
-      return {
-        id: "",
-        name: stored.name,
-        email: stored.email,
-        role: toUserRole(stored.role),
-        avatar: stored.avatar,
-      } as User;
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | Provider | null>(null);
+  const [accessToken, setAccessToken] = useState<string>("");
   const [currentPath, setCurrentPath] = useState("/");
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    () => !!loadStoredAuth(),
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authRestored, setAuthRestored] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
@@ -89,36 +38,67 @@ const App = () => {
       ? profileTypeParam
       : null;
 
-  // Validate Supabase session on every app init / page reload.
-  // Prevents stale localStorage from showing user as logged in
-  // after the Supabase access token has expired.
+  // Supabase session management handles auth state restoration
   useEffect(() => {
-    const validateSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    let mounted = true;
 
+    const initializeAuth = async (session: any) => {
       if (!session) {
-        // No active session — clear any stale localStorage and reset state
-        clearAuth();
-        setUser(null);
-        setIsAuthenticated(false);
-      } else {
-        // Session is valid — refresh the stored token in case it was rotated
-        const stored = loadStoredAuth();
-        if (stored) {
-          saveAuth({ ...stored, accessToken: session.access_token });
+        if (mounted) {
+          setUser(null);
+          setAccessToken("");
+          setIsAuthenticated(false);
+          setAuthRestored(true);
         }
+        return;
       }
 
-      // Only mark auth as restored AFTER the check completes.
-      // This prevents the protected-path redirect from firing
-      // before we know whether the session is actually valid.
-      setAuthRestored(true);
+      const email = session.user.email || "";
+      const name = session.user.user_metadata?.full_name || email.split("@")[0];
+      const avatar = session.user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
+
+      let profile = null;
+      try {
+        const resp = await fetch(`${API_BASE}/api/users/me`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json?.success) profile = json.data;
+        }
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+      }
+
+      if (mounted) {
+        setAccessToken(session.access_token);
+        setUser({
+          id: profile?.id || session.user.id || "",
+          name: profile?.full_name || name,
+          email,
+          role: profile?.role ? toUserRole(profile.role) : toUserRole(session.user.user_metadata?.role || "customer"),
+          avatar: profile?.avatar_url || avatar,
+        } as User);
+        setIsAuthenticated(true);
+        setAuthRestored(true);
+      }
     };
 
-    validateSession();
-  }, []); // runs once on mount — no dependencies needed
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      initializeAuth(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      initializeAuth(session);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [API_BASE]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -179,10 +159,9 @@ const App = () => {
     window.location.hash = path;
   };
 
-  /** Read the current access token from localStorage */
+  /** Get the current access token */
   const getToken = (): string => {
-    const stored = loadStoredAuth();
-    return stored?.accessToken ?? "";
+    return accessToken;
   };
 
   const handleLogin = async (
@@ -258,15 +237,8 @@ const App = () => {
       }
 
       setUser(userData);
+      setAccessToken(accessToken);
       setIsAuthenticated(true);
-      saveAuth({
-        id: userData.id,
-        email,
-        role: userData.role,
-        name: userData.name,
-        avatar: userData.avatar,
-        accessToken,
-      });
 
       // All authenticated users land on /dashboard; the route renders the
       // role-appropriate view (CustomerDashboard or ProviderDashboard).
@@ -281,10 +253,11 @@ const App = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setIsAuthenticated(false);
     setUser(null);
-    clearAuth();
+    setAccessToken("");
     navigate("/");
   };
 
@@ -372,8 +345,6 @@ const App = () => {
           currentUser={user}
           onProfileUpdate={(newName) => {
             setUser((prev) => (prev ? { ...prev, name: newName } : prev));
-            const stored = loadStoredAuth();
-            if (stored) saveAuth({ ...stored, name: newName });
           }}
         />
       );
