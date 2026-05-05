@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 interface ResetPasswordProps {
@@ -9,8 +9,13 @@ interface ResetPasswordProps {
 export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+
+  const passwordsMatch = confirm.length > 0 && password === confirm;
+  const passwordsMismatch = confirm.length > 0 && password !== confirm;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +66,7 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
                   {message}
                 </p>
               )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-2">
                   New Password
@@ -70,15 +76,24 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
                     <Lock className="h-5 w-5 text-slate-300" />
                   </div>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
+                    className="glass-input block w-full pl-11 pr-12 py-4 rounded-2xl text-sm font-bold text-slate-900"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-4 mb-2">
                   Confirm Password
@@ -88,18 +103,35 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
                     <Lock className="h-5 w-5 text-slate-300" />
                   </div>
                   <input
-                    type="password"
+                    type={showConfirm ? "text" : "password"}
                     required
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
+                    className={`glass-input block w-full pl-11 pr-12 py-4 rounded-2xl text-sm font-bold text-slate-900 ${
+                      passwordsMismatch ? "border border-red-400" : passwordsMatch ? "border border-green-400" : ""
+                    }`}
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                    tabIndex={-1}
+                  >
+                    {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
+                {passwordsMismatch && (
+                  <p className="mt-2 ml-4 text-xs font-semibold text-red-500">Passwords do not match.</p>
+                )}
+                {passwordsMatch && (
+                  <p className="mt-2 ml-4 text-xs font-semibold text-green-600">Passwords match.</p>
+                )}
               </div>
+
               <button
                 type="submit"
-                disabled={status === "loading"}
+                disabled={status === "loading" || passwordsMismatch}
                 className="w-full py-4 px-4 rounded-full shadow-xl text-base font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-95 shadow-slate-900/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {status === "loading" ? "Resetting..." : "Reset Password"}
