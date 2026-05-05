@@ -43,17 +43,24 @@ function makeReq(overrides = {}) {
 function makeRes() {
   const res = {};
   res.status = jest.fn().mockReturnValue(res);
+  res.setHeader = jest.fn().mockReturnValue(res);
   res.json = jest.fn().mockReturnValue(res);
   return res;
 }
 
 /** Builds a minimal mock Response for the VDA fetch call. */
-function makeVdaResponse(body, { ok = true, status = 200 } = {}) {
+function makeVdaResponse(body, { ok = true, status = 200, headers: headerMap = {} } = {}) {
+  const lower = Object.fromEntries(
+    Object.entries(headerMap).map(([k, v]) => [String(k).toLowerCase(), v]),
+  );
   return {
     ok,
     status,
     statusText: ok ? 'OK' : 'Error',
     text: jest.fn().mockResolvedValue(JSON.stringify(body)),
+    headers: {
+      get: (name) => lower[String(name).toLowerCase()] ?? null,
+    },
   };
 }
 
@@ -196,6 +203,20 @@ describe('assessVisualDamage — VDA fetch failures', () => {
     const res = makeRes();
     await assessVisualDamage(makeReq(), res);
     expect([500, 502]).toContain(res.status.mock.calls[0][0]);
+    expect(res.json.mock.calls[0][0].success).toBe(false);
+  });
+
+  it('forwards Retry-After when VDA returns 503 with the header', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      makeVdaResponse(
+        { detail: 'The AI assessment did not return usable results.' },
+        { ok: false, status: 503, headers: { 'Retry-After': '45' } },
+      ),
+    );
+    const res = makeRes();
+    await assessVisualDamage(makeReq(), res);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '45');
     expect(res.json.mock.calls[0][0].success).toBe(false);
   });
 });

@@ -85,6 +85,14 @@ _DEFAULT_RATE_LIMIT = os.getenv("VDA_DEFAULT_RATE_LIMIT", "60/minute")
 # Maximum concurrent /assess handlers that may hit the Gemini API from this
 # worker. Protects against saturation when many 10 MB uploads land at once.
 _ASSESS_CONCURRENCY = int(os.getenv("VDA_ASSESS_CONCURRENCY", "4"))
+# Suggested wait (seconds) before a manual retry when the model returns no usable output.
+try:
+    _MODEL_UNAVAILABLE_RETRY_AFTER = max(
+        1,
+        min(int(os.getenv("VDA_MODEL_RETRY_AFTER_SECONDS", "30")), 86400),
+    )
+except ValueError:
+    _MODEL_UNAVAILABLE_RETRY_AFTER = 30
 
 
 def _rate_limit_key(request: Request) -> str:
@@ -307,16 +315,24 @@ async def assess_damage(
 
     if result is None:
         raise HTTPException(
-            status_code=500,
-            detail="Model did not return valid JSON. Please try again.",
+            status_code=503,
+            detail=(
+                "The AI assessment did not return usable results. "
+                "Please wait a moment and try again."
+            ),
+            headers={"Retry-After": str(_MODEL_UNAVAILABLE_RETRY_AFTER)},
         )
 
     required = {"assessment", "recommendation", "estimated_cost_usd", "confidence_score"}
     missing = required - set(result.keys())
     if missing:
         raise HTTPException(
-            status_code=500,
-            detail=f"Incomplete model response. Missing fields: {missing}",
+            status_code=503,
+            detail=(
+                "The AI assessment returned an incomplete result. "
+                "Please wait a moment and try again."
+            ),
+            headers={"Retry-After": str(_MODEL_UNAVAILABLE_RETRY_AFTER)},
         )
 
     return AssessmentResponse(**result)

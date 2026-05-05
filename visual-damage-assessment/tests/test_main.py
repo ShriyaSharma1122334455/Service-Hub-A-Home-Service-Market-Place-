@@ -134,14 +134,15 @@ class TestModelFailures:
             )
         assert res.status_code == 503
 
-    def test_model_returns_none_gives_500(self, client, auth_headers, jpeg_bytes):
+    def test_model_returns_none_gives_503_with_retry_after(self, client, auth_headers, jpeg_bytes):
         with patch("main.assess_image", return_value=None):
             res = client.post(
                 "/assess",
                 files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
                 headers=auth_headers,
             )
-        assert res.status_code == 500
+        assert res.status_code == 503
+        assert res.headers.get("retry-after") == str(main_module._MODEL_UNAVAILABLE_RETRY_AFTER)
 
     def test_unexpected_error_returns_500(self, client, auth_headers, jpeg_bytes):
         with patch("main.assess_image", side_effect=RuntimeError("boom")):

@@ -160,7 +160,17 @@ export const assessVisualDamage = async (req, res) => {
       console.error('VDA service error:', logDetails);
 
       // Return only sanitized message to client
-      return res.status(vdaRes.status >= 400 && vdaRes.status < 600 ? vdaRes.status : 502).json({
+      const outStatus =
+        vdaRes.status >= 400 && vdaRes.status < 600 ? vdaRes.status : 502;
+      res.status(outStatus);
+      const retryAfter =
+        typeof vdaRes.headers?.get === 'function'
+          ? vdaRes.headers.get('Retry-After')
+          : null;
+      if (retryAfter) {
+        res.setHeader('Retry-After', retryAfter);
+      }
+      return res.json({
         success: false,
         error: userMessage,
       });
