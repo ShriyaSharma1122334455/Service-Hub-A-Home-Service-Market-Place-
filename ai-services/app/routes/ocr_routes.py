@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Header, Depends, UploadFile, File,
 
 from app.core.config import settings
 from app.services import ocr_service
+from app.utils.file_validation import validate_image_mime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,7 +25,12 @@ router = APIRouter()
 def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
     """Only the Express backend should call these endpoints."""
     if settings.ENV == "development":
+        logger.warning("internal key bypass active", extra={"route": "ocr"})
         return
+    if settings.ENV != "production":
+        logger.error(
+            "Unrecognised ENV=%r — internal key check enforced", settings.ENV
+        )
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden: invalid internal API key")
 
@@ -57,6 +63,11 @@ async def parse_id(
 
     if len(image_bytes) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Maximum 5MB.")
+
+    try:
+        validate_image_mime(image_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     logger.info("OCR parse-id request — doc_type=%s size=%d bytes", document_type, len(image_bytes))
 

@@ -40,6 +40,8 @@ from app.models.schemas import NSopwCheckResponse, VerificationStatus
 
 logger = logging.getLogger(__name__)
 
+_pending_count: int = 0  # counts checks that returned pending due to connectivity failure
+
 NSOPW_SEARCH_URL = "https://www.nsopw.gov/search-public-sex-offender-registries"
 NSOPW_FORM_URL = "https://www.nsopw.gov/en/Search/Verify"
 REQUEST_TIMEOUT = 15.0
@@ -119,6 +121,15 @@ async def check_nsopw(
     try:
         result = await _httpx_search(first_name, last_name, checked_at)
         return result
+    except (httpx.ConnectError, httpx.TimeoutException, ConnectionError) as exc:
+        global _pending_count
+        _pending_count += 1  # TODO(bug-fix-3): wire alerting
+        logger.warning(
+            "NSOPW connectivity failure (%s) — returning pending; total_pending=%d",
+            type(exc).__name__,
+            _pending_count,
+        )
+        return pending_response
     except Exception as exc:
         logger.error(
             "NSOPW check failed — %s: returning pending response",

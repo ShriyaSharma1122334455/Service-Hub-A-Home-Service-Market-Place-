@@ -10,6 +10,7 @@ Matches the API contract from the project proposal Section 8.10:
 Called by the Express backend after Cloudinary uploads complete.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -44,6 +45,19 @@ def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
         return  # Skip in local dev
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden: invalid internal API key")
+
+
+# ── Download helper (used by verify_face with a combined asyncio timeout) ──
+
+async def _fetch_face_images(id_url: str, selfie_url: str) -> tuple:
+    """Download ID and selfie images sequentially; caller wraps with asyncio.wait_for."""
+    import httpx
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        id_resp = await client.get(id_url)
+        id_resp.raise_for_status()
+        selfie_resp = await client.get(selfie_url)
+        selfie_resp.raise_for_status()
+        return id_resp.content, selfie_resp.content
 
 
 # ── POST /ai/verify/document ──────────────────────────────────────────────
@@ -106,16 +120,20 @@ async def verify_face(
     Uses AWS Rekognition. Threshold: 80% (configurable via FACE_MATCH_THRESHOLD).
     """
     logger.info("Face match request — user=%s", body.user_id)
-    import httpx
 
-    # Download ID Image
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            id_resp = await client.get(str(body.id_image_url))
-            id_resp.raise_for_status()
-            id_bytes = id_resp.content
+        id_bytes, selfie_bytes = await asyncio.wait_for(
+            _fetch_face_images(str(body.id_image_url), str(body.selfie_url)),
+            timeout=25.0,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Face match image downloads timed out (25s combined limit)")
+        raise HTTPException(
+            status_code=504,
+            detail="Image download timed out. The signed URLs may have expired — please try again.",
+        )
     except Exception as exc:
-        logger.error("Failed to download ID image for face match: %s", exc)
+        logger.error("Failed to download images for face match: %s", exc)
         return {
             "status": "rejected",
             "similarity_score": 0.0,
@@ -123,25 +141,7 @@ async def verify_face(
             "is_match": False,
             "face_detected_in_id": False,
             "face_detected_in_selfie": False,
-            "rejection_reason": "Failed to download ID image",
-        }
-
-    # Download Selfie Image
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            selfie_resp = await client.get(str(body.selfie_url))
-            selfie_resp.raise_for_status()
-            selfie_bytes = selfie_resp.content
-    except Exception as exc:
-        logger.error("Failed to download Selfie image for face match: %s", exc)
-        return {
-            "status": "rejected",
-            "similarity_score": 0.0,
-            "threshold_used": 90.0,
-            "is_match": False,
-            "face_detected_in_id": True,
-            "face_detected_in_selfie": False,
-            "rejection_reason": "Failed to download selfie image",
+            "rejection_reason": "Failed to download images",
         }
 
     res = await face_service.compare_faces(

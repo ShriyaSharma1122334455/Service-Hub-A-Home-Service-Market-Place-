@@ -34,7 +34,12 @@ class NsopwCheckBody(BaseModel):
 def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
     """Only the Express backend should call these endpoints."""
     if settings.ENV == "development":
+        logger.warning("internal key bypass active", extra={"route": "nsopw"})
         return
+    if settings.ENV != "production":
+        logger.error(
+            "Unrecognised ENV=%r — internal key check enforced", settings.ENV
+        )
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden: invalid internal API key")
 

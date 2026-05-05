@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Header, Depends, UploadFile, File
 
 from app.core.config import settings
 from app.services import face_service
+from app.utils.file_validation import validate_image_mime
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,7 +25,12 @@ router = APIRouter()
 def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
     """Only the Express backend should call these endpoints."""
     if settings.ENV == "development":
+        logger.warning("internal key bypass active", extra={"route": "face"})
         return
+    if settings.ENV != "production":
+        logger.error(
+            "Unrecognised ENV=%r — internal key check enforced", settings.ENV
+        )
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden: invalid internal API key")
 
@@ -50,8 +56,17 @@ async def match_face(
 
     if not id_bytes:
         raise HTTPException(status_code=400, detail="Empty ID image uploaded")
+    try:
+        validate_image_mime(id_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     if not selfie_bytes:
         raise HTTPException(status_code=400, detail="Empty selfie uploaded")
+    try:
+        validate_image_mime(selfie_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     logger.info("Face match request — id_size=%d selfie_size=%d", len(id_bytes), len(selfie_bytes))
 

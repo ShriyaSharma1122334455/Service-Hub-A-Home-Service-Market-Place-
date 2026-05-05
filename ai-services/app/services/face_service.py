@@ -45,9 +45,6 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Similarity threshold for face match
-FACE_MATCH_THRESHOLD = 90.0
-
 # Confidence level thresholds
 CONFIDENCE_HIGH_THRESHOLD = 90.0
 CONFIDENCE_MEDIUM_THRESHOLD = 75.0
@@ -280,7 +277,7 @@ async def compare_faces(
     # Take the best (highest-similarity) match
     best = max(face_matches, key=lambda m: m["Similarity"])
     score = round(best["Similarity"], 2)
-    is_match = score >= FACE_MATCH_THRESHOLD
+    is_match = score >= settings.FACE_MATCH_THRESHOLD
     confidence_level = _get_confidence_level(score)
 
     return {
@@ -292,7 +289,7 @@ async def compare_faces(
         "checkedAt": checked_at,
         "status": "verified" if is_match else "rejected",
         "rejectionReason": None if is_match else (
-            f"Face similarity ({score:.1f}%) is below the required threshold ({FACE_MATCH_THRESHOLD:.0f}%). "
+            f"Face similarity ({score:.1f}%) is below the required threshold ({settings.FACE_MATCH_THRESHOLD:.0f}%). "
             "Please ensure your selfie is clear, well-lit, and your full face is visible."
         ),
     }

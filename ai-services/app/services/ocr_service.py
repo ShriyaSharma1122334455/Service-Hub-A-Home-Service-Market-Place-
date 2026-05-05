@@ -103,6 +103,9 @@ async def extract_id_data(
     # 2. Parse text based on document type
     if document_type == "passport":
         parsed = _parse_passport_mrz(full_text)
+        if not parsed.get("full_name") and not parsed.get("date_of_birth"):
+            logger.warning("Passport: MRZ and labeled-field regex both failed — trying plain-text fallback")
+            parsed = _parse_passport_plain_text(full_text)
     else:
         parsed = _parse_drivers_license(full_text)
 
@@ -119,11 +122,18 @@ async def extract_id_data(
 
     # Determine status
     if not result["extractedName"] or not result["extractedDOB"]:
-        result["status"] = "rejected"
-        result["rejectionReason"] = (
-            "Could not extract required fields (name, date of birth) from the document. "
-            "Please upload a clearer, well-lit photo."
-        )
+        if document_type == "passport":
+            result["status"] = "manual_review"
+            result["rejectionReason"] = (
+                "Could not automatically parse passport fields. "
+                "Please upload a clearer photo with the full document visible."
+            )
+        else:
+            result["status"] = "rejected"
+            result["rejectionReason"] = (
+                "Could not extract required fields (name, date of birth) from the document. "
+                "Please upload a clearer, well-lit photo."
+            )
     else:
         # Check expiry
         is_expired = _is_document_expired(result["expiryDate"])
@@ -263,6 +273,55 @@ def _parse_passport_regex(raw_text: str) -> Dict[str, Optional[str]]:
     nat = re.search(r"(?:NATIONALITY|COUNTRY\s*CODE)[:\s]+([A-Z]{2,3})", raw_text, re.IGNORECASE)
     if nat:
         result["issuing_state"] = nat.group(1).upper()
+
+    return result
+
+
+def _parse_passport_plain_text(raw_text: str) -> Dict[str, Optional[str]]:
+    """Last-resort plain-text extraction for passports when MRZ and labeled-field regex both fail.
+
+    Handles the "SURNAME / GIVEN NAMES on consecutive lines" layout common in US passports,
+    and month-name DOB formats such as "BORN 12 Mar 1988".
+    """
+    result: Dict[str, Optional[str]] = {
+        "full_name": None,
+        "date_of_birth": None,
+        "document_number": None,
+        "expiry_date": None,
+        "issuing_state": None,
+    }
+
+    lines = [ln.strip() for ln in raw_text.split("\n") if ln.strip()]
+
+    surname: Optional[str] = None
+    given: Optional[str] = None
+    for i, line in enumerate(lines):
+        upper = line.upper()
+        if upper == "SURNAME" and i + 1 < len(lines):
+            surname = lines[i + 1]
+        elif upper in ("GIVEN NAMES", "GIVEN NAME") and i + 1 < len(lines):
+            given = lines[i + 1]
+
+    if surname and given:
+        result["full_name"] = f"{given} {surname}".title()
+    elif surname:
+        result["full_name"] = surname.title()
+
+    dob_m = re.search(
+        r"(?:DATE\s*OF\s*BIRTH|DOB|BIRTH\s*DATE|BORN|NAISSANCE)[:/\s]+"
+        r"(\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+        r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|"
+        r"Nov(?:ember)?|Dec(?:ember)?)\s+\d{4})",
+        raw_text, re.IGNORECASE,
+    )
+    if dob_m:
+        raw_dob = dob_m.group(1).strip()
+        for fmt in ("%d %b %Y", "%d %B %Y"):
+            try:
+                result["date_of_birth"] = datetime.strptime(raw_dob, fmt).date().isoformat()
+                break
+            except ValueError:
+                continue
 
     return result
 
