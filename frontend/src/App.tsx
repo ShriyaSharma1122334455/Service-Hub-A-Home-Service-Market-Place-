@@ -19,6 +19,7 @@ import { Chatbot } from "./components/Chatbot";
 import { VerifyPage } from "./pages/verify";
 import { EditProfile } from "./pages/EditProfile";
 import { BrowseServices } from "./pages/BrowseServices";
+import { ResetPassword } from "./pages/ResetPassword";
 import { supabase } from "./lib/supabase";
 import { toUserRole } from "./lib/roleUtils";
 
@@ -120,6 +121,16 @@ const App = () => {
 
     validateSession();
   }, []); // runs once on mount — no dependencies needed
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setCurrentPath("/reset-password");
+        window.location.hash = "/reset-password";
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -478,6 +489,8 @@ const App = () => {
         }
         return <VisualDamageAssessment onNavigate={navigate} />;
       }
+      case "/reset-password":
+        return <ResetPassword onNavigate={navigate} />;
       case "/my-bookings":
         return <ProviderBookings token={getToken()} onNavigate={navigate} />;
       default:
