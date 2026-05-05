@@ -75,6 +75,10 @@ export const Profile: React.FC<ProfileProps> = ({
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  const [, setReviewsTotalCount] = useState(0);
+  const REVIEWS_PER_PAGE = 5;
 
   // Review form state (only for customers viewing a provider profile)
   const [reviewableBookings, setReviewableBookings] = useState<
