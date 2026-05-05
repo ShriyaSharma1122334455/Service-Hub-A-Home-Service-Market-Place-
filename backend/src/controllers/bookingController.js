@@ -79,11 +79,11 @@ export const createBooking = async (req, res) => {
     // ── Verify provider exists, is verified, and fetch user_id for A-05 ──
     const { data: provider } = await supabase
       .from('providers')
-      .select('id, verification_status, user_id')   // user_id needed for self-booking check
+      .select('id, is_fully_verified, user_id')
       .eq('id', provider_id)
       .single();
 
-    if (!provider || provider.verification_status !== 'verified') {
+    if (!provider || !provider.is_fully_verified) {
       return res.status(403).json({
         success: false,
         error: 'Bookings are only allowed with verified providers',
@@ -182,7 +182,7 @@ export const listBookings = async (req, res) => {
         *,
         service:services(name, base_price),
         provider:providers(business_name, rating_avg),
-        customer:users(full_name, email)
+        customer:users!bookings_customer_id_fkey(full_name, email)
       `)
       .order('created_at', { ascending: false });
 
