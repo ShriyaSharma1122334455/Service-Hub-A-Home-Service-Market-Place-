@@ -33,7 +33,7 @@ export const signUpWithRole = async (
       return { data: null, error: new Error(json.message || "Registration failed") };
     }
     return { data: json.data, error: null };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return { data: null, error: err };
   }
 }

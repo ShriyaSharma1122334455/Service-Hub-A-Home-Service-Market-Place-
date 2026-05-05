@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { Session } from "@supabase/supabase-js";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
 import { signIn } from "./lib/auth";
@@ -42,7 +43,7 @@ const App = () => {
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async (session: any) => {
+    const initializeAuth = async (session: Session | null) => {
       if (!session) {
         if (mounted) {
           setUser(null);
