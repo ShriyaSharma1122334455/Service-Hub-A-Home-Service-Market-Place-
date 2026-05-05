@@ -265,7 +265,7 @@ const FAQ_DATA: FAQEntry[] = [
     question: "What is ServiceHub?",
     answer:
       "ServiceHub is a home services marketplace connecting homeowners with verified professionals for Plumbing, Electrical, Cleaning, and Pest Control across the US.",
-    keywords: ["what is", "about", "servicehub", "platform", "marketplace", "app"],
+    keywords: ["what is", "about", "servicehub", "platform", "marketplace", "app", "how does it work", "how it works"],
     audience: "both",
   },
   {
@@ -359,11 +359,11 @@ function searchFAQ(query: string, role: string | null): FAQEntry | null {
 function detectIntent(input: string, role: string | null): Intent {
   const q = input.toLowerCase().trim();
 
-  if (/^(hi|hey|hello|howdy|sup|yo|good morning|good afternoon|start)\b/.test(q)) {
+  if (/^(hi|hey|hello|howdy|sup|yo|good morning|good afternoon|start)\b/.test(q) || q === "help") {
     return "greeting";
   }
   if (
-    /\b(my orders|view.*booking|order status|booking status|track.*order|where.*order)\b/.test(q) &&
+    /\b(my orders|my bookings|view.*booking|order status|booking status|track.*order|where.*order)\b/.test(q) &&
     !/\b(cancel|refund|delete|remove)\b/.test(q)
   ) {
     return "my_orders";
@@ -372,10 +372,10 @@ function detectIntent(input: string, role: string | null): Intent {
     return "services";
   }
   if (role === "provider") {
-    if (/\b(earn|earning|payout|commission|salary|money|revenue|income|15%|pay me|get paid)\b/.test(q)) {
+    if (/\b(earn|earnings|earning|payout|commission|salary|money|revenue|income|15%|pay me|get paid)\b/.test(q)) {
       return "provider_earnings";
     }
-    if (/\b(manage booking|incoming|accept|reject|booking request)\b/.test(q)) {
+    if (/\b(manage bookings?|my bookings?|incoming|accept|reject|booking request)\b/.test(q)) {
       return "provider_bookings";
     }
   }
