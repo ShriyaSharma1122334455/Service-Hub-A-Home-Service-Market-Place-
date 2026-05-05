@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { UserRole } from "../../types";
-import { Lock, Mail } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff } from "lucide-react";
 
 interface LoginProps {
   onLogin: (
@@ -20,6 +20,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (notification) {
@@ -179,13 +180,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onRegisterClick }) => {
                     <Lock className="h-5 w-5 text-slate-300" />
                   </div>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
+                    className="glass-input block w-full pl-11 pr-12 py-4 rounded-2xl text-sm font-bold text-slate-900"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
 

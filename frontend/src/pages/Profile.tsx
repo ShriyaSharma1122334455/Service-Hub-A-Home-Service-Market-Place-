@@ -42,9 +42,9 @@ interface ProviderService {
 
 interface AvailabilitySlot {
   id: string;
-  date: string;       // "2026-04-25"
+  date: string; // "2026-04-25"
   start_time: string; // "09:00"
-  end_time: string;   // "10:00"
+  end_time: string; // "10:00"
   is_booked: boolean;
 }
 
@@ -92,9 +92,13 @@ export const Profile: React.FC<ProfileProps> = ({
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [providerServices, setProviderServices] = useState<ProviderService[]>([]);
+  const [providerServices, setProviderServices] = useState<ProviderService[]>(
+    [],
+  );
   const [providerServicesLoading, setProviderServicesLoading] = useState(false);
-  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [availabilitySlots, setAvailabilitySlots] = useState<
+    AvailabilitySlot[]
+  >([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   useEffect(() => {
@@ -220,7 +224,9 @@ export const Profile: React.FC<ProfileProps> = ({
           count: number;
           totalPages: number;
           page: number;
-        }>(`/reviews/${providerId}?page=${reviewsPage}&limit=${REVIEWS_PER_PAGE}`);
+        }>(
+          `/reviews/${providerId}?page=${reviewsPage}&limit=${REVIEWS_PER_PAGE}`,
+        );
         if (!cancelled && res.success && res.data) {
           setReviews(Array.isArray(res.data.reviews) ? res.data.reviews : []);
           setReviewsTotalPages(res.data.totalPages ?? 1);
@@ -231,7 +237,9 @@ export const Profile: React.FC<ProfileProps> = ({
       }
     };
     loadReviews();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [profile, reviewsPage]);
 
   // Fetch the customer's completed bookings for this provider so we can show the review form
@@ -270,7 +278,8 @@ export const Profile: React.FC<ProfileProps> = ({
     const providerId = profile.data.id;
     if (!providerId) return;
 
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+    const API_BASE =
+      import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
     let cancelled = false;
 
     const loadServices = async () => {
@@ -280,7 +289,9 @@ export const Profile: React.FC<ProfileProps> = ({
         const data = await res.json();
         if (cancelled) return;
         if (data.success && data.data) {
-          const raw: unknown[] = Array.isArray(data.data.services) ? data.data.services : [];
+          const raw: unknown[] = Array.isArray(data.data.services)
+            ? data.data.services
+            : [];
           setProviderServices(
             raw.map((s) => {
               const svc = s as Record<string, unknown>;
@@ -290,7 +301,9 @@ export const Profile: React.FC<ProfileProps> = ({
                 description: String(svc.description ?? ""),
                 base_price: Number(svc.base_price ?? 0),
                 duration_minutes: Number(svc.duration_minutes ?? 0),
-                sub_category: svc.sub_category ? String(svc.sub_category) : undefined,
+                sub_category: svc.sub_category
+                  ? String(svc.sub_category)
+                  : undefined,
               };
             }),
           );
@@ -325,7 +338,9 @@ export const Profile: React.FC<ProfileProps> = ({
 
     loadServices();
     loadAvailability();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [profile, profileId]);
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
@@ -358,7 +373,7 @@ export const Profile: React.FC<ProfileProps> = ({
       setReviewComment("");
       // Go back to page 1 so the new review is visible immediately
       setReviewsPage(1);
-      setReviewsTotalCount(prev => prev + 1);
+      setReviewsTotalCount((prev) => prev + 1);
       const newReview = res.data as unknown as Review;
       // Only prepend if already on page 1 (useEffect will re-fetch on page change anyway)
       setReviews((prev) => [
@@ -473,7 +488,7 @@ export const Profile: React.FC<ProfileProps> = ({
   return (
     <div className="min-h-[calc(100vh-140px)] py-12 px-4">
       <div className="max-w-2xl mx-auto">
-        <button
+        {/* <button
           onClick={() =>
             onNavigate(
               profileId === "me"
@@ -489,7 +504,7 @@ export const Profile: React.FC<ProfileProps> = ({
         >
           <ArrowLeft className="h-5 w-5" />
           Back
-        </button>
+        </button> */}
 
         <div className="glass-panel rounded-[3rem] overflow-hidden">
           <div className="bg-gradient-to-r from-slate-900 to-slate-700 h-32"></div>
@@ -633,8 +648,11 @@ export const Profile: React.FC<ProfileProps> = ({
 
                             if (res.success) {
                               // refresh the Supabase session so the new JWT carries
-                              
-                              if ((res as { requiresReauth?: boolean }).requiresReauth) {
+
+                              if (
+                                (res as { requiresReauth?: boolean })
+                                  .requiresReauth
+                              ) {
                                 await supabase.auth.refreshSession();
                               }
                               window.location.reload();
@@ -645,7 +663,9 @@ export const Profile: React.FC<ProfileProps> = ({
                             }
                           } catch (error) {
                             console.error("Role upgrade failed:", error);
-                            alert("An error occurred while updating your role. Please try again.");
+                            alert(
+                              "An error occurred while updating your role. Please try again.",
+                            );
                           }
                         }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-bold rounded-full hover:bg-teal-700 transition-all shadow-lg hover:shadow-xl"
@@ -701,7 +721,10 @@ export const Profile: React.FC<ProfileProps> = ({
                   )}
 
                   {!reviewsLoading && reviews.length > 0 && (
-                    <div className="space-y-3" key={`reviews-page-${reviewsPage}`}>
+                    <div
+                      className="space-y-3"
+                      key={`reviews-page-${reviewsPage}`}
+                    >
                       {reviews.map((review) => (
                         <div
                           key={review.id}
@@ -763,7 +786,7 @@ export const Profile: React.FC<ProfileProps> = ({
                     <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
                       <button
                         disabled={reviewsPage <= 1 || reviewsLoading}
-                        onClick={() => setReviewsPage(p => p - 1)}
+                        onClick={() => setReviewsPage((p) => p - 1)}
                         className="px-4 py-1.5 text-sm font-semibold rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                       >
                         ← Prev
@@ -772,8 +795,10 @@ export const Profile: React.FC<ProfileProps> = ({
                         Page {reviewsPage} of {reviewsTotalPages}
                       </span>
                       <button
-                        disabled={reviewsPage >= reviewsTotalPages || reviewsLoading}
-                        onClick={() => setReviewsPage(p => p + 1)}
+                        disabled={
+                          reviewsPage >= reviewsTotalPages || reviewsLoading
+                        }
+                        onClick={() => setReviewsPage((p) => p + 1)}
                         className="px-4 py-1.5 text-sm font-semibold rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
                       >
                         Next →
@@ -918,28 +943,46 @@ export const Profile: React.FC<ProfileProps> = ({
                     </div>
                   )}
 
-                  {!providerServicesLoading && providerServices.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50 rounded-2xl">
-                      <p className="text-slate-500 font-medium text-sm">No services listed yet</p>
-                    </div>
-                  )}
+                  {!providerServicesLoading &&
+                    providerServices.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50 rounded-2xl">
+                        <p className="text-slate-500 font-medium text-sm">
+                          No services listed yet
+                        </p>
+                      </div>
+                    )}
 
                   {!providerServicesLoading && providerServices.length > 0 && (
                     <div className="space-y-3">
                       {providerServices.map((svc) => (
-                        <div key={svc.id} className="flex items-start justify-between gap-4 p-4 bg-slate-50 rounded-2xl">
+                        <div
+                          key={svc.id}
+                          className="flex items-start justify-between gap-4 p-4 bg-slate-50 rounded-2xl"
+                        >
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-800 text-sm">{svc.name}</p>
+                            <p className="font-semibold text-slate-800 text-sm">
+                              {svc.name}
+                            </p>
                             {svc.sub_category && (
-                              <p className="text-xs text-teal-600 font-medium mt-0.5">{svc.sub_category}</p>
+                              <p className="text-xs text-teal-600 font-medium mt-0.5">
+                                {svc.sub_category}
+                              </p>
                             )}
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{svc.description}</p>
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                              {svc.description}
+                            </p>
                           </div>
                           <div className="flex-shrink-0 text-right">
-                            <p className="text-sm font-bold text-slate-900">From ${svc.base_price}</p>
+                            <p className="text-sm font-bold text-slate-900">
+                              From ${svc.base_price}
+                            </p>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              {Math.floor(svc.duration_minutes / 60) > 0 ? `${Math.floor(svc.duration_minutes / 60)}h ` : ""}
-                              {svc.duration_minutes % 60 > 0 ? `${svc.duration_minutes % 60}m` : ""}
+                              {Math.floor(svc.duration_minutes / 60) > 0
+                                ? `${Math.floor(svc.duration_minutes / 60)}h `
+                                : ""}
+                              {svc.duration_minutes % 60 > 0
+                                ? `${svc.duration_minutes % 60}m`
+                                : ""}
                             </p>
                           </div>
                         </div>
@@ -967,17 +1010,29 @@ export const Profile: React.FC<ProfileProps> = ({
 
                   {!availabilityLoading && availabilitySlots.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-6 text-center bg-slate-50 rounded-2xl">
-                      <p className="text-slate-500 font-medium text-sm">No upcoming availability</p>
-                      <p className="text-slate-400 text-xs mt-1">This provider hasn't set future slots yet.</p>
+                      <p className="text-slate-500 font-medium text-sm">
+                        No upcoming availability
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">
+                        This provider hasn't set future slots yet.
+                      </p>
                     </div>
                   )}
 
                   {!availabilityLoading && availabilitySlots.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {availabilitySlots.slice(0, 12).map((slot) => (
-                        <div key={slot.id} className="flex flex-col items-center px-3 py-2 bg-teal-50 border border-teal-100 rounded-xl text-center">
+                        <div
+                          key={slot.id}
+                          className="flex flex-col items-center px-3 py-2 bg-teal-50 border border-teal-100 rounded-xl text-center"
+                        >
                           <span className="text-xs font-bold text-teal-800">
-                            {new Date(slot.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {new Date(
+                              slot.date + "T00:00:00",
+                            ).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
                           </span>
                           <span className="text-xs text-teal-600 font-medium">
                             {slot.start_time} – {slot.end_time}
@@ -986,7 +1041,9 @@ export const Profile: React.FC<ProfileProps> = ({
                       ))}
                       {availabilitySlots.length > 12 && (
                         <div className="flex items-center px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl">
-                          <span className="text-xs text-slate-500 font-medium">+{availabilitySlots.length - 12} more</span>
+                          <span className="text-xs text-slate-500 font-medium">
+                            +{availabilitySlots.length - 12} more
+                          </span>
                         </div>
                       )}
                     </div>
@@ -998,7 +1055,7 @@ export const Profile: React.FC<ProfileProps> = ({
                 ["unverified", "pending"].includes(
                   ((data as BackendProvider).verificationStatus ||
                     (data as BackendUser).verificationStatus ||
-                    "unverified") as string
+                    "unverified") as string,
                 ) && (
                   <button
                     onClick={() => onNavigate("/verify")}

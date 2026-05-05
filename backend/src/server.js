@@ -18,6 +18,7 @@ import chatbotRoutes from './routes/chatbotRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
+import addressRoutes from './routes/addressRoutes.js';
 import testRoutes        from './routes/testRoutes.js';
 import assessmentRoutes  from './routes/assessmentRoutes.js';
 import dashboardRoutes   from './routes/dashboardRoutes.js';
@@ -77,6 +78,7 @@ app.use('/api/reviews',      reviewRoutes);
 app.use('/api/assessments',  assessmentRoutes);
 app.use('/api/complaints',   complaintRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/addresses',    addressRoutes);
 
 // Test routes — development only, never exposed in production
 if (process.env.NODE_ENV !== 'production') {
@@ -102,6 +104,11 @@ app.use((err, _req, res, _next) => {
     error:   isDev ? err.message : 'Internal Server Error',
     ...(isDev && { stack: err.stack }),
   });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 export default app;

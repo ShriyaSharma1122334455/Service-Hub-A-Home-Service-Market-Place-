@@ -9,11 +9,15 @@ import {
   FileText,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Check,
   Wrench,
   Zap,
   SprayCan,
   Bug,
+  MapPin,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface CategoryService {
@@ -29,6 +33,11 @@ interface RegisterProps {
     password?: string,
     name?: string,
     phone?: string,
+    dob?: string,
+    street?: string,
+    city?: string,
+    state?: string,
+    zip?: string,
     providerMeta?: {
       businessName: string;
       description: string;
@@ -86,6 +95,26 @@ const CATEGORIES = [
   },
 ];
 
+const US_STATES = [
+  { abbr: "AL", name: "Alabama" }, { abbr: "AK", name: "Alaska" }, { abbr: "AZ", name: "Arizona" },
+  { abbr: "AR", name: "Arkansas" }, { abbr: "CA", name: "California" }, { abbr: "CO", name: "Colorado" },
+  { abbr: "CT", name: "Connecticut" }, { abbr: "DE", name: "Delaware" }, { abbr: "FL", name: "Florida" },
+  { abbr: "GA", name: "Georgia" }, { abbr: "HI", name: "Hawaii" }, { abbr: "ID", name: "Idaho" },
+  { abbr: "IL", name: "Illinois" }, { abbr: "IN", name: "Indiana" }, { abbr: "IA", name: "Iowa" },
+  { abbr: "KS", name: "Kansas" }, { abbr: "KY", name: "Kentucky" }, { abbr: "LA", name: "Louisiana" },
+  { abbr: "ME", name: "Maine" }, { abbr: "MD", name: "Maryland" }, { abbr: "MA", name: "Massachusetts" },
+  { abbr: "MI", name: "Michigan" }, { abbr: "MN", name: "Minnesota" }, { abbr: "MS", name: "Mississippi" },
+  { abbr: "MO", name: "Missouri" }, { abbr: "MT", name: "Montana" }, { abbr: "NE", name: "Nebraska" },
+  { abbr: "NV", name: "Nevada" }, { abbr: "NH", name: "New Hampshire" }, { abbr: "NJ", name: "New Jersey" },
+  { abbr: "NM", name: "New Mexico" }, { abbr: "NY", name: "New York" }, { abbr: "NC", name: "North Carolina" },
+  { abbr: "ND", name: "North Dakota" }, { abbr: "OH", name: "Ohio" }, { abbr: "OK", name: "Oklahoma" },
+  { abbr: "OR", name: "Oregon" }, { abbr: "PA", name: "Pennsylvania" }, { abbr: "RI", name: "Rhode Island" },
+  { abbr: "SC", name: "South Carolina" }, { abbr: "SD", name: "South Dakota" }, { abbr: "TN", name: "Tennessee" },
+  { abbr: "TX", name: "Texas" }, { abbr: "UT", name: "Utah" }, { abbr: "VT", name: "Vermont" },
+  { abbr: "VA", name: "Virginia" }, { abbr: "WA", name: "Washington" }, { abbr: "WV", name: "West Virginia" },
+  { abbr: "WI", name: "Wisconsin" }, { abbr: "WY", name: "Wyoming" }
+];
+
 const StepIndicator = ({
   current,
   labels,
@@ -131,33 +160,66 @@ const Field = ({
   value,
   onChange,
   placeholder,
+  error,
+  children,
 }: {
   label: string;
   icon: React.ReactNode;
   type?: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
-      {label}
-    </label>
-    <div className="relative">
-      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300">
-        {icon}
+  value?: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  error?: string;
+  children?: React.ReactNode;
+}) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
+  const inputType = isPassword ? (showPassword ? "text" : "password") : type;
+
+  return (
+    <div>
+      <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+        {label}
+      </label>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300">
+          {icon}
+        </div>
+        {children ? (
+          <div className="glass-input flex items-center w-full pl-11 pr-4 py-3 rounded-2xl text-sm font-bold text-slate-900 min-h-[56px]">
+            {children}
+          </div>
+        ) : (
+          <input
+            type={inputType}
+            required
+            value={value}
+            onChange={(e) => onChange && onChange(e.target.value)}
+            placeholder={placeholder}
+            className={`glass-input block w-full pl-11 ${isPassword ? "pr-12" : "pr-4"} py-4 rounded-2xl text-sm font-bold text-slate-900`}
+            onKeyDown={type === "date" ? (e) => e.preventDefault() : undefined}
+            onPaste={type === "date" ? (e) => e.preventDefault() : undefined}
+          />
+        )}
+        {isPassword && !children && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+            tabIndex={-1}
+          >
+            {showPassword ? (
+              <EyeOff className="w-5 h-5" />
+            ) : (
+              <Eye className="w-5 h-5" />
+            )}
+          </button>
+        )}
       </div>
-      <input
-        type={type}
-        required
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="glass-input block w-full pl-11 pr-4 py-4 rounded-2xl text-sm font-bold text-slate-900"
-      />
+      {error && <p className="text-xs text-red-600 mt-1 ml-1">{error}</p>}
     </div>
-  </div>
-);
+  );
+};
 
 const Notification = ({
   message,
@@ -186,6 +248,11 @@ export const Register: React.FC<RegisterProps> = ({
   const [name, setName] = useState("");
   const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
   const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -199,6 +266,8 @@ export const Register: React.FC<RegisterProps> = ({
     message: string;
     type: "error";
   } | null>(null);
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (notification) {
@@ -238,17 +307,50 @@ export const Register: React.FC<RegisterProps> = ({
     }));
   };
 
+  const handleFieldChange = (field: string, value: string) => {
+    switch (field) {
+      case "name":
+        setName(value);
+        break;
+      case "email":
+        setEmail(value);
+        break;
+      case "phone":
+        setPhone(value);
+        break;
+      case "dob":
+        setDob(value);
+        break;
+      case "street":
+        setStreet(value);
+        break;
+      case "city":
+        setCity(value);
+        break;
+      case "state":
+        setState(value);
+        break;
+      case "zip":
+        setZip(value);
+        break;
+      case "password":
+        setPassword(value);
+        break;
+    }
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
   const selectedCats = Object.keys(categoryServices);
 
   // ── Validation ────────────────────────────────────────────────────────────
 
   const validateStep0 = () => {
+    const newErrors: Record<string, string> = {};
+
     if (!name.trim()) {
-      setNotification({
-        message: "Full name is required.",
-        type: "error",
-      });
-      return false;
+      newErrors.name = "Full name is required.";
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setNotification({
@@ -257,12 +359,49 @@ export const Register: React.FC<RegisterProps> = ({
       });
       return false;
     }
-    if (!phone.trim()) {
-      setNotification({
-        message: "Phone number is required.",
-        type: "error",
-      });
-      return false;
+
+    const normalizedPhone = phone.replace(/\D/g, "");
+    if (normalizedPhone.length < 10 || normalizedPhone.length > 15) {
+      newErrors.phone = "Enter a valid phone number (10–15 digits).";
+    }
+
+    if (!dob.trim()) {
+      newErrors.dob = "You must be at least 18 years old.";
+    } else {
+      const parsedDob = new Date(dob);
+      const isValidDob =
+        !Number.isNaN(parsedDob.getTime()) && /^\d{4}-\d{2}-\d{2}$/.test(dob);
+      if (!isValidDob) {
+        newErrors.dob = "You must be at least 18 years old.";
+      } else {
+        const today = new Date();
+        let age = today.getFullYear() - parsedDob.getFullYear();
+        const monthDiff = today.getMonth() - parsedDob.getMonth();
+        if (
+          monthDiff < 0 ||
+          (monthDiff === 0 && today.getDate() < parsedDob.getDate())
+        ) {
+          age -= 1;
+        }
+        if (age < 18) {
+          newErrors.dob = "You must be at least 18 years old.";
+        }
+      }
+    }
+
+    if (!street.trim()) {
+      newErrors.street = "Street address is required.";
+    }
+    if (!city.trim()) {
+      newErrors.city = "City is required.";
+    }
+    if (!state.trim()) {
+      newErrors.state = "State is required.";
+    }
+    if (!zip.trim()) {
+      newErrors.zip = "ZIP code is required.";
+    } else if (!/^\d{5}$/.test(zip)) {
+      newErrors.zip = "ZIP code must be 5 digits.";
     }
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 
@@ -274,7 +413,9 @@ export const Register: React.FC<RegisterProps> = ({
       });
       return false;
     }
-    return true;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const validateStep1 = () => {
@@ -348,6 +489,11 @@ export const Register: React.FC<RegisterProps> = ({
         password,
         name,
         phone,
+        dob,
+        street,
+        city,
+        state,
+        zip,
         role === UserRole.PROVIDER
           ? {
               businessName,
@@ -372,44 +518,162 @@ export const Register: React.FC<RegisterProps> = ({
         type: "error",
       });
       console.error("Registration failed:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const renderStep0 = () => (
-    <div className="space-y-5">
-      <Field
-        label="Full Name"
-        icon={<User className="h-5 w-5" />}
+  const renderStep0 = () => {
+    const dobParts = dob ? dob.split("-") : [];
+    const dobYear = dobParts[0] || "";
+    const dobMonth = dobParts[1] || "";
+    const dobDay = dobParts[2] || "";
+
+    return (
+      <div className="space-y-5">
+        <Field
+          label="Full Name"
+          icon={<User className="h-5 w-5" />}
         value={name}
-        onChange={setName}
+        onChange={(value) => handleFieldChange("name", value)}
         placeholder="John Doe"
+        error={errors.name}
       />
       <Field
         label="Email Address"
         icon={<Mail className="h-5 w-5" />}
         value={email}
-        onChange={setEmail}
+        onChange={(value) => handleFieldChange("email", value)}
         placeholder="name@example.com"
         type="email"
+        error={errors.email}
       />
       <Field
         label="Phone Number"
         icon={<Phone className="h-5 w-5" />}
         value={phone}
-        onChange={setPhone}
+        onChange={(value) => handleFieldChange("phone", value)}
         placeholder="+1 (555) 000-0000"
         type="tel"
+        error={errors.phone}
+      />
+      <div>
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+          Date of Birth
+        </label>
+        <div className="flex flex-row gap-2">
+          <select
+            value={dobMonth || ""}
+            onChange={(e) => {
+              const newMonth = e.target.value;
+              const newDate = (dobYear || newMonth || dobDay) ? `${dobYear}-${newMonth}-${dobDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-[2] rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobMonth ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Month</option>
+            {[
+              { v: "01", l: "January" }, { v: "02", l: "February" }, { v: "03", l: "March" },
+              { v: "04", l: "April" }, { v: "05", l: "May" }, { v: "06", l: "June" },
+              { v: "07", l: "July" }, { v: "08", l: "August" }, { v: "09", l: "September" },
+              { v: "10", l: "October" }, { v: "11", l: "November" }, { v: "12", l: "December" }
+            ].map(m => <option key={m.v} value={m.v} className="text-slate-900">{m.l}</option>)}
+          </select>
+
+          <select
+            value={dobDay || ""}
+            onChange={(e) => {
+              const newDay = e.target.value;
+              const newDate = (dobYear || dobMonth || newDay) ? `${dobYear}-${dobMonth}-${newDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-1 rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobDay ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Day</option>
+            {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map(d => (
+              <option key={d} value={d} className="text-slate-900">{d}</option>
+            ))}
+          </select>
+
+          <select
+            value={dobYear || ""}
+            onChange={(e) => {
+              const newYear = e.target.value;
+              const newDate = (newYear || dobMonth || dobDay) ? `${newYear}-${dobMonth}-${dobDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-1 rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobYear ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Year</option>
+            {Array.from({ length: 100 - 18 + 1 }, (_, i) => String(new Date().getFullYear() - 18 - i)).map(y => (
+              <option key={y} value={y} className="text-slate-900">{y}</option>
+            ))}
+          </select>
+        </div>
+        {errors.dob && <p className="text-xs text-red-600 mt-2 ml-1">{errors.dob}</p>}
+      </div>
+      <Field
+        label="Street"
+        icon={<MapPin className="h-5 w-5" />}
+        value={street}
+        onChange={(value) => handleFieldChange("street", value)}
+        placeholder="123 Main St"
+        error={errors.street}
+      />
+      <Field
+        label="City"
+        icon={<MapPin className="h-5 w-5" />}
+        value={city}
+        onChange={(value) => handleFieldChange("city", value)}
+        placeholder="New York"
+        error={errors.city}
+      />
+      <div>
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+          State
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300">
+            <MapPin className="h-5 w-5" />
+          </div>
+          <select
+            value={state}
+            onChange={(e) => handleFieldChange("state", e.target.value)}
+            className={`glass-input block w-full pl-11 pr-10 py-4 rounded-2xl text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.state ? "border-2 border-red-400" : ""} ${!state ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Select State</option>
+            {US_STATES.map((s) => (
+              <option key={s.abbr} value={s.abbr} className="text-slate-900">
+                {s.name} ({s.abbr})
+              </option>
+            ))}
+          </select>
+          <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
+            <ChevronDown className="h-5 w-5" />
+          </div>
+        </div>
+        {errors.state && <p className="text-xs text-red-600 mt-1 ml-1">{errors.state}</p>}
+      </div>
+      <Field
+        label="ZIP"
+        icon={<MapPin className="h-5 w-5" />}
+        value={zip}
+        onChange={(value) => handleFieldChange("zip", value)}
+        placeholder="10001"
+        error={errors.zip}
       />
       <Field
         label="Password"
         icon={<Lock className="h-5 w-5" />}
         value={password}
-        onChange={setPassword}
+        onChange={(value) => handleFieldChange("password", value)}
         placeholder="Min. 8 characters"
         type="password"
+        error={errors.password}
       />
     </div>
-  );
+    );
+  };
 
   const renderStep1 = () => (
     <div className="space-y-5">

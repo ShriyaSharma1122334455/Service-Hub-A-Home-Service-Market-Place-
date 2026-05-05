@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { User, Provider } from "../types";
 import { UserRole } from "../types";
-import { signIn, signUpWithRole } from "./lib/auth";
+import { signIn } from "./lib/auth";
 import { Navbar } from "./components/NavBar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
@@ -160,7 +160,9 @@ const App = () => {
 
   const isEditProfile = basePath === "/profile/edit";
 
-  const profileIdMatch = !isEditProfile ? basePath.match(/^\/profile\/(.+)$/) : null;
+  const profileIdMatch = !isEditProfile
+    ? basePath.match(/^\/profile\/(.+)$/)
+    : null;
   const profileId = profileIdMatch ? profileIdMatch[1] : null;
 
   const bookServiceMatch = basePath.match(/^\/book\/(.+)$/);
@@ -292,29 +294,50 @@ const App = () => {
     password?: string,
     name?: string,
     phone?: string,
+    dob?: string,
+    street?: string,
+    city?: string,
+    state?: string,
+    zip?: string,
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) return { success: false, message: "Password required" };
 
       const roleLower = String(role).toLowerCase();
 
-      const { error: signupError } = await signUpWithRole(
-        email,
-        password,
-        roleLower,
-        name,
-        phone,
-      );
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          role: roleLower,
+          fullName: name,
+          phone,
+          dob,
+          street,
+          city,
+          state,
+          zip,
+        }),
+      });
 
-      if (signupError) {
-        if (signupError.message?.includes("already registered")) {
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        if (result.error?.includes("already")) {
           return {
             success: false,
             message:
               "This email is already registered. Please sign in instead.",
           };
         }
-        return { success: false, message: signupError.message };
+        return {
+          success: false,
+          message: result.error || "Registration failed",
+        };
       }
 
       // Login the user after successful signup
@@ -323,15 +346,16 @@ const App = () => {
         return loginResult;
       }
 
-      // TODO: Save provider business information when the API endpoint is implemented
-      // For now, providers will need to complete their profile through a separate flow
-
       return { success: true };
     } catch (err) {
       console.error("Register failed", err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred. Please try again.";
       return {
         success: false,
-        message: "An unexpected error occurred. Please try again.",
+        message,
       };
     }
   };
@@ -347,7 +371,7 @@ const App = () => {
           onNavigate={navigate}
           currentUser={user}
           onProfileUpdate={(newName) => {
-            setUser((prev) => prev ? { ...prev, name: newName } : prev);
+            setUser((prev) => (prev ? { ...prev, name: newName } : prev));
             const stored = loadStoredAuth();
             if (stored) saveAuth({ ...stored, name: newName });
           }}
@@ -426,7 +450,11 @@ const App = () => {
       case "/verify":
         return <VerifyPage userId={user?.id || ""} onNavigate={navigate} />;
       case "/faq":
-        return <FAQ userRole={user?.role?.toLowerCase() as "customer" | "provider"} />;
+        return (
+          <FAQ
+            userRole={user?.role?.toLowerCase() as "customer" | "provider"}
+          />
+        );
       case "/visual-damage": {
         const isCustomerUser =
           isAuthenticated &&
