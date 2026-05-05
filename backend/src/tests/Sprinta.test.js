@@ -55,10 +55,16 @@ await jest.unstable_mockModule('../utils/vdaResponseValidator.js', () => ({
   validateAndSanitizeVdaResponse: jest.fn().mockImplementation((x) => x),
 }));
 
-// ── Mock vdaServiceConfig so validateVdaServiceConfig never throws ────────
+// ── Mock vdaServiceConfig so startup validators never throw ─────────────
+const mockValidateVdaServiceConfig = jest.fn();
+const mockValidateVdaAuthConfig    = jest.fn();
 await jest.unstable_mockModule('../config/vdaServiceConfig.js', () => ({
-  validateVdaServiceConfig: jest.fn(),
-  default: { validateVdaServiceConfig: jest.fn() },
+  validateVdaServiceConfig: mockValidateVdaServiceConfig,
+  validateVdaAuthConfig:    mockValidateVdaAuthConfig,
+  default: {
+    validateVdaServiceConfig: mockValidateVdaServiceConfig,
+    validateVdaAuthConfig:    mockValidateVdaAuthConfig,
+  },
 }));
 
 // ── Supabase queue mock ───────────────────────────────────────────────────

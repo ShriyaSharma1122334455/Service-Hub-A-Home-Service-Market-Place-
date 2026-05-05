@@ -6,7 +6,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { checkSupabaseConnection } from './config/supabase.js';
-import { validateVdaServiceConfig } from './config/vdaServiceConfig.js';
+import { validateVdaServiceConfig, validateVdaAuthConfig } from './config/vdaServiceConfig.js';
 import { startReminderCron } from './services/reminderService.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';

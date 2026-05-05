@@ -122,20 +122,23 @@ async function main() {
   let created = 0;
   let skipped = 0;
 
-  for (let i = 0; i < insertedBookings.length; i++) {
-    const booking  = insertedBookings[i];
-    const fixture  = REVIEW_FIXTURES[i];
+  const reviewResults = await Promise.all(
+    insertedBookings.map(async (booking, i) => {
+      const fixture = REVIEW_FIXTURES[i];
+      const { error: rErr } = await supabase
+        .from('reviews')
+        .insert({
+          booking_id:   booking.id,
+          reviewer_id:  booking.customer_id,
+          provider_id:  provider.id,
+          rating:       fixture.rating,
+          comment:      fixture.comment,
+        });
+      return { rErr, i, fixture };
+    }),
+  );
 
-    const { error: rErr } = await supabase
-      .from('reviews')
-      .insert({
-        booking_id:   booking.id,
-        reviewer_id:  booking.customer_id,
-        provider_id:  provider.id,
-        rating:       fixture.rating,
-        comment:      fixture.comment,
-      });
-
+  for (const { rErr, i, fixture } of reviewResults) {
     if (rErr) {
       if (rErr.code === '23505') {
         skipped++;
