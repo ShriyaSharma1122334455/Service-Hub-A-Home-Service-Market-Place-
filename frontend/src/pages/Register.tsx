@@ -494,11 +494,17 @@ export const Register: React.FC<RegisterProps> = ({
     }
   };
 
-  const renderStep0 = () => (
-    <div className="space-y-5">
-      <Field
-        label="Full Name"
-        icon={<User className="h-5 w-5" />}
+  const renderStep0 = () => {
+    const dobParts = dob ? dob.split("-") : [];
+    const dobYear = dobParts[0] || "";
+    const dobMonth = dobParts[1] || "";
+    const dobDay = dobParts[2] || "";
+
+    return (
+      <div className="space-y-5">
+        <Field
+          label="Full Name"
+          icon={<User className="h-5 w-5" />}
         value={name}
         onChange={(value) => handleFieldChange("name", value)}
         placeholder="John Doe"
@@ -522,15 +528,61 @@ export const Register: React.FC<RegisterProps> = ({
         type="tel"
         error={errors.phone}
       />
-      <Field
-        label="Date of Birth"
-        icon={<MapPin className="h-5 w-5" />}
-        value={dob}
-        onChange={(value) => handleFieldChange("dob", value)}
-        type="date"
-        placeholder=""
-        error={errors.dob}
-      />
+      <div>
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2">
+          Date of Birth
+        </label>
+        <div className="flex flex-row gap-2">
+          <select
+            value={dobMonth || ""}
+            onChange={(e) => {
+              const newMonth = e.target.value;
+              const newDate = (dobYear || newMonth || dobDay) ? `${dobYear}-${newMonth}-${dobDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-[2] rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobMonth ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Month</option>
+            {[
+              { v: "01", l: "January" }, { v: "02", l: "February" }, { v: "03", l: "March" },
+              { v: "04", l: "April" }, { v: "05", l: "May" }, { v: "06", l: "June" },
+              { v: "07", l: "July" }, { v: "08", l: "August" }, { v: "09", l: "September" },
+              { v: "10", l: "October" }, { v: "11", l: "November" }, { v: "12", l: "December" }
+            ].map(m => <option key={m.v} value={m.v} className="text-slate-900">{m.l}</option>)}
+          </select>
+
+          <select
+            value={dobDay || ""}
+            onChange={(e) => {
+              const newDay = e.target.value;
+              const newDate = (dobYear || dobMonth || newDay) ? `${dobYear}-${dobMonth}-${newDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-1 rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobDay ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Day</option>
+            {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map(d => (
+              <option key={d} value={d} className="text-slate-900">{d}</option>
+            ))}
+          </select>
+
+          <select
+            value={dobYear || ""}
+            onChange={(e) => {
+              const newYear = e.target.value;
+              const newDate = (newYear || dobMonth || dobDay) ? `${newYear}-${dobMonth}-${dobDay}` : "";
+              handleFieldChange("dob", newDate);
+            }}
+            className={`glass-input flex-1 rounded-2xl py-4 px-4 text-sm font-bold appearance-none focus:outline-none focus:ring-2 focus:ring-slate-900 ${errors.dob ? "border-2 border-red-400" : ""} ${!dobYear ? "text-slate-400" : "text-slate-900"}`}
+          >
+            <option value="" disabled className="text-slate-400">Year</option>
+            {Array.from({ length: 100 - 18 + 1 }, (_, i) => String(new Date().getFullYear() - 18 - i)).map(y => (
+              <option key={y} value={y} className="text-slate-900">{y}</option>
+            ))}
+          </select>
+        </div>
+        {errors.dob && <p className="text-xs text-red-600 mt-2 ml-1">{errors.dob}</p>}
+      </div>
 
       <Field
         label="Street"
@@ -574,7 +626,8 @@ export const Register: React.FC<RegisterProps> = ({
         error={errors.password}
       />
     </div>
-  );
+    );
+  };
 
   const renderStep1 = () => (
     <div className="space-y-5">

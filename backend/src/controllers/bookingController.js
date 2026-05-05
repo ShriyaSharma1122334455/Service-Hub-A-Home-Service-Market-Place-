@@ -1,6 +1,5 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
-import logger from '../utils/logger.js';
 
 // ── Shared helper ─────────────────────────────────────────────────────────
 
@@ -165,7 +164,7 @@ export const createBooking = async (req, res) => {
     res.status(201).json({ success: true, data: booking });
 
   } catch (err) {
-    logger.error({ err }, 'Create booking error');
+    console.error('Create booking error:', err);
     res.status(500).json({ success: false, error: 'Failed to create booking' });
   }
 };
@@ -215,7 +214,7 @@ export const listBookings = async (req, res) => {
     res.json({ success: true, count: bookings.length, data: bookings });
 
   } catch (err) {
-    logger.error({ err }, 'List bookings error');
+    console.error('List bookings error:', err);
     res.status(500).json({ success: false, error: 'Failed to list bookings' });
   }
 };
@@ -288,7 +287,7 @@ export const getBooking = async (req, res) => {
     res.json({ success: true, data: booking });
 
   } catch (err) {
-    logger.error({ err }, 'Get booking error');
+    console.error('Get booking error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch booking' });
   }
 };
@@ -358,7 +357,7 @@ export const acceptBooking = async (req, res) => {
     res.json({ success: true, data: booking });
 
   } catch (err) {
-    logger.error({ err }, 'Accept booking error');
+    console.error('Accept booking error:', err);
     res.status(500).json({ success: false, error: 'Failed to accept booking' });
   }
 };
@@ -424,7 +423,7 @@ export const rejectBooking = async (req, res) => {
     res.json({ success: true, data: booking });
 
   } catch (err) {
-    logger.error({ err }, 'Reject booking error');
+    console.error('Reject booking error:', err);
     res.status(500).json({ success: false, error: 'Failed to reject booking' });
   }
 };
@@ -491,7 +490,7 @@ export const completeBooking = async (req, res) => {
     res.json({ success: true, data: booking });
 
   } catch (err) {
-    logger.error({ err }, 'Complete booking error');
+    console.error('Complete booking error:', err);
     res.status(500).json({ success: false, error: 'Failed to complete booking' });
   }
 };

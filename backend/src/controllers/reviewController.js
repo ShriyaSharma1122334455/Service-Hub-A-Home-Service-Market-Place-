@@ -1,6 +1,5 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
-import logger from '../utils/logger.js';
 
 // POST /api/reviews
 export const createReview = async (req, res) => {
@@ -60,7 +59,7 @@ export const createReview = async (req, res) => {
     return res.status(201).json({ success: true, data: review });
 
   } catch (err) {
-    logger.error({ err }, 'createReview error');
+    console.error('createReview error:', err);
     res.status(500).json({ success: false, error: 'Failed to create review' });
   }
 };
@@ -103,7 +102,7 @@ export const getProviderReviews = async (req, res) => {
     });
 
   } catch (err) {
-    logger.error({ err }, 'getProviderReviews error');
+    console.error('getProviderReviews error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch reviews' });
   }
 };
@@ -150,7 +149,7 @@ export const getServiceReviews = async (req, res) => {
     });
 
   } catch (err) {
-    logger.error({ err }, 'getServiceReviews error');
+    console.error('getServiceReviews error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch service reviews' });
   }
 };
@@ -159,15 +158,25 @@ export const getServiceReviews = async (req, res) => {
 // Called internally — not a route handler
 const updateProviderRating = async (providerId) => {
   try {
-    const { error } = await supabase.rpc('recalculate_provider_rating', {
-      provider_id: providerId
-    });
+    const { data: reviews } = await supabase
+      .from('reviews')
+      .select('rating')
+      .eq('provider_id', providerId);
 
-    if (error) {
-      logger.error({ err: error }, 'updateProviderRating RPC error');
-    }
+    if (!reviews || reviews.length === 0) return;
+
+    const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+
+    await supabase
+      .from('providers')
+      .update({
+        rating_avg:   Math.round(avg * 100) / 100, // 2 decimal places
+        rating_count: reviews.length
+      })
+      .eq('id', providerId);
+
   } catch (err) {
-    logger.error({ err }, 'updateProviderRating error');
+    console.error('updateProviderRating error:', err);
   }
 };
 

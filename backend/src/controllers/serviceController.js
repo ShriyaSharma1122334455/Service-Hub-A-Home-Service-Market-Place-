@@ -1,6 +1,5 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
-import logger from '../utils/logger.js';
 
 // ── Shared ownership helper ───────────────────────────────────────────────
 
@@ -75,7 +74,7 @@ export const listServices = async (req, res) => {
     });
 
   } catch (err) {
-    logger.error({ err }, 'listServices error');
+    console.error('listServices error:', err);
     res.status(500).json({ success: false, error: 'Failed to list services' });
   }
 };
@@ -97,7 +96,7 @@ export const getService = async (req, res) => {
     res.json({ success: true, data: service });
 
   } catch (err) {
-    logger.error({ err }, 'getService error');
+    console.error('getService error:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch service' });
   }
 };
@@ -138,7 +137,7 @@ export const createService = async (req, res) => {
     res.status(201).json({ success: true, data: service });
 
   } catch (err) {
-    logger.error({ err }, 'createService error');
+    console.error('createService error:', err);
     res.status(500).json({ success: false, error: 'Failed to create service' });
   }
 };
@@ -206,7 +205,7 @@ export const updateService = async (req, res) => {
     res.json({ success: true, data: service });
 
   } catch (err) {
-    logger.error({ err }, 'updateService error');
+    console.error('updateService error:', err);
     res.status(500).json({ success: false, error: 'Failed to update service' });
   }
 };
@@ -251,7 +250,7 @@ export const deleteService = async (req, res) => {
     res.json({ success: true, message: 'Service deleted' });
 
   } catch (err) {
-    logger.error({ err }, 'deleteService error');
+    console.error('deleteService error:', err);
     res.status(500).json({ success: false, error: 'Failed to delete service' });
   }
 };

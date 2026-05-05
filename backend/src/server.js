@@ -43,11 +43,11 @@ const loginLimiter = rateLimit({
 });
 
 const registerLimiter = rateLimit({
-  windowMs:       60 * 60 * 1000,   // 1 hour
+  windowMs:       5 * 60 * 1000,    // 5 minutes
   max:            5,
   standardHeaders: true,
   legacyHeaders:  false,
-  message:        { success: false, error: 'Too many registration attempts. Please try again in an hour.' },
+  message:        { success: false, message: 'Too many registration attempts. Please try again in 5 minutes.' },
 });
 
 // ── Security & utility middleware ─────────────────────────────────────────
