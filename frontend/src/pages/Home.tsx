@@ -118,7 +118,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
           </div>
         </div>
         <p className="text-slate-400 text-sm font-medium">
-          © 2024 ServiceHub Inc. All rights reserved.
+          © {new Date().getFullYear()} ServiceHub Inc. All rights reserved.
         </p>
       </footer>
 
