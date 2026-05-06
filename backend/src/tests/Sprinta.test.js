@@ -364,7 +364,7 @@ describe('A-05 · createBooking — self-booking prevention', () => {
     queue(
       { data: [], error: null },                 // no slot conflict
       // provider.user_id === internalUser.id  → self-booking detected
-      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'user-cust-1' }, error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-cust-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },   // internalUser.id === 'user-cust-1'
     );
     const res = await request(app)
@@ -378,7 +378,7 @@ describe('A-05 · createBooking — self-booking prevention', () => {
     mockAs('customer');
     queue(
       { data: [], error: null },
-      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'user-prov-1' }, error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },   // different user_id → OK
       { data: SERVICE_OK, error: null },
       { data: { id: 'bk-new', status: 'pending' }, error: null },
@@ -545,7 +545,7 @@ describe('A-11 · createBooking — service/provider ownership', () => {
     mockAs('customer');
     queue(
       { data: [], error: null },
-      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'user-prov-1' }, error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },
       { data: SERVICE_OTHER_PROV, error: null },   // provider_id mismatch
     );
@@ -560,7 +560,7 @@ describe('A-11 · createBooking — service/provider ownership', () => {
     mockAs('customer');
     queue(
       { data: [], error: null },
-      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'user-prov-1' }, error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },
       { data: { ...SERVICE_OK, is_active: false }, error: null },
     );
