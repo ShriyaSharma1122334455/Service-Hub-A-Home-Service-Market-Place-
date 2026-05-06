@@ -143,10 +143,13 @@ const App = () => {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Protected paths require a logged-in session
+  // Protected paths require a logged-in session.
+  // Public provider/user profiles (/profile/:id) are intentionally excluded so
+  // guests can browse them — only the "me" and "edit" sub-paths stay gated.
   const isProtectedPath =
     basePath === "/dashboard" ||
-    basePath.startsWith("/profile") ||
+    basePath === "/profile/me" ||
+    basePath === "/profile/edit" ||
     basePath === "/my-bookings" ||
     basePath.startsWith("/booking-confirmation");
 
