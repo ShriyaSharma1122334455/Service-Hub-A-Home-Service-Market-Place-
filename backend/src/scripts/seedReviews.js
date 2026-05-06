@@ -126,6 +126,8 @@ async function main() {
     const booking  = insertedBookings[i];
     const fixture  = REVIEW_FIXTURES[i];
 
+    // Keep inserts sequential so progress logs are ordered and easy to read.
+    // eslint-disable-next-line no-await-in-loop
     const { error: rErr } = await supabase
       .from('reviews')
       .insert({

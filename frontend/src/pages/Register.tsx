@@ -244,7 +244,7 @@ export const Register: React.FC<RegisterProps> = ({
     if (notification) {
       const timer = setTimeout(() => {
         setNotification(null);
-      }, 20000); // 20 seconds as requested
+      }, 3000);
 
       return () => clearTimeout(timer);
     }
@@ -440,16 +440,18 @@ export const Register: React.FC<RegisterProps> = ({
   const handleNext = () => {
     if (step === 0 && !validateStep0()) return;
     if (step === 1 && !validateStep1()) return;
+    setNotification(null);
     setStep((s) => s + 1);
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Client-side validation for edge cases
-    if (role === UserRole.CUSTOMER ? !validateStep0() : !validateStep2())
-      return;
+  const handleFinalSubmit = async () => {
+    if (role === UserRole.CUSTOMER) {
+      if (!validateStep0()) return;
+    } else {
+      if (!validateStep2()) return;
+    }
     setLoading(true);
 
     try {
@@ -836,7 +838,7 @@ export const Register: React.FC<RegisterProps> = ({
 
           {/* Card */}
           <div className="glass-panel py-8 px-6 sm:px-8 rounded-[2.5rem]">
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={(e) => e.preventDefault()}>
               <div className="mb-6">
                 <h3 className="text-lg font-bold text-slate-900">
                   {step === 0
@@ -876,7 +878,8 @@ export const Register: React.FC<RegisterProps> = ({
                 )}
                 {isLastStep ? (
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleFinalSubmit}
                     disabled={loading}
                     className="flex-1 py-4 px-4 rounded-full shadow-xl text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >

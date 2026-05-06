@@ -100,6 +100,7 @@ import { setSupabaseClient, resetSupabaseClient } from '../middleware/authMiddle
 beforeEach(() => {
   jest.clearAllMocks();
   mockFromResult = { data: [], error: null };
+  mockFrom.mockImplementation(() => createChainProxy());
 });
 
 // ─── 1. Health check ──────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ describe('Auth – /api/auth', () => {
       },
       error: null,
     });
+    mockFromResult = { data: { id: 'internal-user-1' }, error: null };
 
     const res = await request(app).post('/api/auth/register').send({
       email: 'newuser@example.com',
@@ -179,6 +181,7 @@ describe('Auth – /api/auth', () => {
     expect(res.statusCode).toBe(400);
   });
 
+
   it('POST /login returns token for valid credentials', async () => {
     mockSignIn.mockResolvedValueOnce({
       data: {
@@ -187,6 +190,8 @@ describe('Auth – /api/auth', () => {
       },
       error: null,
     });
+    // ensurePublicUserRow: getInternalUser finds an existing profile — no upsert
+    mockFromResult = { data: { id: 'internal-user-1', role: 'customer' }, error: null };
 
     const res = await request(app)
       .post('/api/auth/login')
@@ -195,6 +200,48 @@ describe('Auth – /api/auth', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('token');
+  });
+
+  it('POST /login upserts public.users when auth user has no profile row', async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: {
+        session: { access_token: 'fake-jwt-token' },
+        user: {
+          id: 'uuid-orphan',
+          email: 'orphan@example.com',
+          user_metadata: { role: 'customer', full_name: 'Orphan User' },
+        },
+      },
+      error: null,
+    });
+
+    let fromAwaitCount = 0;
+    mockFrom.mockImplementation(() => {
+      const handler = {
+        get(target, prop) {
+          if (prop === 'then') {
+            return (resolve) => {
+              fromAwaitCount += 1;
+              if (fromAwaitCount === 1) {
+                resolve({ data: null, error: { code: 'PGRST116', message: 'not found' } });
+              } else {
+                resolve({ data: null, error: null });
+              }
+            };
+          }
+          return jest.fn().mockReturnValue(new Proxy({}, handler));
+        },
+      };
+      return new Proxy({}, handler);
+    });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'orphan@example.com', password: 'Password123!' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(fromAwaitCount).toBe(2);
   });
 
   it('POST /login rejects wrong password (401)', async () => {

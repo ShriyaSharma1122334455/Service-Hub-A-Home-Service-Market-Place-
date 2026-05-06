@@ -677,15 +677,6 @@ export const Profile: React.FC<ProfileProps> = ({
                 </div>
               )}
 
-              {profileId === "me" && (
-                <div className="p-4 bg-slate-50 rounded-2xl">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    ID
-                  </p>
-                  <p className="text-slate-500 text-sm font-mono">{data.id}</p>
-                </div>
-              )}
-
               {/* Reviews section — provider profiles only */}
               {isProvider && (
                 <div className="pt-2">

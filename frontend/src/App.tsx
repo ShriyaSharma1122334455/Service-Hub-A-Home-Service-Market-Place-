@@ -36,6 +36,16 @@ type StoredAuth = {
   accessToken?: string;
 };
 
+type ProviderRegistrationMeta = {
+  businessName: string;
+  description: string;
+  services: Array<{
+    category: string;
+    description: string;
+    price: string;
+  }>;
+};
+
 const loadStoredAuth = (): StoredAuth | null => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -228,46 +238,56 @@ const App = () => {
       const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0F172A&color=fff`;
 
       let profile = null;
+      let profileError: string | null = null;
       if (accessToken) {
         try {
           const resp = await fetch(`${API_BASE}/api/users/me`, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (!resp.ok) {
-            console.error("Profile fetch failed", resp.status);
+            let backendError = "Unable to load account profile.";
+            try {
+              const errJson = await resp.json();
+              backendError =
+                errJson?.error || errJson?.message || backendError;
+            } catch {
+              // ignore json parse failures
+            }
+            profileError = backendError;
           } else {
             const json = await resp.json();
             if (json?.success) profile = json.data;
+            else profileError = json?.error || json?.message || null;
           }
         } catch (fetchErr) {
           console.error("Profile fetch error:", fetchErr);
+          profileError =
+            "Unable to verify your account profile. Please try again.";
         }
+      }
+
+      if (!profile) {
+        return {
+          success: false,
+          message: profileError || "Unable to load account profile.",
+        };
+      }
+
+      const actualRole = toUserRole(profile?.role);
+      if (actualRole !== role) {
+        return {
+          success: false,
+          message: `Invalid role selected. This account is registered as a ${actualRole.toLowerCase()}.`,
+        };
       }
 
       const userData = {
         id: profile?.id || supabaseUser?.id || "",
         name: profile?.full_name || name,
         email,
-        role: profile?.role ? toUserRole(profile.role) : role,
+        role: actualRole,
         avatar: profile?.avatar_url || avatar,
       } as User;
-
-      // Validate that the selected role matches the actual role from database
-      if (profile?.role) {
-        const actualRole = toUserRole(profile.role);
-        if (actualRole !== role) {
-          return {
-            success: false,
-            message: `Invalid role selected. This account is registered as a ${actualRole.toLowerCase()}.`,
-          };
-        }
-      } else {
-        // If we can't fetch profile, assume the selected role is correct
-        // This handles cases where profile creation is pending
-        console.warn(
-          "Could not fetch user profile, proceeding with selected role",
-        );
-      }
 
       setUser(userData);
       setIsAuthenticated(true);
@@ -311,6 +331,7 @@ const App = () => {
     city?: string,
     state?: string,
     zip?: string,
+    providerMeta?: ProviderRegistrationMeta,
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       if (!password) return { success: false, message: "Password required" };
@@ -333,13 +354,15 @@ const App = () => {
           city,
           state,
           zip,
+          providerMeta,
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        if (result.error?.includes("already")) {
+        const backendMessage = result.message || result.error || "";
+        if (String(backendMessage).toLowerCase().includes("already")) {
           return {
             success: false,
             message:
@@ -348,7 +371,15 @@ const App = () => {
         }
         return {
           success: false,
-          message: result.error || "Registration failed",
+          message: backendMessage || "Registration failed",
+        };
+      }
+
+      if (result?.data?.emailConfirmationRequired) {
+        return {
+          success: false,
+          message:
+            "Registration successful. Please confirm your email before signing in.",
         };
       }
 
