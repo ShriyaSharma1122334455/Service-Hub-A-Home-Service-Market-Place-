@@ -68,13 +68,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Browse Services
                   </span>
                 </>
-              ) : (
+              ) : user?.role === UserRole.PROVIDER ? (
                 <span
-                  onClick={() => onNavigate(getHomePath())}
-                  className={navItemClass(getHomePath())}
+                  onClick={() => onNavigate("/dashboard")}
+                  className={navItemClass("/dashboard")}
                 >
                   Home
                 </span>
+              ) : (
+                <>
+                  <span
+                    onClick={() => onNavigate("/")}
+                    className={navItemClass("/")}
+                  >
+                    Home
+                  </span>
+                  <span
+                    onClick={() => onNavigate("/browse-services")}
+                    className={navItemClass("/browse-services")}
+                  >
+                    Browse Services
+                  </span>
+                </>
               )}
               <span
                 onClick={() => onNavigate("/faq")}
@@ -165,13 +180,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Browse Services
                 </div>
               </>
-            ) : (
+            ) : user?.role === UserRole.PROVIDER ? (
               <div
                 className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => { onNavigate(getHomePath()); setIsOpen(false); }}
+                onClick={() => { onNavigate("/dashboard"); setIsOpen(false); }}
               >
                 Home
               </div>
+            ) : (
+              <>
+                <div
+                  className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => { onNavigate("/"); setIsOpen(false); }}
+                >
+                  Home
+                </div>
+                <div
+                  className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => { onNavigate("/browse-services"); setIsOpen(false); }}
+                >
+                  Browse Services
+                </div>
+              </>
             )}
             {user && (
               <div
