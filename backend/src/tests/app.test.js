@@ -775,7 +775,7 @@ describe('Bookings – POST /api/bookings', () => {
 
     supabaseAwaitQueue.push(
       { data: [], error: null },
-      { data: { id: 'prov-1', verification_status: 'verified', user_id: 'prov-user-uuid' }, error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'prov-user-uuid' }, error: null },
       { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
       { data: { id: 'svc-1', base_price: 125, provider_id: 'prov-1', is_active: true }, error: null },
       {
