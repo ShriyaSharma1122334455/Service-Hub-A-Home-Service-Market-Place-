@@ -49,13 +49,6 @@ interface ServiceGroup {
   services: ServiceItem[];
 }
 
-interface FAQEntry {
-  question: string;
-  answer: string;
-  keywords: string[];
-  audience: "customer" | "provider" | "both";
-}
-
 interface FAQMatch {
   question: string;
   answer: string;
@@ -89,14 +82,13 @@ interface BotMessage {
 
 type ChatMessage = UserMessage | BotMessage;
 
-type Intent =
-  | "greeting"
-  | "my_orders"
-  | "services"
-  | "faq_search"
-  | "provider_earnings"
-  | "provider_bookings"
-  | "fallback";
+// LLM response shape from POST /api/chatbot/message
+interface LLMResponse {
+  text: string;
+  contentType: BotContentType;
+  faqAnswer: FAQMatch | null;
+  quickReplies: QuickReply[] | null;
+}
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -183,141 +175,26 @@ const SERVICE_GROUPS: ServiceGroup[] = [
   },
 ];
 
-const FAQ_DATA: FAQEntry[] = [
-  {
-    question: "How do I book a service?",
-    answer:
-      "Browse the home page, pick a service category, choose a verified provider near you, select a time slot, and confirm. That's it!",
-    keywords: ["how to book", "book a service", "schedule", "reserve", "appointment", "appoint"],
-    audience: "customer",
-  },
-  {
-    question: "What payment methods are accepted?",
-    answer:
-      "We accept all major credit and debit cards through Stripe. Your card details are never stored on our servers — all transactions are encrypted.",
-    keywords: ["pay", "payment", "card", "credit", "debit", "stripe", "billing", "charge"],
-    audience: "both",
-  },
-  {
-    question: "Can I cancel my booking?",
-    answer:
-      "Yes — go to 'My Bookings' in your dashboard, select the booking, and click 'Cancel'. Cancellation policies vary based on how close to the appointment you cancel.",
-    keywords: ["cancel", "cancellation", "refund", "undo", "stop booking"],
-    audience: "customer",
-  },
-  {
-    question: "How do I leave a review?",
-    answer:
-      "After a booking is marked Completed, a 'Leave a Review' option appears in your dashboard. Rate 1–5 stars and leave a comment.",
-    keywords: ["review", "rate", "rating", "feedback", "star", "comment"],
-    audience: "customer",
-  },
-  {
-    question: "What if my provider doesn't show up?",
-    answer:
-      "Submit a complaint through the 'Support' button in your dashboard. Our team will investigate and process a full refund if applicable.",
-    keywords: ["no show", "didn't show", "missing", "absent", "late", "refund", "didn't arrive"],
-    audience: "customer",
-  },
-  {
-    question: "Are providers verified?",
-    answer:
-      "Yes! Every provider goes through ID verification, face matching, and an NSOPW background check before being listed on the platform.",
-    keywords: ["verif", "verified", "background", "safe", "trust", "check", "screened", "legit"],
-    audience: "both",
-  },
-  {
-    question: "How do I register as a provider?",
-    answer:
-      "Click 'Get Started' → 'Register as Provider'. Fill in your business details, services, and pricing, then complete the verification process.",
-    keywords: ["register", "sign up", "join", "become provider", "create account", "onboard"],
-    audience: "provider",
-  },
-  {
-    question: "What does verification involve?",
-    answer:
-      "Three steps: (1) Upload a valid US government-issued ID, (2) Take a selfie for face matching, (3) Automated NSOPW background check. A badge appears on your profile once verified.",
-    keywords: ["verif", "process", "id", "document", "selfie", "badge", "background check"],
-    audience: "provider",
-  },
-  {
-    question: "How do I manage my bookings as a provider?",
-    answer:
-      "Log in and open your Provider Dashboard → 'Bookings' tab. You can view upcoming, in-progress, and completed bookings, and accept or reject new requests.",
-    keywords: ["manage", "accept", "reject", "dashboard", "incoming", "request", "schedule"],
-    audience: "provider",
-  },
-  {
-    question: "When and how do I get paid?",
-    answer:
-      "Payments are via Stripe. Once a booking is marked Completed, a payout (minus the 15% platform commission) is sent to your bank within 2–3 business days.",
-    keywords: ["paid", "payout", "earnings", "salary", "money", "withdraw", "bank", "commission"],
-    audience: "provider",
-  },
-  {
-    question: "What if a customer complains about me?",
-    answer:
-      "Our support team contacts both parties. You get to share your side — decisions are made fairly based on evidence from both sides.",
-    keywords: ["complaint", "dispute", "report", "issue", "claim", "appeal"],
-    audience: "provider",
-  },
-  {
-    question: "What is ServiceHub?",
-    answer:
-      "ServiceHub is a home services marketplace connecting homeowners with verified professionals for Plumbing, Electrical, Cleaning, and Pest Control across the US.",
-    keywords: ["what is", "about", "servicehub", "platform", "marketplace", "app", "how does it work", "how it works"],
-    audience: "both",
-  },
-  {
-    question: "Which cities is ServiceHub available in?",
-    answer:
-      "ServiceHub is available nationwide across the US. Coverage may vary by zip code — check availability when searching for providers.",
-    keywords: ["city", "cities", "location", "available", "where", "area", "zip", "coverage"],
-    audience: "both",
-  },
-  {
-    question: "Is my personal information safe?",
-    answer:
-      "Absolutely. All data is encrypted and stored securely. We never sell your information to third parties. Auth is handled by Supabase.",
-    keywords: ["safe", "security", "privacy", "data", "personal", "secure", "private", "protect"],
-    audience: "both",
-  },
-  {
-    question: "How do I contact support?",
-    answer:
-      "Click the 'Support' button in the top navigation after logging in. Fill out the form and our team will respond within 24 hours.",
-    keywords: ["support", "contact", "agent", "human", "ticket", "reach out", "help desk"],
-    audience: "both",
-  },
-  {
-    question: "What is the platform commission?",
-    answer:
-      "ServiceHub charges a 15% commission on each completed booking. This covers platform maintenance, payment processing, support, and provider verification.",
-    keywords: ["commission", "fee", "15%", "cut", "platform fee", "charge", "deduct"],
-    audience: "both",
-  },
-];
-
 const CUSTOMER_QUICK_REPLIES: QuickReply[] = [
-  { label: "📦 My Orders", value: "my orders" },
-  { label: "🛠️ Services", value: "show services" },
-  { label: "💳 Payment Info", value: "payment methods" },
-  { label: "❌ Cancel Booking", value: "cancel booking" },
-  { label: "🎧 Contact Support", value: "contact support" },
+  { label: "📦 My Orders", value: "Show me my orders" },
+  { label: "🛠️ Services", value: "What services do you offer?" },
+  { label: "💳 Payment Info", value: "What payment methods are accepted?" },
+  { label: "❌ Cancel Booking", value: "How do I cancel a booking?" },
+  { label: "🎧 Contact Support", value: "How do I contact support?" },
 ];
 
 const PROVIDER_QUICK_REPLIES: QuickReply[] = [
-  { label: "💰 My Earnings", value: "earnings" },
-  { label: "📅 My Bookings", value: "manage bookings" },
-  { label: "✅ Verification", value: "verification process" },
-  { label: "🛠️ Services Offered", value: "show services" },
-  { label: "🎧 Contact Support", value: "contact support" },
+  { label: "💰 My Earnings", value: "How do earnings work?" },
+  { label: "📅 My Bookings", value: "Show me my bookings" },
+  { label: "✅ Verification", value: "What is the verification process?" },
+  { label: "🛠️ Services Offered", value: "What services does ServiceHub offer?" },
+  { label: "🎧 Contact Support", value: "How do I contact support?" },
 ];
 
 const GUEST_QUICK_REPLIES: QuickReply[] = [
-  { label: "🛠️ Services", value: "show services" },
-  { label: "❓ How It Works", value: "how does it work" },
-  { label: "🔐 How to Book", value: "how to book" },
+  { label: "🛠️ Services", value: "What services do you offer?" },
+  { label: "❓ How It Works", value: "How does ServiceHub work?" },
+  { label: "🔐 How to Book", value: "How do I book a service?" },
 ];
 
 // ─── Pure functions ───────────────────────────────────────────────────────────
@@ -326,267 +203,15 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-function searchFAQ(query: string, role: string | null): FAQEntry | null {
-  const q = query.toLowerCase();
-  let bestMatch: FAQEntry | null = null;
-  let bestScore = 0;
-
-  for (const entry of FAQ_DATA) {
-    if (entry.audience !== "both") {
-      if (role === "customer" && entry.audience === "provider") continue;
-      if (role === "provider" && entry.audience === "customer") continue;
-    }
-    let score = 0;
-    for (const kw of entry.keywords) {
-      // Use word-boundary regex so "book" doesn't match inside "booking"
-      // Multi-word phrases match as-is; single words use \b
-      const pattern = kw.includes(" ")
-        ? new RegExp(kw.replace(/\s+/g, "\\s+"))
-        : new RegExp(`\\b${kw}\\b`);
-      if (pattern.test(q)) {
-        // Phrase keywords (more specific) score 2; single-word keywords score 1
-        score += kw.includes(" ") ? 2 : 1;
-      }
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = entry;
-    }
-  }
-  return bestScore >= 1 ? bestMatch : null;
-}
-
-function detectIntent(input: string, role: string | null): Intent {
-  const q = input.toLowerCase().trim();
-
-  if (/^(hi|hey|hello|howdy|sup|yo|good morning|good afternoon|start)\b/.test(q) || q === "help") {
-    return "greeting";
-  }
-  if (
-    /\b(my orders|my bookings|view.*booking|order status|booking status|track.*order|where.*order)\b/.test(q) &&
-    !/\b(cancel|refund|delete|remove)\b/.test(q)
-  ) {
-    return "my_orders";
-  }
-  if (/\b(service|services|what.*offer|offer|catalog|cleaning|plumbing|electrical|pest|available service)\b/.test(q)) {
-    return "services";
-  }
-  if (role === "provider") {
-    if (/\b(earn|earnings|earning|payout|commission|salary|money|revenue|income|15%|pay me|get paid)\b/.test(q)) {
-      return "provider_earnings";
-    }
-    if (/\b(manage bookings?|my bookings?|incoming|accept|reject|booking request)\b/.test(q)) {
-      return "provider_bookings";
-    }
-  }
-  const match = searchFAQ(q, role);
-  if (match) return "faq_search";
-
-  return "fallback";
-}
-
-function generateResponse(
-  intent: Intent,
-  input: string,
-  user: User | Provider | null,
-  realBookings?: RealBooking[] | null,
-): Omit<BotMessage, "id" | "timestamp" | "sender"> {
-  const role = user?.role?.toLowerCase() ?? null;
-  const name = user?.name?.split(" ")[0] || "there";
-
-  switch (intent) {
-    case "greeting":
-      return {
-        contentType: "quick-replies",
-        text:
-          role === "provider"
-            ? `Hi ${name}! 👋 I'm your ServiceHub assistant. How can I help you today?`
-            : user
-            ? `Hi ${name}! 👋 I'm here to help. What would you like to do?`
-            : "👋 Hi! I'm the ServiceHub assistant. Here's what I can help with:",
-        quickReplies:
-          role === "provider"
-            ? PROVIDER_QUICK_REPLIES
-            : user
-            ? CUSTOMER_QUICK_REPLIES
-            : GUEST_QUICK_REPLIES,
-      };
-
-    case "my_orders":
-      if (!user) {
-        return {
-          contentType: "quick-replies",
-          text: "You need to be logged in to view your orders. Please sign in first.",
-          quickReplies: [
-            { label: "🔐 Go to Login", value: "how to book" },
-            { label: "🛠️ Browse Services", value: "show services" },
-          ],
-        };
-      }
-      if (role === "provider") {
-        // Provider: show their scheduled jobs if available
-        if (realBookings && realBookings.length > 0) {
-          return {
-            contentType: "order-cards",
-            text: `You have ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""} scheduled:`,
-            orders: realBookings.map(mapBookingToOrder),
-            quickReplies: [
-              { label: "💰 Earnings Info", value: "earnings" },
-              { label: "❓ More Help", value: "help" },
-            ],
-          };
-        }
-        if (realBookings && realBookings.length === 0) {
-          return {
-            contentType: "quick-replies",
-            text: "You have no bookings yet. When customers book your services, they'll appear here.",
-            quickReplies: [
-              { label: "💰 Earnings Info", value: "earnings" },
-              { label: "🛠️ Services Offered", value: "show services" },
-            ],
-          };
-        }
-        return {
-          contentType: "faq-answer",
-          text: "As a provider, you manage bookings from your dashboard:",
-          faqAnswer: {
-            question: "How do I manage my bookings?",
-            answer:
-              "Open your Provider Dashboard → Bookings tab. You can view all upcoming and past bookings, and accept or reject new requests from customers.",
-          },
-          quickReplies: [{ label: "💰 Earnings Info", value: "earnings" }],
-        };
-      }
-      // Customer: show real bookings if fetched
-      if (realBookings && realBookings.length === 0) {
-        return {
-          contentType: "quick-replies",
-          text: "You don't have any bookings yet. Browse our services to get started!",
-          quickReplies: [
-            { label: "🛠️ Browse Services", value: "show services" },
-            { label: "❓ How to Book", value: "how to book" },
-          ],
-        };
-      }
-      if (realBookings && realBookings.length > 0) {
-        return {
-          contentType: "order-cards",
-          text: `Here are your ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""}:`,
-          orders: realBookings.map(mapBookingToOrder),
-          quickReplies: [
-            { label: "🛠️ Browse Services", value: "show services" },
-            { label: "❓ Cancel a Booking", value: "cancel booking" },
-          ],
-        };
-      }
-      // Fallback if fetch failed or not attempted
-      return {
-        contentType: "quick-replies",
-        text: "Unable to load your bookings right now. Please try again.",
-        quickReplies: [
-          { label: "🔄 Try Again", value: "my orders" },
-          { label: "🛠️ Browse Services", value: "show services" },
-        ],
-      };
-
-    case "services":
-      return {
-        contentType: "service-grid",
-        text: "Here's everything we offer:",
-        services: SERVICE_GROUPS,
-        quickReplies: [
-          { label: "📦 My Orders", value: "my orders" },
-          { label: "❓ How to Book", value: "how to book" },
-        ],
-      };
-
-    case "faq_search": {
-      const match = searchFAQ(input, role)!;
-      return {
-        contentType: "faq-answer",
-        text: "Here's what I found:",
-        faqAnswer: { question: match.question, answer: match.answer },
-        quickReplies: [
-          { label: "🔍 Ask another question", value: "help" },
-          { label: "🛠️ View Services", value: "show services" },
-        ],
-      };
-    }
-
-    case "provider_earnings":
-      return {
-        contentType: "faq-answer",
-        text: "Here's how earnings work:",
-        faqAnswer: {
-          question: "When and how do I get paid?",
-          answer:
-            "Payouts are via Stripe. Once a booking is marked Completed, you receive the amount minus the 15% platform commission within 2–3 business days to your registered bank account.",
-        },
-        quickReplies: [
-          { label: "📅 My Bookings", value: "manage bookings" },
-          { label: "💡 More Questions", value: "help" },
-        ],
-      };
-
-    case "provider_bookings":
-      if (realBookings && realBookings.length > 0) {
-        return {
-          contentType: "order-cards",
-          text: `You have ${realBookings.length} booking${realBookings.length !== 1 ? "s" : ""} from customers:`,
-          orders: realBookings.map(mapBookingToOrder),
-          quickReplies: [
-            { label: "💰 Earnings Info", value: "earnings" },
-            { label: "❓ More Help", value: "help" },
-          ],
-        };
-      }
-      if (realBookings && realBookings.length === 0) {
-        return {
-          contentType: "quick-replies",
-          text: "No incoming bookings yet. Once customers book your services, they'll appear here.",
-          quickReplies: [
-            { label: "💰 Earnings Info", value: "earnings" },
-            { label: "🛠️ Services Offered", value: "show services" },
-          ],
-        };
-      }
-      return {
-        contentType: "faq-answer",
-        text: "Managing your bookings:",
-        faqAnswer: {
-          question: "How do I manage bookings as a provider?",
-          answer:
-            "Open your Provider Dashboard → Bookings tab. View all upcoming and past bookings, and accept or reject new requests from customers in real time.",
-        },
-        quickReplies: [
-          { label: "💰 Earnings Info", value: "earnings" },
-          { label: "❓ More Questions", value: "help" },
-        ],
-      };
-
-    default:
-      return {
-        contentType: "quick-replies",
-        text: "I'm not sure I caught that. Here are some things I can help with:",
-        quickReplies:
-          role === "provider"
-            ? PROVIDER_QUICK_REPLIES
-            : user
-            ? CUSTOMER_QUICK_REPLIES
-            : GUEST_QUICK_REPLIES,
-      };
-  }
-}
-
-function getWelcomeMessage(user: User | Provider | null): BotMessage {
+function staticWelcome(user: User | Provider | null): BotMessage {
   const role = user?.role?.toLowerCase();
   const name = user?.name?.split(" ")[0];
 
   const text = !user
-    ? "👋 Hi! I'm the ServiceHub assistant. I can help you explore services, find answers, and more."
+    ? "👋 Hi! I'm the ServiceHub assistant. Ask me anything about our services, bookings, payments, or how the platform works."
     : role === "provider"
-    ? `👋 Welcome back, ${name}! I can help with your bookings, earnings, and platform questions.`
-    : `👋 Hello, ${name}! I can show your orders, browse services, or answer any questions.`;
+    ? `👋 Welcome back, ${name}! Ask me about your bookings, earnings, verification, or anything else on ServiceHub.`
+    : `👋 Hello, ${name}! I can help with your orders, browse services, or answer questions about ServiceHub.`;
 
   return {
     id: generateId(),
@@ -594,6 +219,23 @@ function getWelcomeMessage(user: User | Provider | null): BotMessage {
     timestamp: new Date(),
     contentType: "quick-replies",
     text,
+    quickReplies:
+      role === "provider"
+        ? PROVIDER_QUICK_REPLIES
+        : user
+        ? CUSTOMER_QUICK_REPLIES
+        : GUEST_QUICK_REPLIES,
+  };
+}
+
+function fallbackBotMessage(user: User | Provider | null): BotMessage {
+  const role = user?.role?.toLowerCase();
+  return {
+    id: generateId(),
+    sender: "bot",
+    timestamp: new Date(),
+    contentType: "quick-replies",
+    text: "Sorry, I'm having trouble connecting right now. Please try again in a moment.",
     quickReplies:
       role === "provider"
         ? PROVIDER_QUICK_REPLIES
@@ -752,7 +394,7 @@ function MessageBubble({
           {bot.text && (
             <p className="text-sm text-slate-700">{bot.text}</p>
           )}
-          {bot.contentType === "order-cards" && bot.orders && (
+          {bot.contentType === "order-cards" && bot.orders && bot.orders.length > 0 && (
             <div className="space-y-1.5">
               {bot.orders.map((o) => (
                 <OrderCard key={o.id} order={o} />
@@ -796,6 +438,8 @@ export const Chatbot: React.FC<ChatbotProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Multi-turn conversation history (last 6 turns sent to LLM)
+  const conversationHistory = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -815,11 +459,11 @@ export const Chatbot: React.FC<ChatbotProps> = ({
     }, 200);
   }, []);
 
-  // Push welcome message on first open (wrapped in function to satisfy set-state-in-effect rule)
+  // Push welcome message on first open
   useEffect(() => {
     function init() {
       setMessages((prev) =>
-        prev.length === 0 ? [getWelcomeMessage(user)] : prev,
+        prev.length === 0 ? [staticWelcome(user)] : prev,
       );
     }
     if (isOpen) init();
@@ -838,10 +482,11 @@ export const Chatbot: React.FC<ChatbotProps> = ({
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
 
+    const trimmed = text.trim();
     const userMsg: UserMessage = {
       id: generateId(),
       sender: "user",
-      text: text.trim(),
+      text: trimmed,
       timestamp: new Date(),
     };
 
@@ -849,35 +494,93 @@ export const Chatbot: React.FC<ChatbotProps> = ({
     setInputValue("");
     setIsTyping(true);
 
-    const role = user?.role?.toLowerCase() ?? null;
-    const intent = detectIntent(text, role);
+    try {
+      const result = await fetchApi<LLMResponse>("/chatbot/message", {
+        method: "POST",
+        body: JSON.stringify({
+          message: trimmed,
+          history: conversationHistory.current.slice(-6),
+        }),
+      });
 
-    // Fetch real booking data for order/booking intents
-    let realBookings: RealBooking[] | null = null;
-    if (user && (intent === "my_orders" || intent === "provider_bookings")) {
-      try {
-        const result = await fetchApi<ChatbotContext>("/chatbot/context");
-        if (result.success && result.data) {
-          const ctx = result.data as unknown as ChatbotContext;
-          realBookings = ctx.bookings ?? [];
-        }
-      } catch {
-        // realBookings stays null → fallback message shown
+      if (!result.success || !result.data) {
+        setMessages((prev) => [...prev.slice(-49), fallbackBotMessage(user)]);
+        return;
       }
+
+      const payload = result.data as LLMResponse;
+
+      const botMsg: BotMessage = {
+        id: generateId(),
+        sender: "bot",
+        timestamp: new Date(),
+        contentType: payload.contentType ?? "text",
+        text: payload.text ?? "",
+        faqAnswer: payload.faqAnswer ?? undefined,
+        quickReplies: payload.quickReplies ?? undefined,
+      };
+
+      // Service grid: inject the static service catalog
+      if (botMsg.contentType === "service-grid") {
+        botMsg.services = SERVICE_GROUPS;
+      }
+
+      // Order cards: AI signalled it; fetch real bookings if logged in
+      if (botMsg.contentType === "order-cards") {
+        if (user) {
+          try {
+            const ctxRes = await fetchApi<ChatbotContext>("/chatbot/context");
+            if (ctxRes.success && ctxRes.data) {
+              const bookings = (ctxRes.data as ChatbotContext).bookings ?? [];
+              botMsg.orders = bookings.map(mapBookingToOrder);
+              if (bookings.length === 0) {
+                // Re-frame as a friendly no-bookings reply
+                botMsg.contentType = "quick-replies";
+                botMsg.text =
+                  user.role?.toLowerCase() === "provider"
+                    ? "You don't have any bookings yet. They'll appear here once customers book your services."
+                    : "You don't have any bookings yet. Browse services to get started!";
+                botMsg.quickReplies = botMsg.quickReplies ?? [
+                  { label: "🛠️ Browse Services", value: "What services do you offer?" },
+                  { label: "❓ How to Book", value: "How do I book a service?" },
+                ];
+              }
+            } else {
+              botMsg.contentType = "quick-replies";
+              botMsg.text =
+                "Unable to load your bookings right now. Please try again in a moment.";
+              botMsg.quickReplies = botMsg.quickReplies ?? [
+                { label: "🔄 Try Again", value: "Show me my orders" },
+              ];
+            }
+          } catch {
+            botMsg.contentType = "quick-replies";
+            botMsg.text =
+              "Unable to load your bookings right now. Please try again in a moment.";
+          }
+        } else {
+          // Guest asked for orders — redirect to sign in
+          botMsg.contentType = "quick-replies";
+          botMsg.text =
+            "You need to sign in to view your orders. Once logged in, I can show your bookings here.";
+          botMsg.quickReplies = botMsg.quickReplies ?? GUEST_QUICK_REPLIES;
+        }
+      }
+
+      // Track history for multi-turn context
+      conversationHistory.current.push({ role: "user", content: trimmed });
+      conversationHistory.current.push({ role: "assistant", content: botMsg.text });
+      // Cap memory to last 12 entries (6 turns)
+      if (conversationHistory.current.length > 12) {
+        conversationHistory.current = conversationHistory.current.slice(-12);
+      }
+
+      setMessages((prev) => [...prev.slice(-49), botMsg]);
+    } catch {
+      setMessages((prev) => [...prev.slice(-49), fallbackBotMessage(user)]);
+    } finally {
+      setIsTyping(false);
     }
-
-    // Small delay for a natural conversational feel
-    await new Promise<void>((resolve) => setTimeout(resolve, 600));
-
-    const payload = generateResponse(intent, text, user, realBookings);
-    const botMsg: BotMessage = {
-      id: generateId(),
-      sender: "bot",
-      timestamp: new Date(),
-      ...payload,
-    };
-    setMessages((prev) => [...prev.slice(-49), botMsg]);
-    setIsTyping(false);
   };
 
   const roleBadge = user

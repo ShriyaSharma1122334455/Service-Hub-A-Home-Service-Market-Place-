@@ -51,6 +51,14 @@ const registerLimiter = rateLimit({
   message:        { success: false, message: 'Too many registration attempts. Please try again in 2 minutes.' },
 });
 
+const chatbotLimiter = rateLimit({
+  windowMs:       60 * 1000,        // 1 minute
+  max:            20,                // headroom under Groq's 30/min free tier
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { success: false, error: 'Too many chatbot messages. Please wait a moment.' },
+});
+
 // ── Security & utility middleware ─────────────────────────────────────────
 app.use(helmet());
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
@@ -71,6 +79,7 @@ app.use(express.urlencoded({ extended: true }));
 // ── Rate-limit auth endpoints ─────────────────────────────────────────────
 app.use('/api/auth/login',    loginLimiter);
 app.use('/api/auth/register', registerLimiter);   // ← A-09: new
+app.use('/api/chatbot/message', chatbotLimiter);  // ← SER-AI: protect Groq quota
 
 // ── API routes ────────────────────────────────────────────────────────────
 app.use('/api/auth',         authRoutes);
