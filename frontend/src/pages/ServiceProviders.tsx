@@ -294,6 +294,17 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
           <p className="text-slate-400 text-sm mt-2 max-w-xs">
             No providers are currently offering this service. Check back soon!
           </p>
+          {!user && (
+            <button
+              onClick={() => {
+                const redirect = encodeURIComponent(window.location.hash.replace("#", ""));
+                onNavigate(`/login?redirect=${redirect}`);
+              }}
+              className="mt-6 px-6 py-2.5 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
+            >
+              Log in to book when available
+            </button>
+          )}
         </div>
       )}
 
