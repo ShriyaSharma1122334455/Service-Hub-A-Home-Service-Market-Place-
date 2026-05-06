@@ -207,7 +207,7 @@ export const BrowseServices: React.FC<BrowseServicesProps> = ({
                 </div>
                 
                 <button
-                  onClick={() => onNavigate(`/book/${service.id}`)}
+                  onClick={() => onNavigate(`/book/${service.id}?from=browse`)}
                   className="bg-slate-900 text-white rounded-full px-4 py-2 text-sm font-bold hover:bg-slate-800 mt-auto"
                 >
                   Book Now

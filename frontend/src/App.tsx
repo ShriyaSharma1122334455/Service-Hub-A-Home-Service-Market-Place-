@@ -90,6 +90,7 @@ const App = () => {
     profileTypeParam === "user" || profileTypeParam === "provider"
       ? profileTypeParam
       : null;
+  const fromParam = searchParams.get("from");
 
   // Validate Supabase session on every app init / page reload.
   // Prevents stale localStorage from showing user as logged in
@@ -403,12 +404,15 @@ const App = () => {
     }
 
     if (bookServiceId) {
+      const fromBrowse = fromParam === "browse";
       return (
         <ServiceProviders
           serviceId={bookServiceId}
           onNavigate={navigate}
           user={user}
           token={getToken()}
+          backPath={fromBrowse ? "/browse-services" : "/"}
+          backLabel={fromBrowse ? "Back to Browse Services" : "Back to Home"}
         />
       );
     }

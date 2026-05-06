@@ -73,6 +73,10 @@ interface ServiceProvidersProps {
   user?: User | null;
   /** Supabase access token — required to open BookingModal */
   token?: string;
+  /** Where the back button navigates. Defaults to "/" (home). */
+  backPath?: string;
+  /** Label for the back button. Defaults to "Back to Home". */
+  backLabel?: string;
 }
 
 /** Only the top matches are listed; the API may return more. */
@@ -119,6 +123,8 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
   onNavigate,
   user = null,
   token,
+  backPath = "/",
+  backLabel = "Back to Home",
 }) => {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [providers, setProviders] = useState<ProviderCard[]>([]);
@@ -217,11 +223,11 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
       {/* Back button */}
       <button
-        onClick={() => onNavigate("/")}
+        onClick={() => onNavigate(backPath)}
         className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors mb-8"
       >
         <ArrowLeft size={16} />
-        Back to Home
+        {backLabel}
       </button>
 
       {/* Page header */}
