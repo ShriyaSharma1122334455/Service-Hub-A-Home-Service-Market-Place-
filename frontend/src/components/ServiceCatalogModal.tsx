@@ -289,7 +289,8 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
                           <button
                             onClick={() => {
                               onClose();
-                              onNavigate("/login");
+                              const redirect = encodeURIComponent(`/book/${service.id}`);
+                              onNavigate(`/login?redirect=${redirect}`);
                             }}
                             className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
                           >

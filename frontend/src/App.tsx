@@ -150,13 +150,14 @@ const App = () => {
     basePath === "/my-bookings" ||
     basePath.startsWith("/booking-confirmation");
 
-  // Redirect unauthenticated users away from protected pages
+  // Redirect unauthenticated users away from protected pages, preserving destination
   useEffect(() => {
     if (!authRestored) return;
     if (isProtectedPath && !isAuthenticated) {
-      window.location.hash = "/login";
+      const redirect = encodeURIComponent(currentPath);
+      window.location.hash = `/login?redirect=${redirect}`;
     }
-  }, [isProtectedPath, isAuthenticated, authRestored]);
+  }, [isProtectedPath, isAuthenticated, authRestored, currentPath]);
 
   // Visual damage assessment: customers only (not guests or providers)
   useEffect(() => {
@@ -281,9 +282,10 @@ const App = () => {
         accessToken,
       });
 
-      // All authenticated users land on /dashboard; the route renders the
-      // role-appropriate view (CustomerDashboard or ProviderDashboard).
-      navigate("/dashboard");
+      // After login, go to the originally requested page if one was stored,
+      // otherwise fall back to /dashboard.
+      const redirectTo = searchParams.get("redirect");
+      navigate(redirectTo ? decodeURIComponent(redirectTo) : "/dashboard");
 
       return { success: true };
     } catch (err) {
