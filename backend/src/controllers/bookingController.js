@@ -154,7 +154,7 @@ export const createBooking = async (req, res) => {
           error: 'The requested service does not belong to the specified provider',
         });
       }
-      if (providerService.custom_price != null) {
+      if (providerService.custom_price !== null) {
         priceToCharge = providerService.custom_price;
       }
     }
