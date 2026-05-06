@@ -7,7 +7,7 @@ export const getProvider = async (req, res) => {
     const { data: provider, error } = await supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count, verification_status,
+        id, business_name, description, rating_avg, rating_count, is_fully_verified,
         user:users(full_name, email, avatar_url, role),
         provider_categories(category_id)
       `)
@@ -26,7 +26,7 @@ export const getProvider = async (req, res) => {
         description:           provider.description,
         rating_avg:            provider.rating_avg,
         rating_count:          provider.rating_count,
-        verification_status:   provider.verification_status || 'unverified',
+        is_fully_verified:     provider.is_fully_verified ?? false,
         service_categories:    provider.provider_categories,
         full_name:             provider.user?.full_name || provider.business_name,
         email:                 provider.user?.email,
@@ -46,7 +46,7 @@ export const listProviders = async (req, res) => {
     const { data: providers, error } = await supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count, verification_status,
+        id, business_name, description, rating_avg, rating_count, is_fully_verified,
         user:users(full_name, email, avatar_url)
       `)
       .eq('is_active', true);
@@ -59,7 +59,7 @@ export const listProviders = async (req, res) => {
       description:         p.description,
       rating_avg:          p.rating_avg,
       rating_count:        p.rating_count,
-      verification_status: p.verification_status || 'unverified',
+      is_fully_verified:   p.is_fully_verified ?? false,
       full_name:           p.user?.full_name || p.business_name,
       email:               p.user?.email,
       avatar_url:          p.user?.avatar_url,
@@ -87,7 +87,7 @@ export const getProvidersByService = async (req, res) => {
       .select(`
         custom_price, custom_description,
         provider:providers(
-          id, business_name, rating_avg, rating_count, is_active, verification_status,
+          id, business_name, rating_avg, rating_count, is_active, is_fully_verified,
           user:users(full_name, avatar_url)
         )
       `)
@@ -104,7 +104,7 @@ export const getProvidersByService = async (req, res) => {
         business_name:         row.provider.business_name,
         rating_avg:            row.provider.rating_avg,
         rating_count:          row.provider.rating_count,
-        verification_status:   row.provider.verification_status || 'unverified',
+        is_fully_verified:     row.provider.is_fully_verified ?? false,
         full_name:             row.provider.user?.full_name || null,
         avatar_url:            row.provider.user?.avatar_url || null,
         custom_price:          row.custom_price ?? null,
@@ -152,7 +152,7 @@ export const searchProviders = async (req, res) => {
     let query = supabase
       .from('providers')
       .select(`
-        id, business_name, description, rating_avg, rating_count, is_active, verification_status,
+        id, business_name, description, rating_avg, rating_count, is_active, is_fully_verified,
         user:users(full_name, email, avatar_url),
         provider_categories(category_id)
       `, { count: 'exact' });
@@ -180,7 +180,7 @@ export const searchProviders = async (req, res) => {
       rating_avg:            p.rating_avg,
       rating_count:          p.rating_count,
       is_active:             p.is_active,
-      verification_status:   p.verification_status || 'unverified',
+      is_fully_verified:     p.is_fully_verified ?? false,
       service_categories:    p.provider_categories,
       full_name:             p.user?.full_name,
       email:                 p.user?.email,
