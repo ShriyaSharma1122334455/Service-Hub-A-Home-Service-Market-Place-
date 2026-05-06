@@ -59,7 +59,7 @@ export const getPrefill = async (req, res) => {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('full_name, email, phone')
+      .select('full_name, email, phone, dob')
       .eq('id', internalUser.id)
       .single();
 
@@ -74,7 +74,7 @@ export const getPrefill = async (req, res) => {
         full_name: user.full_name,
         email: user.email,
         phone: user.phone || null,
-        date_of_birth: null,
+        date_of_birth: user.dob || null,
       },
       error: null,
     });
@@ -213,7 +213,7 @@ export const uploadId = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadId error:', err);
-    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to process ID document' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to process ID document. Please try again.' });
   }
 };
 

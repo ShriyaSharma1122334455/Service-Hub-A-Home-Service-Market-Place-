@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import fetchApi from "../../lib/api";
 import { supabase } from "../../lib/supabase";
+import { toUserMessage } from "../../utils/errorMessages";
 import {
   Camera,
   Upload,
@@ -159,7 +160,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
         setError(json.error || "Failed to upload ID document.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
+      setError(toUserMessage(err));
     } finally {
       setLoading(false);
     }
@@ -261,7 +262,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
         setError(json.error || "Failed to upload selfie.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
+      setError(toUserMessage(err));
     } finally {
       setLoading(false);
     }

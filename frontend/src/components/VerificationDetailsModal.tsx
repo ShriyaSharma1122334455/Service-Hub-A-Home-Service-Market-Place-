@@ -49,6 +49,15 @@ interface VerificationData {
   created_at?: string;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  verified: "Verified",
+  pending: "Under Review",
+  manual_review: "Under Manual Review",
+  rejected: "Not Verified",
+  failed: "Not Verified",
+  unverified: "Not Verified",
+};
+
 const StatusIcon: React.FC<{ status?: string }> = ({ status }) => {
   switch (status) {
     case "verified":
@@ -155,8 +164,8 @@ export const VerificationDetailsModal: React.FC<
                     ${data.verification_status === "unverified" ? "bg-slate-100 text-slate-600" : ""}`}
                 >
                   <StatusIcon status={data.verification_status} />
-                  {data.verification_status.charAt(0).toUpperCase() +
-                    data.verification_status.slice(1)}
+                  {STATUS_LABELS[data.verification_status] ??
+                    data.verification_status}
                 </span>
               </div>
 
