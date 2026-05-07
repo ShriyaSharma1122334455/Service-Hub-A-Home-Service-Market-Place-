@@ -58,6 +58,13 @@ const STATUS_LABELS: Record<string, string> = {
   unverified: "Not Verified",
 };
 
+const overallBadgeClass = (status: string) => {
+  if (status === "verified") return "bg-emerald-100 text-emerald-700";
+  if (status === "pending" || status === "manual_review") return "bg-amber-100 text-amber-700";
+  if (status === "failed" || status === "rejected") return "bg-red-100 text-red-700";
+  return "bg-slate-100 text-slate-600";
+};
+
 const StatusIcon: React.FC<{ status?: string }> = ({ status }) => {
   switch (status) {
     case "verified":
