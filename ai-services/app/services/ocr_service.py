@@ -454,19 +454,43 @@ def _parse_drivers_license(raw_text: str) -> Dict[str, Optional[str]]:
         result["address"] = addr.group(0).strip()
 
     # ── License / DL number ───────────────────────────────────────────────
+    _dl_skip = frozenset({
+        "CLASS", "DONOR", "EYES", "HAIR", "SEX", "NONE", "REAL", "HAZMAT",
+    })
     dl_patterns = [
-        r"(?:DL|DLN|ID|LIC|LICENSE|LICENCE)\s*(?:NO|NUMBER|NUM|#)?[:\s#]*([A-Z0-9]{4,15})",
-        r"(?:^|\n)\s*(?:NO|NUM|NUMBER)[:\s]+([A-Z0-9]{6,15})",
-        r"\b([A-Z]\d{7,14})\b",  # Common format: letter + digits
+        # Same-line labeled: "DL A123456" / "DLN: A123456" / "LICENSE NO A123456"
+        # [: \t#]+ intentionally excludes newlines to avoid grabbing the wrong line
+        r"(?:DLN?|LIC(?:ENSE|ENCE)?(?:\s*(?:NO\.?|NUM(?:BER)?|#))?)\s*[: \t#]+([A-Z]{0,2}[A-Z0-9]{5,14})",
+        # "ID NO:" / "ID #" — require explicit qualifier to avoid false matches on "IDENTIFICATION"
+        r"ID\s*(?:NO\.?|NUM(?:BER)?|#)\s*[: \t#]*([A-Z]{0,2}[A-Z0-9]{5,14})",
+        # Label on one line, number on the next: "DL\nA1234567"
+        r"(?:DLN?|LIC(?:ENSE|ENCE)?)\b[^\n]*\n[ \t]*([A-Z]{0,2}[A-Z0-9]{5,14})",
+        # "NO" / "NUMBER" at line start
+        r"(?:^|\n)[ \t]*(?:NO\.?|NUM(?:BER)?)[: \t]+([A-Z]{0,2}[A-Z0-9]{5,14})",
+        # Structural: 1 letter + 7-14 digits (CA A1234567, FL A123456789012, MD, GA, IL, VA)
+        r"\b([A-Z][0-9]{7,14})\b",
+        # Structural: 2 letters + 5-9 digits (PA AA123456, WA, NV)
+        r"\b([A-Z]{2}[0-9]{5,9})\b",
+        # Structural: 9-14 consecutive digits (NY=9, NJ=14, CO=9, MA=9, MN=13)
+        r"\b([0-9]{9,14})\b",
     ]
     for pattern in dl_patterns:
         id_num = re.search(pattern, raw_text, re.IGNORECASE)
         if id_num:
-            val = id_num.group(1).upper()
-            # Skip too-short values or things that look like dates
-            if len(val) >= 5 and not re.match(r"^\d{1,2}\d{1,2}\d{2,4}$", val):
-                result["document_number"] = val
-                break
+            val = id_num.group(1).upper().strip()
+            if len(val) < 5:
+                continue
+            if val in _dl_skip:
+                continue
+            # Reject 8-digit strings that are valid compressed dates (MMDDYYYY)
+            if len(val) == 8 and val.isdigit():
+                try:
+                    if 1 <= int(val[:2]) <= 12 and 1 <= int(val[2:4]) <= 31:
+                        continue
+                except ValueError:
+                    pass
+            result["document_number"] = val
+            break
 
     # ── Issuing state ─────────────────────────────────────────────────────
     US_STATES = {

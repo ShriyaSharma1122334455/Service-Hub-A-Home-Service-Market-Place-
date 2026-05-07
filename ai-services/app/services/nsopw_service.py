@@ -66,6 +66,129 @@ INTERSTITIAL_MARKERS = (
 )
 
 
+# ── Jurisdiction-specific REST helpers ───────────────────────────────────
+
+async def _check_iowa(first_name: str, last_name: str) -> Dict[str, Any]:
+    """Iowa Sex Offender Registry — GET JSON API (50 req/hr cap)."""
+    url = "https://www.iowasexoffender.gov/api/search/results.json"
+    params = {"lastname": last_name, "firstname": first_name}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+    records = data if isinstance(data, list) else data.get("results", [])
+    match_found = len(records) > 0
+    return {
+        "nsopwStatus": "fail" if match_found else "pass",
+        "matchFound": match_found,
+        "matchDetails": [{"name": r.get("name", "")} for r in records[:5]],
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "source": "iowasexoffender.gov",
+    }
+
+
+async def _check_missouri(first_name: str, last_name: str) -> Dict[str, Any]:
+    """Missouri MSHP Sex Offender Registry — ArcGIS REST query."""
+    url = (
+        "https://www.mshp.dps.missouri.gov/arcgis/rest/services"
+        "/NSOR/MapServer/7/query"
+    )
+    where = (
+        f"LAST_NAME='{last_name.upper()}' AND FIRST_NAME='{first_name.upper()}'"
+    )
+    params = {
+        "where": where,
+        "outFields": "FIRST_NAME,LAST_NAME,CITY",
+        "f": "json",
+        "resultRecordCount": 10,
+    }
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+    features = data.get("features", [])
+    match_found = len(features) > 0
+    return {
+        "nsopwStatus": "fail" if match_found else "pass",
+        "matchFound": match_found,
+        "matchDetails": [
+            {
+                "name": (
+                    f"{f['attributes'].get('FIRST_NAME', '')} "
+                    f"{f['attributes'].get('LAST_NAME', '')}".strip()
+                )
+            }
+            for f in features[:5]
+        ],
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "source": "mshp.dps.missouri.gov",
+    }
+
+
+async def _check_dc(first_name: str, last_name: str) -> Dict[str, Any]:
+    """Washington D.C. Sex Offender Registry — DC GIS FeatureServer query."""
+    url = (
+        "https://maps2.dcgis.dc.gov/dcgis/rest/services"
+        "/FEEDS/MPD/FeatureServer/20/query"
+    )
+    where = (
+        f"LASTNAME='{last_name.upper()}' AND FIRSTNAME='{first_name.upper()}'"
+    )
+    params = {
+        "where": where,
+        "outFields": "*",
+        "f": "json",
+        "resultRecordCount": 10,
+    }
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+    features = data.get("features", [])
+    match_found = len(features) > 0
+    return {
+        "nsopwStatus": "fail" if match_found else "pass",
+        "matchFound": match_found,
+        "matchDetails": [
+            {
+                "name": (
+                    f"{f['attributes'].get('FIRSTNAME', '')} "
+                    f"{f['attributes'].get('LASTNAME', '')}".strip()
+                )
+            }
+            for f in features[:5]
+        ],
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "source": "maps2.dcgis.dc.gov",
+    }
+
+
+async def _check_chicago(first_name: str, last_name: str) -> Dict[str, Any]:
+    """Chicago Sex Offender Registry — Socrata open data API."""
+    url = "https://data.cityofchicago.org/resource/vc9r-bqvy.json"
+    params = {"LASTNAME": last_name.upper(), "FIRSTNAME": first_name.upper()}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        records = resp.json()
+    match_found = len(records) > 0
+    return {
+        "nsopwStatus": "fail" if match_found else "pass",
+        "matchFound": match_found,
+        "matchDetails": [
+            {
+                "name": (
+                    f"{r.get('FIRSTNAME', '')} "
+                    f"{r.get('LASTNAME', '')}".strip()
+                )
+            }
+            for r in records[:5]
+        ],
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "source": "data.cityofchicago.org",
+    }
+
+
 # ── Public API ────────────────────────────────────────────────────────────
 
 async def check_nsopw(
@@ -73,12 +196,14 @@ async def check_nsopw(
     last_name: str,
     state: Optional[str] = None,
     zip_code: Optional[str] = None,
+    city: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Search NSOPW for a provider and check if their name appears in results.
+    Search for a provider in sex offender registries.
 
-    Uses Playwright (ZIP code search) as the primary strategy. Falls back
-    to httpx scraping (first/last name) if Playwright is unavailable.
+    Routes to a jurisdiction-specific REST API when the state/city is one of
+    the four supported jurisdictions (IA, MO, DC, Chicago/IL).  Falls back to
+    the NSOPW Playwright scraper for all other jurisdictions.
 
     PII is NEVER passed to any logger call.
 
@@ -87,6 +212,7 @@ async def check_nsopw(
         last_name:  Provider's legal last name.
         state:      Optional two-letter state code (e.g. "NJ").
         zip_code:   Optional five-digit ZIP code from their ID document.
+        city:       Optional city name — used for Chicago jurisdiction routing.
 
     Returns:
         dict with nsopwStatus, matchFound, matchDetails, checkedAt, source.
@@ -102,6 +228,26 @@ async def check_nsopw(
         "checkedAt": checked_at,
         "source": "nsopw.gov",
     }
+
+    # ── Jurisdiction routing (REST APIs — no browser, faster) ────────────
+    state_upper = (state or "").upper()
+    city_upper = (city or "").upper()
+    try:
+        if state_upper == "IA":
+            return await _check_iowa(first_name, last_name)
+        if state_upper == "MO":
+            return await _check_missouri(first_name, last_name)
+        if state_upper == "DC":
+            return await _check_dc(first_name, last_name)
+        if state_upper == "IL" and city_upper == "CHICAGO":
+            return await _check_chicago(first_name, last_name)
+    except Exception as exc:
+        logger.error(
+            "Jurisdiction REST API failed (%s) — %s: falling back to NSOPW",
+            state_upper,
+            type(exc).__name__,
+        )
+        # Fall through to NSOPW Playwright scraper below.
 
     # ── Strategy 1: Playwright + ZIP Code ─────────────────────────────────
     if zip_code:

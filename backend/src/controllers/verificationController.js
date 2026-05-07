@@ -25,11 +25,27 @@ const AI_INTERNAL_KEY = process.env.AI_INTERNAL_API_KEY || 'change-me-in-product
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Normalize a raw DOB string to YYYY-MM-DD.
+ * Handles: YYYY-MM-DD (passthrough), MM/DD/YYYY, MM-DD-YYYY.
+ * Returns null when the format is unrecognised.
+ */
+const normalizeDob = (raw) => {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) return `${slash[3]}-${slash[1].padStart(2, '0')}-${slash[2].padStart(2, '0')}`;
+  const dash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (dash) return `${dash[3]}-${dash[1].padStart(2, '0')}-${dash[2].padStart(2, '0')}`;
+  return null;
+};
+
 /** Resolve Supabase auth id → internal public.users row */
 const getInternalUser = async (supabaseId) => {
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, email, phone, role')
+    .select('id, full_name, email, phone, dob, role')
     .eq('supabase_id', supabaseId)
     .single();
   if (error) return null;
@@ -57,24 +73,14 @@ export const getPrefill = async (req, res) => {
       return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('full_name, email, phone, dob')
-      .eq('id', internalUser.id)
-      .single();
-
-    if (error || !user) {
-      return res.status(404).json({ success: false, data: null, error: 'User not found' });
-    }
-
     // Only return safe, non-sensitive fields — never password, tokens, supabase_id
     return res.json({
       success: true,
       data: {
-        full_name: user.full_name,
-        email: user.email,
-        phone: user.phone || null,
-        date_of_birth: user.dob || null,
+        full_name: internalUser.full_name,
+        email: internalUser.email,
+        phone: internalUser.phone || null,
+        date_of_birth: internalUser.dob || null,
       },
       error: null,
     });
@@ -162,7 +168,10 @@ export const uploadId = async (req, res) => {
     const extractedName = ocrResult?.extractedName || ocrResult?.extracted_data?.full_name || null;
     const extractedDob = ocrResult?.extractedDOB || ocrResult?.extracted_data?.date_of_birth || null;
 
-    // Save verification record — find existing or create new
+    // Always insert a new record per attempt — never overwrite previous attempts.
+    // uploadSelfie and submitVerification find the latest record via
+    // .order('created_at', { ascending: false }).limit(1) so they naturally
+    // pick up this new row.
     const verificationPayload = {
       document_type: documentType,
       id_document_url: uploadResult.path,
@@ -173,31 +182,27 @@ export const uploadId = async (req, res) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Check if a verification record already exists for this user
-    const { data: existing } = await supabase
+    const { error: insertError } = await supabase
       .from('verifications')
-      .select('id')
-      .eq('user_id', internalUser.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .insert({ user_id: internalUser.id, ...verificationPayload });
+    if (insertError) {
+      console.error('Verification insert error:', insertError.message);
+    }
 
-    if (existing) {
-      // Update the existing record
-      const { error: updateError } = await supabase
-        .from('verifications')
-        .update(verificationPayload)
-        .eq('id', existing.id);
-      if (updateError) {
-        console.error('Verification update error:', updateError.message);
-      }
-    } else {
-      // Insert a new record
-      const { error: insertError } = await supabase
-        .from('verifications')
-        .insert({ user_id: internalUser.id, ...verificationPayload });
-      if (insertError) {
-        console.error('Verification insert error:', insertError.message);
+    // DOB mismatch check — if OCR found a DOB that differs from the profile, auto-update.
+    let dobMismatch = false;
+    if (extractedDob) {
+      const ocrNorm = normalizeDob(extractedDob) ?? extractedDob;
+      const dbNorm = normalizeDob(internalUser.dob) ?? internalUser.dob ?? null;
+      if (ocrNorm !== dbNorm) {
+        dobMismatch = true;
+        const { error: dobUpdateErr } = await supabase
+          .from('users')
+          .update({ dob: ocrNorm })
+          .eq('id', internalUser.id);
+        if (dobUpdateErr) {
+          console.error('DOB update error:', dobUpdateErr.message);
+        }
       }
     }
 
@@ -208,6 +213,7 @@ export const uploadId = async (req, res) => {
         extractedName,
         extractedDob,
         documentPath: uploadResult.path,
+        dobMismatch,
       },
       error: null,
     });
@@ -321,7 +327,7 @@ export const uploadSelfie = async (req, res) => {
       .update({
         selfie_url: uploadResult.path,
         face_match_result: faceMatchResult,
-        face_match_score: faceMatchResult?.similarity_score || 0.0,
+        face_match_score: faceMatchResult?.similarity ?? 0.0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', verification.id);
@@ -336,7 +342,7 @@ export const uploadSelfie = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadSelfie error:', err);
-    return res.status(500).json({ success: false, data: null, error: err.stack || err.message || 'Failed to process selfie' });
+    return res.status(500).json({ success: false, data: null, error: 'Failed to process selfie image. Please try again.' });
   }
 };
 
@@ -420,13 +426,20 @@ export const submitVerification = async (req, res) => {
       }
     }
 
-    // ── Step 4b: Extract ZIP code from OCR address for NSOPW search ─────
+    // ── Step 4b: Extract ZIP code and city from OCR address ─────────────
     let zipCode = null;
+    let city = null;
     const ocrAddress = ocrResult.address || ocrResult.extracted_data?.address || '';
     if (typeof ocrAddress === 'string') {
       const zipMatch = ocrAddress.match(/\b(\d{5})(?:-\d{4})?\b/);
       if (zipMatch) {
         zipCode = zipMatch[1];
+      }
+      // City sits between the last comma-separated street segment and the state code
+      // e.g. "123 Main St, Chicago, IL 60601"
+      const cityMatch = ocrAddress.match(/,\s*([A-Za-z\s]+),\s*[A-Z]{2}/);
+      if (cityMatch) {
+        city = cityMatch[1].trim();
       }
     }
 
@@ -448,6 +461,7 @@ export const submitVerification = async (req, res) => {
           lastName,
           state,
           zipCode,
+          city,
         }),
         signal: controller.signal,
       });

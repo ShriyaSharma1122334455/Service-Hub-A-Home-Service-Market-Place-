@@ -24,25 +24,25 @@ interface VerificationData {
   extracted_dob?: string;
   ocr_result?: {
     status?: string;
-    extracted_data?: {
-      full_name?: string;
-      date_of_birth?: string;
-      id_number?: string;
-      expiration_date?: string;
-      issue_state?: string;
-    };
-    confidence_score?: number;
+    extractedName?: string;
+    extractedDOB?: string;
+    documentNumber?: string;
+    expiryDate?: string;
+    issuingState?: string;
+    confidence?: number;
+    rejectionReason?: string | null;
   };
   face_match_result?: {
     status?: string;
-    similarity_score?: number;
-    is_match?: boolean;
-    threshold_used?: number;
+    similarity?: number;
+    matched?: boolean;
+    faceDetectedInId?: boolean;
+    faceDetectedInSelfie?: boolean;
   };
   nsopw_result?: {
-    status?: string;
-    is_clear?: boolean;
-    used_fallback?: boolean;
+    nsopwStatus?: string;
+    matchFound?: boolean;
+    matchDetails?: unknown[];
   };
   submitted_at?: string;
   reviewed_at?: string;
@@ -51,11 +51,18 @@ interface VerificationData {
 
 const STATUS_LABELS: Record<string, string> = {
   verified: "Verified",
-  pending: "Under Review",
-  manual_review: "Under Manual Review",
+  pending: "Manual Review",
+  manual_review: "Manual Review",
   rejected: "Not Verified",
   failed: "Not Verified",
-  unverified: "Not Verified",
+  unverified: "Not Started",
+};
+
+const overallBadgeClass = (status: string) => {
+  if (status === "verified") return "bg-emerald-100 text-emerald-700";
+  if (status === "pending" || status === "manual_review") return "bg-amber-100 text-amber-700";
+  if (status === "failed" || status === "rejected") return "bg-red-100 text-red-700";
+  return "bg-slate-100 text-slate-600";
 };
 
 const StatusIcon: React.FC<{ status?: string }> = ({ status }) => {
@@ -101,9 +108,20 @@ export const VerificationDetailsModal: React.FC<
 
   if (!isOpen) return null;
 
-  const ocrData = data?.ocr_result?.extracted_data;
+  const ocrResult = data?.ocr_result;
   const faceData = data?.face_match_result;
   const nsopwData = data?.nsopw_result;
+
+  // Derive section-level status from actual result fields, not the AI's `status` string.
+  // The AI may store status="rejected" even when fields were extracted (low confidence),
+  // or status="verified" even when face match failed — so we check real data.
+  const ocrStatus: string | undefined =
+    ocrResult?.extractedName || ocrResult?.extractedDOB ? "verified" : ocrResult?.status;
+
+  const faceStatus: string | undefined =
+    faceData?.matched === true ? "verified" :
+    faceData?.matched === false ? "rejected" :
+    faceData?.status;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -157,11 +175,7 @@ export const VerificationDetailsModal: React.FC<
                   Overall Status
                 </span>
                 <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold
-                    ${data.verification_status === "verified" ? "bg-emerald-100 text-emerald-700" : ""}
-                    ${data.verification_status === "pending" ? "bg-amber-100 text-amber-700" : ""}
-                    ${data.verification_status === "failed" ? "bg-red-100 text-red-700" : ""}
-                    ${data.verification_status === "unverified" ? "bg-slate-100 text-slate-600" : ""}`}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold ${overallBadgeClass(data.verification_status)}`}
                 >
                   <StatusIcon status={data.verification_status} />
                   {STATUS_LABELS[data.verification_status] ??
@@ -176,28 +190,28 @@ export const VerificationDetailsModal: React.FC<
                   <span className="text-sm font-bold text-slate-700">
                     Document OCR
                   </span>
-                  <StatusIcon status={data.ocr_result?.status} />
+                  <StatusIcon status={ocrStatus} />
                 </div>
-                {ocrData ? (
+                {ocrResult?.extractedName || ocrResult?.extractedDOB ? (
                   <div className="space-y-1.5 text-sm">
                     <p className="text-slate-600">
                       <span className="font-medium text-slate-800">Name:</span>{" "}
-                      {ocrData.full_name || "—"}
+                      {ocrResult.extractedName || "—"}
                     </p>
                     <p className="text-slate-600">
                       <span className="font-medium text-slate-800">DOB:</span>{" "}
-                      {ocrData.date_of_birth || "—"}
+                      {ocrResult.extractedDOB || "—"}
                     </p>
                     <p className="text-slate-600">
                       <span className="font-medium text-slate-800">
                         ID Number:
                       </span>{" "}
-                      {ocrData.id_number || "—"}
+                      {ocrResult.documentNumber || "—"}
                     </p>
-                    {data.ocr_result?.confidence_score !== undefined && (
+                    {ocrResult.confidence !== undefined && (
                       <p className="text-slate-400 text-xs mt-1">
                         Confidence:{" "}
-                        {(data.ocr_result.confidence_score * 100).toFixed(1)}%
+                        {(ocrResult.confidence * 100).toFixed(1)}%
                       </p>
                     )}
                   </div>
@@ -213,7 +227,7 @@ export const VerificationDetailsModal: React.FC<
                   <span className="text-sm font-bold text-slate-700">
                     Face Match
                   </span>
-                  <StatusIcon status={faceData?.status} />
+                  <StatusIcon status={faceStatus} />
                 </div>
                 {faceData ? (
                   <div className="space-y-1.5 text-sm">
@@ -221,11 +235,11 @@ export const VerificationDetailsModal: React.FC<
                       <span className="font-medium text-slate-800">
                         Similarity:
                       </span>{" "}
-                      {faceData.similarity_score?.toFixed(1) ?? "—"}%
+                      {faceData.similarity?.toFixed(1) ?? "—"}%
                     </p>
                     <p className="text-slate-600">
                       <span className="font-medium text-slate-800">Match:</span>{" "}
-                      {faceData.is_match ? "✅ Yes" : "❌ No"}
+                      {faceData.matched ? "✅ Yes" : "❌ No"}
                     </p>
                   </div>
                 ) : (
@@ -240,7 +254,7 @@ export const VerificationDetailsModal: React.FC<
                   <span className="text-sm font-bold text-slate-700">
                     Background Check (NSOPW)
                   </span>
-                  <StatusIcon status={nsopwData?.status} />
+                  <StatusIcon status={nsopwData?.nsopwStatus} />
                 </div>
                 {nsopwData ? (
                   <div className="space-y-1.5 text-sm">
@@ -248,13 +262,8 @@ export const VerificationDetailsModal: React.FC<
                       <span className="font-medium text-slate-800">
                         Status:
                       </span>{" "}
-                      {nsopwData.is_clear ? "✅ Clear" : "⚠️ Review needed"}
+                      {nsopwData.matchFound === false ? "✅ Clear" : "⚠️ Review needed"}
                     </p>
-                    {nsopwData.used_fallback && (
-                      <p className="text-amber-600 text-xs">
-                        Used self-declaration fallback
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400">

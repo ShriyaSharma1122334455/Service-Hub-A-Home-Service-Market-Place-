@@ -57,6 +57,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
   const [idFile, setIdFile] = useState<File | null>(null);
   const [idPreview, setIdPreview] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
+  const [dobMismatch, setDobMismatch] = useState(false);
 
   // Step 3: Selfie Capture
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -73,8 +74,6 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
 
   // --- Step 1 logic ---
   useEffect(() => {
-    if (!userId) return;
-
     interface PrefillResponse {
       full_name: string;
       email: string;
@@ -84,9 +83,15 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
 
     let mounted = true;
     const fetchPrefill = async () => {
+      // Use the prop userId, but fall back to the live Supabase session uid so
+      // the fetch always runs even if the App state hasn't hydrated yet.
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = userId || session?.user?.id;
+      if (!uid) return;
+
       setLoading(true);
       setError(null);
-      const res = await fetchApi<PrefillResponse>(`/verification/prefill/${userId}`);
+      const res = await fetchApi<PrefillResponse>(`/verification/prefill/${uid}`);
       if (!mounted) return;
       if (res.success && res.data) {
         setPrefill({
@@ -156,6 +161,7 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
       const json = await res.json();
       if (res.ok && json.success) {
         setOcrResult(json.data.ocrResult);
+        setDobMismatch(!!json.data.dobMismatch);
       } else {
         setError(json.error || "Failed to upload ID document.");
       }
@@ -534,6 +540,15 @@ export const VerifyPage: React.FC<VerifyPageProps> = ({ userId, onNavigate }) =>
                       <p className="font-medium text-slate-900">{ocrResult.documentNumber || "Not found"}</p>
                     </div>
                   </div>
+
+                  {dobMismatch && (
+                    <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                      <p className="text-sm text-amber-800">
+                        The date of birth on your ID document differs from your profile. Your profile has been automatically updated to match your ID.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex gap-4">
                     <button
                       onClick={() => {

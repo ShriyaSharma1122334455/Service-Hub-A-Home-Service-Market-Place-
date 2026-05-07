@@ -27,6 +27,7 @@ class NsopwCheckBody(BaseModel):
     lastName: str = Field(..., min_length=1, description="Provider's last name")
     state: Optional[str] = Field(None, description="Two-letter state code, e.g. NJ")
     zipCode: Optional[str] = Field(None, description="Five-digit ZIP code from ID document")
+    city: Optional[str] = Field(None, description="City name — used for Chicago jurisdiction routing")
 
 
 # ── Internal API key guard ────────────────────────────────────────────────
@@ -68,5 +69,6 @@ async def check_nsopw(
         last_name=body.lastName,
         state=body.state,
         zip_code=body.zipCode,
+        city=body.city,
     )
     return result
