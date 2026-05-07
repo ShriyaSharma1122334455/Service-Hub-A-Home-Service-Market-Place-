@@ -800,7 +800,20 @@ describe('Bookings – POST /api/bookings', () => {
   it('returns 409 when the requested slot is already booked', async () => {
     mockCustomerAuth();
     supabaseAwaitQueue.push(
-      { data: [{ id: 'existing-booking' }], error: null },
+      { data: { id: 'prov-1', is_fully_verified: true, user_id: 'prov-user-uuid' }, error: null },
+      { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
+      { data: { id: 'svc-1', base_price: 125, provider_id: 'prov-1', is_active: true }, error: null },
+      {
+        data: {
+          id: 'slot-1',
+          provider_id: 'prov-1',
+          date: '2026-08-10',
+          start_time: '10:00',
+          end_time: '11:00',
+          is_booked: true,
+        },
+        error: null,
+      },
     );
 
     const res = await request(app)
@@ -809,6 +822,7 @@ describe('Bookings – POST /api/bookings', () => {
       .send({
         provider_id: 'prov-1',
         service_id: 'svc-1',
+        availability_id: 'slot-1',
         scheduled_at: '2026-08-10T10:00:00.000Z',
       });
 
@@ -819,18 +833,32 @@ describe('Bookings – POST /api/bookings', () => {
 
   it('creates booking successfully when slot is free', async () => {
     mockCustomerAuth();
+    const futureIso = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
     supabaseAwaitQueue.push(
-      { data: [], error: null },
       { data: { id: 'prov-1', is_fully_verified: true, user_id: 'prov-user-uuid' }, error: null },
       { data: { id: 'internal-customer-1', role: 'customer' }, error: null },
       { data: { id: 'svc-1', base_price: 125, provider_id: 'prov-1', is_active: true }, error: null },
       {
         data: {
+          id: 'slot-1',
+          provider_id: 'prov-1',
+          date: futureIso.slice(0, 10),
+          start_time: '10:00',
+          end_time: '11:00',
+          is_booked: false,
+        },
+        error: null,
+      },
+      { data: [], error: null },
+      { data: { id: 'slot-1' }, error: null },
+      {
+        data: {
           id: 'booking-1',
           provider_id: 'prov-1',
           service_id: 'svc-1',
-          scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          availability_id: 'slot-1',
+          scheduled_at: futureIso,
           total_price: 125,
           status: 'pending',
         },
@@ -844,16 +872,59 @@ describe('Bookings – POST /api/bookings', () => {
       .send({
         provider_id:  'prov-1',
         service_id:   'svc-1',
-        scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+        availability_id: 'slot-1',
+        scheduled_at: futureIso,
       });
 
     expect(res.statusCode).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toMatchObject({
       id: 'booking-1',
+      availability_id: 'slot-1',
       status: 'pending',
       total_price: 125,
     });
+  });
+
+  it('rejecting a booking reopens its linked availability slot', async () => {
+    mockProviderAuth();
+    supabaseAwaitQueue.push(
+      { data: { id: 'internal-provider-1', role: 'provider' }, error: null },
+      { data: { id: 'prov-1' }, error: null },
+      {
+        data: {
+          id: 'booking-1',
+          provider_id: 'prov-1',
+          availability_id: 'slot-1',
+          status: 'pending',
+        },
+        error: null,
+      },
+      {
+        data: {
+          id: 'booking-1',
+          provider_id: 'prov-1',
+          availability_id: 'slot-1',
+          status: 'cancelled',
+        },
+        error: null,
+      },
+      { data: { id: 'slot-1' }, error: null },
+    );
+
+    const res = await request(app)
+      .put('/api/bookings/booking-1/reject')
+      .set('Authorization', 'Bearer fake-jwt')
+      .send({ reason: 'Declined by provider' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toMatchObject({
+      id: 'booking-1',
+      status: 'cancelled',
+      availability_id: 'slot-1',
+    });
+    expect(supabaseAwaitQueue).toHaveLength(0);
   });
 });
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ServiceCategory } from "../../types";
 import type { User, Provider } from "../../types";
-import { Star, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { ServiceCatalogModal } from "../components/ServiceCatalogModal";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -65,12 +65,6 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
     <div className="flex flex-col min-h-[calc(100vh-100px)]">
       <section className="relative py-20 lg:py-32 overflow-visible">
         <div className="relative max-w-5xl mx-auto px-4 text-center z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 border border-white/60 shadow-sm backdrop-blur-md mb-8 animate-float">
-            <Star size={14} className="text-amber-500 fill-amber-500" />
-            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Trusted by 10k+ Homeowners
-            </span>
-          </div>
           <h1 className="text-5xl sm:text-7xl lg:text-8xl font-bold text-slate-900 tracking-tighter mb-8 leading-[0.95]">
             Home services, <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-500">

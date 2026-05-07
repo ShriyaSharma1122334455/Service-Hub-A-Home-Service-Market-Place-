@@ -33,10 +33,6 @@ const WARN_LABELS: Record<string, string> = {
 
 const POLICY_ITEMS = [
   {
-    title: "Free cancellation",
-    desc: "Cancel up to 24 hours before your appointment at no charge.",
-  },
-  {
     title: "Late cancellation",
     desc: "Cancellations within 24 hours may incur a fee set by the provider.",
   },

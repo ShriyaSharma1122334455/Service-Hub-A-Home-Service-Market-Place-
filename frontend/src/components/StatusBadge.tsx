@@ -1,13 +1,25 @@
 import React from "react";
 import { Clock, CheckCircle2, XCircle } from "lucide-react";
 
-export type BookingStatus = "upcoming" | "completed" | "cancelled";
+export type BookingStatus = "pending" | "confirmed" | "upcoming" | "completed" | "cancelled";
 
 // Mirrors the BADGE_CONFIG pattern in VerificationBadge.tsx
 const BADGE_CONFIG: Record<
   BookingStatus,
   { label: string; bg: string; text: string; icon: React.ReactNode }
 > = {
+  pending: {
+    label: "Pending provider approval",
+    bg: "bg-amber-50 border-amber-200",
+    text: "text-amber-700",
+    icon: <Clock size={14} className="text-amber-600" />,
+  },
+  confirmed: {
+    label: "Confirmed",
+    bg: "bg-teal-50 border-teal-200",
+    text: "text-teal-700",
+    icon: <CheckCircle2 size={14} className="text-teal-600" />,
+  },
   upcoming: {
     label: "Upcoming",
     bg: "bg-amber-50 border-amber-200",

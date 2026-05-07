@@ -69,12 +69,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </>
               ) : (
-                <span
-                  onClick={() => onNavigate(getHomePath())}
-                  className={navItemClass(getHomePath())}
-                >
-                  Home
-                </span>
+                <>
+                  <span
+                    onClick={() => onNavigate(getHomePath())}
+                    className={navItemClass(getHomePath())}
+                  >
+                    Home
+                  </span>
+                  {user?.role === UserRole.PROVIDER && (
+                    <span
+                      onClick={() => onNavigate("/my-bookings")}
+                      className={navItemClass("/my-bookings")}
+                    >
+                      Bookings
+                    </span>
+                  )}
+                </>
               )}
               <span
                 onClick={() => onNavigate("/faq")}
@@ -166,12 +176,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </>
             ) : (
-              <div
-                className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() => { onNavigate(getHomePath()); setIsOpen(false); }}
-              >
-                Home
-              </div>
+              <>
+                <div
+                  className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => { onNavigate(getHomePath()); setIsOpen(false); }}
+                >
+                  Home
+                </div>
+                {user?.role === UserRole.PROVIDER && (
+                  <div
+                    className="block px-4 py-3 rounded-2xl text-base font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() => { onNavigate("/my-bookings"); setIsOpen(false); }}
+                  >
+                    Bookings
+                  </div>
+                )}
+              </>
             )}
             {user && (
               <div

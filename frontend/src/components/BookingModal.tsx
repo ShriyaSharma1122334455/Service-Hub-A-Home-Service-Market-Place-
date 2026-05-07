@@ -120,8 +120,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   // Submission
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Tracks whether displayed slots are real provider slots or generated fallbacks
-  const [usedFallback, setUsedFallback] = useState(false);
   const errorRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll the error into view whenever it appears so users actually see
@@ -148,7 +146,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       setSlotsLoading(true);
       setSlots([]);
       setSelectedSlot(null);
-      setUsedFallback(false);
+      setError(null);
       const dateStr = toLocalDate(selectedDate!);
       try {
         const res = await fetch(
@@ -159,26 +157,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           }
         );
         const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          const available: Slot[] = (json.data as SlotRaw[])
-            .filter((s) => !s.is_booked)
-            .map((s) => ({
-              id: s.id,
-              startTime: s.start_time,
-              endTime: s.end_time,
-              label: `${fmt12h(s.start_time)} – ${fmt12h(s.end_time)}`,
-            }));
-          setUsedFallback(false);
-          setSlots(available);
+        if (!res.ok || !json.success || !Array.isArray(json.data)) {
+          setError(json.error || "Could not load availability. Please try another date or retry.");
+          setSlots([]);
+          return;
         } else {
-          // No availability endpoint yet — fall back to generated slots
-          setUsedFallback(true);
-          setSlots(generateFallbackSlots());
+          const available: Slot[] = (json.data as SlotRaw[]).map((s) => ({
+            id: s.id,
+            startTime: s.start_time,
+            endTime: s.end_time,
+            label: `${fmt12h(s.start_time)} – ${fmt12h(s.end_time)}`,
+          }));
+          setSlots(available);
         }
       } catch {
         if (!controller.signal.aborted) {
-          setUsedFallback(true);
-          setSlots(generateFallbackSlots());
+          setSlots([]);
+          setError("Could not load availability. Please check your connection and try again.");
         }
       } finally {
         if (!controller.signal.aborted) setSlotsLoading(false);
@@ -188,22 +183,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     fetchSlots();
     return () => controller.abort();
   }, [selectedDate, providerId, token]);
-
-  /** Fallback: generate 9am–5pm hourly slots when no availability API data */
-  function generateFallbackSlots(): Slot[] {
-    const out: Slot[] = [];
-    for (let h = 9; h < 17; h++) {
-      const start = `${String(h).padStart(2, "0")}:00`;
-      const end = `${String(h + 1).padStart(2, "0")}:00`;
-      out.push({
-        id: `fallback-${h}`,
-        startTime: start,
-        endTime: end,
-        label: `${fmt12h(start)} – ${fmt12h(end)}`,
-      });
-    }
-    return out;
-  }
 
   // ── Submit booking ─────────────────────────────────────────────────────────
   async function handleBook() {
@@ -224,12 +203,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       address_city: addressCity.trim() || undefined,
       address_state: addressState.trim() || undefined,
       address_zip: addressZip.trim() || undefined,
+      availability_id: selectedSlot.id,
     };
-
-    // Only include availability_id if it's a real slot (not fallback)
-    if (!selectedSlot.id.startsWith("fallback-")) {
-      body.availability_id = selectedSlot.id;
-    }
 
     try {
       const res = await fetch(`${API_BASE}/api/bookings`, {
@@ -384,14 +359,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </p>
               ) : (
                 <>
-                  {usedFallback && (
-                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-2 text-xs text-amber-800">
-                      <span className="mt-0.5">⚠️</span>
-                      <span>
-                        <span className="font-bold">Suggested times only</span> — this provider hasn't set specific availability. These are general windows. The provider will confirm your chosen time after booking.
-                      </span>
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {slots.map((slot) => (
                     <button

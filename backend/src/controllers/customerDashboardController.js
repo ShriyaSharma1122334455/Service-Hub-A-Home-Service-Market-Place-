@@ -1,17 +1,9 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
-// DB stores 'pending' and 'confirmed'; the API surface exposes both as 'upcoming'.
-// 'cancelled' in DB maps directly to 'cancelled' in the response.
 const UPCOMING_DB_STATUSES = ['pending', 'confirmed'];
 
 const VALID_API_STATUSES = new Set(['upcoming', 'completed', 'cancelled']);
-
-/** Maps a raw DB status string to the API-facing status label. */
-function toApiStatus(dbStatus) {
-  if (dbStatus === 'pending' || dbStatus === 'confirmed') return 'upcoming';
-  return dbStatus; // 'completed' | 'cancelled' pass through unchanged
-}
 
 /**
  * GET /api/dashboard/customer
@@ -89,7 +81,7 @@ export const getCustomerDashboard = async (req, res) => {
       serviceName:  b.service?.name          ?? null,
       providerName: b.provider?.business_name ?? null,
       date:         b.scheduled_at,
-      status:       toApiStatus(b.status),
+      status:       b.status,
     }));
 
     // Post-filter by provider name (case-insensitive substring)

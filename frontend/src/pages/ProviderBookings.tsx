@@ -125,7 +125,12 @@ export const ProviderBookings: React.FC<ProviderBookingsProps> = ({
           [bookingId]: json.error || `Failed to ${action} booking.`,
         }));
       } else {
-        const newStatus = action === "accept" ? "confirmed" : "cancelled";
+        const newStatus =
+          typeof json.data?.status === "string"
+            ? json.data.status
+            : action === "accept"
+              ? "confirmed"
+              : "cancelled";
         setBookings((prev) =>
           prev.map((b) => (b.id === bookingId ? { ...b, status: newStatus } : b)),
         );

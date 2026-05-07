@@ -33,10 +33,10 @@ export const createBooking = async (req, res) => {
       address_zip,
     } = req.body;
 
-    if (!provider_id || !service_id || !scheduled_at) {
+    if (!provider_id || !service_id || !availability_id || !scheduled_at) {
       return res.status(400).json({
         success: false,
-        error: 'provider_id, service_id and scheduled_at are required',
+        error: 'provider_id, service_id, availability_id and scheduled_at are required',
       });
     }
 
@@ -52,25 +52,6 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Booking must be scheduled at least 30 minutes from now',
-      });
-    }
-
-    const { data: conflicting, error: conflictError } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('provider_id', provider_id)
-      .eq('scheduled_at', scheduled_at)
-      .in('status', ['pending', 'confirmed'])
-      .limit(1);
-
-    if (conflictError) {
-      return res.status(400).json({ success: false, error: conflictError.message });
-    }
-    if (Array.isArray(conflicting) && conflicting.length > 0) {
-      return res.status(409).json({
-        success: false,
-        error: 'This time slot is no longer available. Please choose another time.',
-        code: 'SLOT_UNAVAILABLE',
       });
     }
 
@@ -159,13 +140,69 @@ export const createBooking = async (req, res) => {
       }
     }
 
+    const scheduledDateKey = scheduled_at.slice(0, 10);
+
+    const { data: slot, error: slotLookupError } = await supabase
+      .from('availability_slots')
+      .select('id, provider_id, date, start_time, end_time, is_booked')
+      .eq('id', availability_id)
+      .eq('provider_id', provider_id)
+      .maybeSingle();
+
+    if (slotLookupError) {
+      return res.status(400).json({ success: false, error: slotLookupError.message });
+    }
+    if (!slot || slot.date !== scheduledDateKey || slot.is_booked) {
+      return res.status(409).json({
+        success: false,
+        error: 'This time slot is no longer available. Please choose another time.',
+        code: 'SLOT_UNAVAILABLE',
+      });
+    }
+
+    const { data: conflicting, error: conflictError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('provider_id', provider_id)
+      .eq('scheduled_at', scheduled_at)
+      .in('status', ['pending', 'confirmed'])
+      .limit(1);
+
+    if (conflictError) {
+      return res.status(400).json({ success: false, error: conflictError.message });
+    }
+    if (Array.isArray(conflicting) && conflicting.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'This time slot is no longer available. Please choose another time.',
+        code: 'SLOT_UNAVAILABLE',
+      });
+    }
+
+    const { data: reservedSlot, error: availabilityError } = await supabase
+      .from('availability_slots')
+      .update({ is_booked: true })
+      .eq('id', availability_id)
+      .eq('provider_id', provider_id)
+      .eq('is_booked', false)
+      .select('id')
+      .single();
+
+    if (availabilityError || !reservedSlot) {
+      return res.status(409).json({
+        success: false,
+        error: 'This time slot is no longer available. Please choose another time.',
+        code: 'SLOT_UNAVAILABLE',
+      });
+    }
+
     const { data: booking, error } = await supabase
       .from('bookings')
       .insert({
         customer_id:     internalUser.id,
         provider_id,
         service_id,
-        availability_id: null,
+        availability_id,
         scheduled_at,
         notes:           notes || null,
         total_price:     priceToCharge,
@@ -180,18 +217,11 @@ export const createBooking = async (req, res) => {
       .single();
 
     if (error) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-
-    // ── B3 FIX: correct table name (was 'availability', should be 'availability_slots')
-    if (availability_id) {
-      const { error: availabilityError } = await supabase
+      await supabase
         .from('availability_slots')
-        .update({ is_booked: true })
+        .update({ is_booked: false })
         .eq('id', availability_id);
-      if (availabilityError) {
-        return res.status(400).json({ success: false, error: availabilityError.message });
-      }
+      return res.status(400).json({ success: false, error: error.message });
     }
 
     res.status(201).json({ success: true, data: booking });
@@ -349,7 +379,7 @@ export const acceptBooking = async (req, res) => {
 
     const { data: existing } = await supabase
       .from('bookings')
-      .select('id, provider_id, status')
+      .select('id, provider_id, availability_id, status')
       .eq('id', req.params.id)
       .single();
 
@@ -437,14 +467,27 @@ export const rejectBooking = async (req, res) => {
         cancellation_reason: req.body.reason || 'Rejected by provider',
       })
       .eq('id', req.params.id)
+      .eq('provider_id', provider.id)
+      .in('status', ['pending', 'confirmed'])
       .select()
       .single();
 
     if (error || !booking) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        error: error?.message || 'Failed to update booking',
+        error: error?.message || 'Booking status was changed by another request. Please refresh.',
       });
+    }
+
+    if (existing.availability_id) {
+      const { error: releaseError } = await supabase
+        .from('availability_slots')
+        .update({ is_booked: false })
+        .eq('id', existing.availability_id);
+
+      if (releaseError) {
+        return res.status(400).json({ success: false, error: releaseError.message });
+      }
     }
 
     res.json({ success: true, data: booking });

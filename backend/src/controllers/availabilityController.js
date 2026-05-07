@@ -20,6 +20,7 @@ export const getProviderAvailability = async (req, res) => {
       .select('id, date, start_time, end_time, is_booked')
       .eq('provider_id', providerId)
       .eq('date', date)
+      .eq('is_booked', false)
       .order('start_time', { ascending: true });
 
     if (error) {

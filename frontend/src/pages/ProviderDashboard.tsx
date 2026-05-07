@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
-import { Calendar, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Loader2, AlertCircle, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import type { User, Provider } from "../../types";
 import { UserRole } from "../../types";
 
@@ -47,6 +47,8 @@ interface CalendarEvent {
   service_name: string | null;
   customer_name?: string | null;
 }
+
+type BookingAction = "accept" | "reject";
 
 interface ProviderDashboardData {
   stats: DashboardStats;
@@ -154,10 +156,16 @@ function BreakdownList({
   title,
   rows,
   emptyHint,
+  onAction,
+  actionLoading,
+  actionError,
 }: {
   title: string;
   rows: BreakdownRow[];
   emptyHint: string;
+  onAction: (bookingId: string, action: BookingAction) => void;
+  actionLoading: Record<string, BookingAction | null>;
+  actionError: Record<string, string | null>;
 }) {
   return (
     <div className="rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden">
@@ -171,6 +179,9 @@ function BreakdownList({
         ) : (
           rows.map((row) => {
             const when = new Date(row.scheduled_at);
+            const isPending = row.status === "pending";
+            const rowLoading = actionLoading[row.id];
+            const rowError = actionError[row.id];
             return (
               <li key={row.id} className="px-5 py-3.5 hover:bg-slate-50/60 transition-colors">
                 <div className="flex justify-between gap-2">
@@ -193,6 +204,41 @@ function BreakdownList({
                     {formatUsd(row.total_price)}
                   </span>
                 </div>
+                {rowError && (
+                  <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    {rowError}
+                  </div>
+                )}
+                {isPending && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onAction(row.id, "reject")}
+                      disabled={!!rowLoading}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl border border-red-200 text-red-600 font-semibold text-xs hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {rowLoading === "reject" ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <XCircle size={13} />
+                      )}
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onAction(row.id, "accept")}
+                      disabled={!!rowLoading}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {rowLoading === "accept" ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <CheckCircle size={13} />
+                      )}
+                      Accept
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })
@@ -220,6 +266,8 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [calendarStatuses, setCalendarStatuses] = useState<string[]>(["confirmed"]);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<Record<string, BookingAction | null>>({});
+  const [actionError, setActionError] = useState<Record<string, string | null>>({});
   const hasLoadedDashboard = useRef(false);
   const allCalendarStatuses = ["pending", "confirmed", "completed", "cancelled"] as const;
 
@@ -305,6 +353,43 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
     }, 60000);
     return () => window.clearInterval(timer);
   }, [isProvider, token, load]);
+
+  const handleBookingAction = useCallback(async (bookingId: string, action: BookingAction) => {
+    setActionLoading((prev) => ({ ...prev, [bookingId]: action }));
+    setActionError((prev) => ({ ...prev, [bookingId]: null }));
+
+    try {
+      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/${action}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body:
+          action === "reject"
+            ? JSON.stringify({ reason: "Declined by provider" })
+            : undefined,
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setActionError((prev) => ({
+          ...prev,
+          [bookingId]: json.error || `Failed to ${action} booking.`,
+        }));
+        return;
+      }
+
+      setSelectedEvent((prev) => (prev?.id === bookingId ? null : prev));
+      await load({ calendarOnly: false, silent: true });
+    } catch {
+      setActionError((prev) => ({
+        ...prev,
+        [bookingId]: "Network error. Please try again.",
+      }));
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [bookingId]: null }));
+    }
+  }, [load, token]);
 
   const calendarItemsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -554,6 +639,9 @@ export const ProviderDashboard: FC<ProviderDashboardProps> = ({
                 title="Bookings"
                 rows={bookingRows}
                 emptyHint="No bookings yet."
+                onAction={handleBookingAction}
+                actionLoading={actionLoading}
+                actionError={actionError}
               />
             </div>
 
