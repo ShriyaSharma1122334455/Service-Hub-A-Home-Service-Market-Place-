@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { checkSupabaseConnection } from './config/supabase.js';
 import { validateVdaServiceConfig, validateVdaAuthConfig } from './config/vdaServiceConfig.js';
 import { startReminderCron } from './services/reminderService.js';
+import { startAutoCompleteCron } from './services/autoCompleteService.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
@@ -33,6 +34,7 @@ if (process.env.NODE_ENV !== 'test') {
   validateVdaServiceConfig();
   validateVdaAuthConfig();
   startReminderCron();
+  startAutoCompleteCron();
 }
 
 // ── Rate limiters ─────────────────────────────────────────────────────────
