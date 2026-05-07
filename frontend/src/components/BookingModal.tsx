@@ -499,6 +499,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </div>
           )}
 
+          {/* ── Validation hint ──────────────────────────────────────────── */}
+          {(!selectedDate || !selectedSlot) && (
+            <p className="text-xs text-slate-500 -mt-1">
+              {!selectedDate
+                ? "Pick a date to see available time slots."
+                : "Pick a time slot to confirm your booking."}
+            </p>
+          )}
+
           {/* ── Actions ────────────────────────────────────────────────────── */}
           <div className="flex gap-3 pb-1">
             <button
