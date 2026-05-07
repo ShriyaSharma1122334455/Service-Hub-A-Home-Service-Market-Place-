@@ -2,10 +2,20 @@ import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
 // Subjects accepted by the complaints_subject_check DB constraint. Keep this
-// in sync with the Postgres CHECK constraint on public.complaints.subject.
+// in sync with the Postgres CHECK constraint on public.complaints.subject
+// (see migrations/2026_05_07_expand_complaints_subjects.sql) and with the
+// dropdown options in frontend/src/components/SupportModal.tsx.
 export const ALLOWED_COMPLAINT_SUBJECTS = [
+  // Customer-facing
   'Provider did not show up',
+  'Poor quality of work',
+  'Billing or payment issue',
+  'Rude or unprofessional behavior',
   'Safety concern',
+  // Provider-facing
+  'Verification or profile appeal',
+  'Incorrect service category',
+  // Shared
   'Other',
 ];
 
