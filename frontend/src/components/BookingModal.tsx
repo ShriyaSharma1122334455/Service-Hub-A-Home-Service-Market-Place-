@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Calendar,
@@ -122,6 +122,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   // Tracks whether displayed slots are real provider slots or generated fallbacks
   const [usedFallback, setUsedFallback] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll the error into view whenever it appears so users actually see
+  // backend rejections instead of staring at a "still nothing" modal.
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     const p = readDamagePrefill();
@@ -463,9 +472,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
           {/* ── Error ─────────────────────────────────────────────────────── */}
           {error && (
-            <div className="flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 text-sm">
+            <div
+              ref={errorRef}
+              role="alert"
+              aria-live="assertive"
+              className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm"
+            >
               <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-              {error}
+              <span>{error}</span>
             </div>
           )}
 
