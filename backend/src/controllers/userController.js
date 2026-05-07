@@ -76,8 +76,11 @@ export const getMe = async (req, res) => {
       dob = extras.dob ?? dob;
     }
 
-    // provider is the first element of the joined array (or null if no row yet)
-    const provider = user.providers?.[0] ?? null;
+    // Supabase returns the joined providers row as an object for to-one
+    // relations and as an array for to-many. Handle both shapes.
+    const provider = Array.isArray(user.providers)
+      ? (user.providers[0] ?? null)
+      : (user.providers ?? null);
 
     if (user.role === 'provider') {
       if (!provider) {
