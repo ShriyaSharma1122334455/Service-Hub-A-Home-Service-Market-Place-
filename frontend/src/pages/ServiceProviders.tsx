@@ -188,25 +188,32 @@ export const ServiceProviders: React.FC<ServiceProvidersProps> = ({
 
   // Fetch aggregate reviews for this service (SER-82)
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     async function loadServiceReviews() {
       setServiceReviewsLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/api/reviews/service/${serviceId}?limit=5`);
+        const res = await fetch(
+          `${API_BASE}/api/reviews/service/${serviceId}?limit=5`,
+          { signal: controller.signal },
+        );
         const data = await res.json();
-        if (cancelled || !data.success) return;
+        if (controller.signal.aborted || !data.success) return;
         const payload = data.data ?? {};
         setServiceReviews(Array.isArray(payload.reviews) ? payload.reviews : []);
         setServiceReviewsAvg(payload.avgRating ?? 0);
         setServiceReviewsCount(payload.count ?? 0);
-      } catch {
-        // non-fatal — section just won't render
+      } catch (err) {
+        // Swallow abort noise; other failures are non-fatal — section
+        // just won't render.
+        if ((err as { name?: string })?.name !== "AbortError") {
+          // intentionally silent
+        }
       } finally {
-        if (!cancelled) setServiceReviewsLoading(false);
+        if (!controller.signal.aborted) setServiceReviewsLoading(false);
       }
     }
     loadServiceReviews();
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [serviceId, API_BASE]);
 
   const categorySlug = service?.categorySlug ?? "";
