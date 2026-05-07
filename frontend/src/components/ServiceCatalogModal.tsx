@@ -100,7 +100,8 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
     url.searchParams.set("category", categoryId);
     if (debouncedSearch) url.searchParams.set("search", debouncedSearch);
 
-    fetch(url.toString())
+    const controller = new AbortController();
+    fetch(url.toString(), { signal: controller.signal })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data)) {
@@ -109,8 +110,13 @@ export const ServiceCatalogModal: React.FC<ServiceCatalogModalProps> = ({
           setError(true);
         }
       })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (err?.name !== "AbortError") setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [categoryId, debouncedSearch, API_BASE]);
 
   // Close on Escape key

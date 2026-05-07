@@ -37,15 +37,20 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/categories`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/categories`, { signal: controller.signal })
       .then((res) => res.json())
       .then((json) => {
         const list = json?.data ?? json;
         if (Array.isArray(list)) setCategories(list);
       })
-      .catch(() => {
-        // Silently fail — categories still display, just no modal functionality
+      .catch((err) => {
+        // Ignore abort errors triggered by StrictMode / unmount; log others.
+        if (err?.name !== "AbortError") {
+          // Silently fail — categories still display, just no modal functionality
+        }
       });
+    return () => controller.abort();
   }, [API_BASE]);
 
   const handleCategoryClick = (displayName: string) => {
