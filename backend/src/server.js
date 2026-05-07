@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { checkSupabaseConnection } from './config/supabase.js';
 import { validateVdaServiceConfig, validateVdaAuthConfig } from './config/vdaServiceConfig.js';
 import { startReminderCron } from './services/reminderService.js';
+import { startAutoCompleteCron } from './services/autoCompleteService.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
@@ -19,6 +20,7 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
 import addressRoutes from './routes/addressRoutes.js';
+import availabilityRoutes from './routes/availabilityRoutes.js';
 import testRoutes        from './routes/testRoutes.js';
 import assessmentRoutes  from './routes/assessmentRoutes.js';
 import dashboardRoutes   from './routes/dashboardRoutes.js';
@@ -32,6 +34,7 @@ if (process.env.NODE_ENV !== 'test') {
   validateVdaServiceConfig();
   validateVdaAuthConfig();
   startReminderCron();
+  startAutoCompleteCron();
 }
 
 // ── Rate limiters ─────────────────────────────────────────────────────────
@@ -49,6 +52,14 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:  false,
   message:        { success: false, message: 'Too many registration attempts. Please try again in 2 minutes.' },
+});
+
+const chatbotLimiter = rateLimit({
+  windowMs:       60 * 1000,        // 1 minute
+  max:            20,                // headroom under Groq's 30/min free tier
+  standardHeaders: true,
+  legacyHeaders:  false,
+  message:        { success: false, error: 'Too many chatbot messages. Please wait a moment.' },
 });
 
 // ── Security & utility middleware ─────────────────────────────────────────
@@ -71,6 +82,7 @@ app.use(express.urlencoded({ extended: true }));
 // ── Rate-limit auth endpoints ─────────────────────────────────────────────
 app.use('/api/auth/login',    loginLimiter);
 app.use('/api/auth/register', registerLimiter);   // ← A-09: new
+app.use('/api/chatbot/message', chatbotLimiter);  // ← SER-AI: protect Groq quota
 
 // ── API routes ────────────────────────────────────────────────────────────
 app.use('/api/auth',         authRoutes);
@@ -86,6 +98,7 @@ app.use('/api/assessments',  assessmentRoutes);
 app.use('/api/complaints',   complaintRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/addresses',    addressRoutes);
+app.use('/api/availability', availabilityRoutes);
 
 // Test routes — development only, never exposed in production
 if (process.env.NODE_ENV !== 'production') {

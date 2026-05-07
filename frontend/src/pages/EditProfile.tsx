@@ -12,6 +12,7 @@ import {
   validateFullName,
   validatePhoneNumber,
   validateBio,
+  validateDob,
   validateEditProfileForm,
   type FormErrors,
 } from "../lib/profileValidation";
@@ -27,6 +28,7 @@ type FormData = {
   email: string;
   phone: string;
   bio: string;
+  dob: string;
 };
 
 type TouchedFields = Partial<Record<keyof FormData, boolean>>;
@@ -43,6 +45,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({
     email: "",
     phone: "",
     bio: "",
+    dob: "",
   });
   const [initialData, setInitialData] = useState<FormData | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -71,13 +74,20 @@ export const EditProfile: React.FC<EditProfileProps> = ({
         return;
       }
 
-      // getMe returns either a user or provider shape — both now include phone/bio
-      const d = res.data as { full_name?: string; email?: string; phone?: string; bio?: string };
+      // getMe returns either a user or provider shape — both include editable profile fields
+      const d = res.data as {
+        full_name?: string;
+        email?: string;
+        phone?: string;
+        bio?: string;
+        dob?: string;
+      };
       const initial: FormData = {
         full_name: d.full_name ?? "",
         email: d.email ?? currentUser.email ?? "",
         phone: d.phone ?? "",
         bio: d.bio ?? "",
+        dob: d.dob ?? "",
       };
       setFormData(initial);
       setInitialData(initial);
@@ -93,12 +103,14 @@ export const EditProfile: React.FC<EditProfileProps> = ({
     initialData !== null &&
     (formData.full_name !== initialData.full_name ||
       formData.phone !== initialData.phone ||
-      formData.bio !== initialData.bio);
+      formData.bio !== initialData.bio ||
+      formData.dob !== initialData.dob);
 
   const validateField = (name: keyof FormData, value: string): string | undefined => {
     if (name === "full_name") return validateFullName(value).error;
     if (name === "phone") return validatePhoneNumber(value).error;
     if (name === "bio") return validateBio(value).error;
+    if (name === "dob") return validateDob(value).error;
     return undefined;
   };
 
@@ -129,7 +141,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({
     e.preventDefault();
 
     // Touch all fields to reveal any hidden errors
-    setTouched({ full_name: true, phone: true, bio: true });
+    setTouched({ full_name: true, phone: true, bio: true, dob: true });
 
     const { isValid, errors: validationErrors } = validateEditProfileForm(formData);
     setErrors(validationErrors);
@@ -139,10 +151,16 @@ export const EditProfile: React.FC<EditProfileProps> = ({
     setSubmitError(null);
     setSuccessMessage(null);
 
-    const payload: { full_name?: string; phone?: string; bio?: string } = {};
+    const payload: {
+      full_name?: string;
+      phone?: string;
+      bio?: string;
+      dob?: string;
+    } = {};
     if (formData.full_name !== initialData?.full_name) payload.full_name = formData.full_name;
     if (formData.phone !== initialData?.phone) payload.phone = formData.phone;
     if (formData.bio !== initialData?.bio) payload.bio = formData.bio;
+    if (formData.dob !== initialData?.dob) payload.dob = formData.dob;
 
     const res = await profileService.updateUserProfile(payload);
     setIsSubmitting(false);
@@ -322,6 +340,34 @@ export const EditProfile: React.FC<EditProfileProps> = ({
               {touched.phone && errors.phone && (
                 <p className="mt-1.5 text-xs text-red-500 font-medium">
                   {errors.phone}
+                </p>
+              )}
+            </div>
+
+            {/* Date of Birth */}
+            <div>
+              <label
+                htmlFor="dob"
+                className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2"
+              >
+                Date of Birth <span className="text-slate-300 font-normal normal-case">(optional)</span>
+              </label>
+              <input
+                id="dob"
+                name="dob"
+                type="date"
+                value={formData.dob}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`w-full px-4 py-3 rounded-2xl border text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition ${
+                  touched.dob && errors.dob
+                    ? "border-red-400 bg-red-50"
+                    : "border-slate-200 bg-white"
+                }`}
+              />
+              {touched.dob && errors.dob && (
+                <p className="mt-1.5 text-xs text-red-500 font-medium">
+                  {errors.dob}
                 </p>
               )}
             </div>

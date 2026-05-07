@@ -51,18 +51,11 @@ interface VerificationData {
 
 const STATUS_LABELS: Record<string, string> = {
   verified: "Verified",
-  pending: "Manual Review",
-  manual_review: "Manual Review",
+  pending: "Under Review",
+  manual_review: "Under Manual Review",
   rejected: "Not Verified",
   failed: "Not Verified",
-  unverified: "Not Started",
-};
-
-const overallBadgeClass = (status: string) => {
-  if (status === "verified") return "bg-emerald-100 text-emerald-700";
-  if (status === "pending" || status === "manual_review") return "bg-amber-100 text-amber-700";
-  if (status === "failed" || status === "rejected") return "bg-red-100 text-red-700";
-  return "bg-slate-100 text-slate-600";
+  unverified: "Not Verified",
 };
 
 const StatusIcon: React.FC<{ status?: string }> = ({ status }) => {

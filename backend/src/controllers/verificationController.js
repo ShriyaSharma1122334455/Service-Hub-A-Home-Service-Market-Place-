@@ -73,14 +73,24 @@ export const getPrefill = async (req, res) => {
       return res.status(404).json({ success: false, data: null, error: 'User not found' });
     }
 
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('full_name, email, phone, dob')
+      .eq('id', internalUser.id)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ success: false, data: null, error: 'User not found' });
+    }
+
     // Only return safe, non-sensitive fields — never password, tokens, supabase_id
     return res.json({
       success: true,
       data: {
-        full_name: internalUser.full_name,
-        email: internalUser.email,
-        phone: internalUser.phone || null,
-        date_of_birth: internalUser.dob || null,
+        full_name: user.full_name,
+        email: user.email,
+        phone: user.phone || null,
+        date_of_birth: user.dob || null,
       },
       error: null,
     });

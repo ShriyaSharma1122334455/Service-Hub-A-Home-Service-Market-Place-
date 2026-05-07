@@ -8,6 +8,7 @@ export type BackendUser = {
   full_name: string;
   email?: string;
   phone?: string;
+  dob?: string;
   avatarUrl?: string;
   role: string;
   bio?: string;
@@ -32,6 +33,7 @@ export type BackendProvider = {
   business_name?: string;
   email?: string;
   phone?: string;
+  dob?: string;
   avatarUrl?: string;
   role?: string;
   bio?: string;
@@ -78,6 +80,7 @@ export const profileService = {
     full_name?: string;
     phone?: string;
     bio?: string;
+    dob?: string;
   }): Promise<ApiResponse<BackendUser>> {
     return fetchApi<BackendUser>('/users/me', {
       method: 'PUT',

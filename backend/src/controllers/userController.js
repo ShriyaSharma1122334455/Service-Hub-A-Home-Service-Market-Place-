@@ -1,5 +1,8 @@
 import supabase from '../config/supabase.js';
-import { PROFILE_NOT_FOUND_MESSAGE } from '../utils/internalUser.js';
+import {
+  PROFILE_NOT_FOUND_MESSAGE,
+  ensurePublicUserFromAuthSummary,
+} from '../utils/internalUser.js';
 
 // getMe
 
@@ -10,16 +13,15 @@ export const getMe = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Authenticated user required' });
     }
 
-    // Step 1 — core columns that are guaranteed to exist
-    const { data: user, error } = await supabase
-      .from('users')
-      .select(`
+    const meSelect = `
         id,
         supabase_id,
         full_name,
         email,
         avatar_url,
         role,
+        dob,
+        verification_status,
         providers (
           id,
           business_name,
@@ -28,9 +30,30 @@ export const getMe = async (req, res) => {
           rating_count,
           provider_categories ( category_id )
         )
-      `)
+      `;
+
+    // Step 1 — core columns that are guaranteed to exist
+    let { data: user, error } = await supabase
+      .from('users')
+      .select(meSelect)
       .eq('supabase_id', supabaseId)
       .single();
+
+    // Auth session exists but public.users row is missing — heal then retry once
+    if (error || !user) {
+      const healed = await ensurePublicUserFromAuthSummary({
+        id: supabaseId,
+        email: req.user?.email,
+        role: req.user?.role,
+      });
+      if (healed) {
+        ({ data: user, error } = await supabase
+          .from('users')
+          .select(meSelect)
+          .eq('supabase_id', supabaseId)
+          .single());
+      }
+    }
 
     if (error || !user) {
       return res.status(404).json({ success: false, error: PROFILE_NOT_FOUND_MESSAGE });
@@ -41,18 +64,23 @@ export const getMe = async (req, res) => {
     // Silently fall back to null so the main profile load never breaks.
     let phone = null;
     let bio = null;
+    let dob = user.dob ?? null;
     const { data: extras } = await supabase
       .from('users')
-      .select('phone, bio')
+      .select('phone, bio, dob')
       .eq('supabase_id', supabaseId)
       .single();
     if (extras) {
       phone = extras.phone ?? null;
       bio = extras.bio ?? null;
+      dob = extras.dob ?? dob;
     }
 
-    // provider is the first element of the joined array (or null if no row yet)
-    const provider = user.providers?.[0] ?? null;
+    // Supabase returns the joined providers row as an object for to-one
+    // relations and as an array for to-many. Handle both shapes.
+    const provider = Array.isArray(user.providers)
+      ? (user.providers[0] ?? null)
+      : (user.providers ?? null);
 
     if (user.role === 'provider') {
       if (!provider) {
@@ -69,6 +97,7 @@ export const getMe = async (req, res) => {
             full_name: user.full_name,
             email: user.email,
             phone,
+            dob,
             bio,
             avatar_url: user.avatar_url,
             role: user.role,
@@ -90,10 +119,11 @@ export const getMe = async (req, res) => {
           full_name: user.full_name,
           email: user.email,
           phone,
+          dob,
           bio,
           avatar_url: user.avatar_url,
           role: user.role,
-          verificationStatus: provider.verification_status || user.verification_status || 'unverified',
+          verificationStatus: user.verification_status || 'unverified',
           profile_incomplete: false,
         },
       });
@@ -102,7 +132,7 @@ export const getMe = async (req, res) => {
     // Customer — spread core user fields then overlay phone/bio
     return res.json({
       success: true,
-      data: { type: 'user', ...user, phone, bio, verificationStatus: user.verification_status || 'unverified' }
+      data: { type: 'user', ...user, phone, bio, dob, verificationStatus: user.verification_status || 'unverified' }
     });
 
   } catch (err) {
@@ -142,10 +172,16 @@ export const getUser = async (req, res) => {
 
 export const listUsers = async (req, res) => {
   try {
-    const { data: users, error } = await supabase
+    // Optional ?role=customer|provider|admin filter. No filter = all users.
+    const roleFilter = req.query.role || null;
+
+    let query = supabase
       .from('users')
-      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status')
-      .eq('role', 'customer');
+      .select('id, supabase_id, full_name, avatar_url, role, email, verification_status');
+
+    if (roleFilter) query = query.eq('role', roleFilter);
+
+    const { data: users, error } = await query;
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
@@ -275,7 +311,7 @@ export const updateUserRole = async (req, res) => {
 const FULL_NAME_RE = /^[a-zA-ZÀ-ÿ\s'-]+$/;
 const PHONE_RE = /^(\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/;
 
-function validateProfileUpdate({ full_name, phone, bio }) {
+function validateProfileUpdate({ full_name, phone, bio, dob }) {
   const errors = {};
 
   if (full_name !== undefined) {
@@ -297,6 +333,27 @@ function validateProfileUpdate({ full_name, phone, bio }) {
     errors.bio = 'Bio must not exceed 500 characters';
   }
 
+  if (dob !== undefined && dob !== null && String(dob).trim() !== '') {
+    const dobValue = String(dob).trim();
+    const parsedDob = new Date(dobValue);
+    const isValidDob =
+      !Number.isNaN(parsedDob.getTime()) && /^\d{4}-\d{2}-\d{2}$/.test(dobValue);
+
+    if (!isValidDob) {
+      errors.dob = 'Date of birth must be in YYYY-MM-DD format';
+    } else {
+      const today = new Date();
+      let age = today.getFullYear() - parsedDob.getFullYear();
+      const monthDiff = today.getMonth() - parsedDob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedDob.getDate())) {
+        age -= 1;
+      }
+      if (age < 18) {
+        errors.dob = 'You must be at least 18 years old';
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -307,9 +364,9 @@ export const updateUserProfile = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Authenticated user required' });
     }
 
-    const { full_name, phone, bio } = req.body;
+    const { full_name, phone, bio, dob } = req.body;
 
-    const errors = validateProfileUpdate({ full_name, phone, bio });
+    const errors = validateProfileUpdate({ full_name, phone, bio, dob });
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ success: false, message: 'Validation failed', errors });
     }
@@ -321,6 +378,7 @@ export const updateUserProfile = async (req, res) => {
     const extData = {};
     if (phone !== undefined) extData.phone = (phone === null || String(phone).trim() === '') ? null : String(phone).trim();
     if (bio   !== undefined) extData.bio   = (bio   === null || String(bio).trim()   === '') ? null : String(bio).trim();
+    if (dob   !== undefined) extData.dob   = (dob   === null || String(dob).trim()   === '') ? null : String(dob).trim();
 
     if (!Object.keys(coreData).length && !Object.keys(extData).length) {
       return res.status(400).json({ success: false, error: 'No fields provided to update' });

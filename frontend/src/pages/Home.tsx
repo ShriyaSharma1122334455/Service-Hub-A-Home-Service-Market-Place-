@@ -37,15 +37,20 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/categories`)
+    const controller = new AbortController();
+    fetch(`${API_BASE}/api/categories`, { signal: controller.signal })
       .then((res) => res.json())
       .then((json) => {
         const list = json?.data ?? json;
         if (Array.isArray(list)) setCategories(list);
       })
-      .catch(() => {
-        // Silently fail — categories still display, just no modal functionality
+      .catch((err) => {
+        // Ignore abort errors triggered by StrictMode / unmount; log others.
+        if (err?.name !== "AbortError") {
+          // Silently fail — categories still display, just no modal functionality
+        }
       });
+    return () => controller.abort();
   }, [API_BASE]);
 
   const handleCategoryClick = (displayName: string) => {
@@ -77,12 +82,21 @@ export const Home: React.FC<HomeProps> = ({ onNavigate, user }) => {
             design. Instant booking, transparent pricing.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <button
-              onClick={() => onNavigate("/register")}
-              className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center gap-2"
-            >
-              Get Started Free <ArrowRight size={20} />
-            </button>
+            {!user ? (
+              <button
+                onClick={() => onNavigate("/register")}
+                className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center gap-2"
+              >
+                Get Started Free <ArrowRight size={20} />
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigate("/browse-services")}
+                className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 hover:scale-105 transition-all flex items-center justify-center gap-2"
+              >
+                Browse Services <ArrowRight size={20} />
+              </button>
+            )}
           </div>
         </div>
       </section>

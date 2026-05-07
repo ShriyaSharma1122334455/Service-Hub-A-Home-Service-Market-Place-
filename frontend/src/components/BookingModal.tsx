@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Calendar,
@@ -120,6 +120,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   // Submission
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks whether displayed slots are real provider slots or generated fallbacks
+  const [usedFallback, setUsedFallback] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll the error into view whenever it appears so users actually see
+  // backend rejections instead of staring at a "still nothing" modal.
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     const p = readDamagePrefill();
@@ -137,6 +148,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       setSlotsLoading(true);
       setSlots([]);
       setSelectedSlot(null);
+      setUsedFallback(false);
       const dateStr = toLocalDate(selectedDate!);
       try {
         const res = await fetch(
@@ -156,13 +168,18 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               endTime: s.end_time,
               label: `${fmt12h(s.start_time)} – ${fmt12h(s.end_time)}`,
             }));
+          setUsedFallback(false);
           setSlots(available);
         } else {
           // No availability endpoint yet — fall back to generated slots
+          setUsedFallback(true);
           setSlots(generateFallbackSlots());
         }
       } catch {
-        if (!controller.signal.aborted) setSlots(generateFallbackSlots());
+        if (!controller.signal.aborted) {
+          setUsedFallback(true);
+          setSlots(generateFallbackSlots());
+        }
       } finally {
         if (!controller.signal.aborted) setSlotsLoading(false);
       }
@@ -366,7 +383,16 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   No slots available on this date. Try another day.
                 </p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <>
+                  {usedFallback && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-2 text-xs text-amber-800">
+                      <span className="mt-0.5">⚠️</span>
+                      <span>
+                        <span className="font-bold">Suggested times only</span> — this provider hasn't set specific availability. These are general windows. The provider will confirm your chosen time after booking.
+                      </span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {slots.map((slot) => (
                     <button
                       key={slot.id}
@@ -384,6 +410,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     </button>
                   ))}
                 </div>
+                </>
               )}
             </section>
           )}
@@ -445,9 +472,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
           {/* ── Error ─────────────────────────────────────────────────────── */}
           {error && (
-            <div className="flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 text-sm">
+            <div
+              ref={errorRef}
+              role="alert"
+              aria-live="assertive"
+              className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm"
+            >
               <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-              {error}
+              <span>{error}</span>
             </div>
           )}
 
@@ -479,6 +511,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <span className="font-bold text-teal-700">${servicePrice}</span>
               </div>
             </div>
+          )}
+
+          {/* ── Validation hint ──────────────────────────────────────────── */}
+          {(!selectedDate || !selectedSlot) && (
+            <p className="text-xs text-slate-500 -mt-1">
+              {!selectedDate
+                ? "Pick a date to see available time slots."
+                : "Pick a time slot to confirm your booking."}
+            </p>
           )}
 
           {/* ── Actions ────────────────────────────────────────────────────── */}

@@ -123,6 +123,24 @@ describe('updateUserProfile controller', () => {
     expect(body.errors).toHaveProperty('bio');
   });
 
+  test('returns 400 when dob has invalid format', async () => {
+    const res = mockRes();
+    await updateUserProfile(mockReq({ dob: '01/15/1990' }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    const body = res.json.mock.calls[0][0];
+    expect(body.errors).toHaveProperty('dob');
+  });
+
+  test('returns 400 when dob indicates user is under 18', async () => {
+    const res = mockRes();
+    const today = new Date();
+    const under18 = `${today.getFullYear() - 17}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await updateUserProfile(mockReq({ dob: under18 }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    const body = res.json.mock.calls[0][0];
+    expect(body.errors).toHaveProperty('dob');
+  });
+
   test('returns 400 when no fields are provided', async () => {
     const res = mockRes();
     await updateUserProfile(mockReq({}), res);
@@ -171,6 +189,13 @@ describe('updateUserProfile controller', () => {
   test('accepts bio of exactly 500 characters', async () => {
     const res = mockRes();
     await updateUserProfile(mockReq({ bio: 'x'.repeat(500) }), res);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json.mock.calls[0][0].success).toBe(true);
+  });
+
+  test('returns 200 when valid dob is provided', async () => {
+    const res = mockRes();
+    await updateUserProfile(mockReq({ dob: '1990-06-15' }), res);
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json.mock.calls[0][0].success).toBe(true);
   });

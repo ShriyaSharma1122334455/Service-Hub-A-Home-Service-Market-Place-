@@ -247,6 +247,9 @@ if (hasError) {
   console.log(`
 Next steps:
 1. Fill in all .env files
+   • Cloudinary, Supabase, Resend, Gmail, etc. — see the team Google Doc.
+   • Chatbot LLM: set GROQ_API_KEY in backend/.env (shared key in the team
+     Google Doc, or grab your own free one at https://console.groq.com).
 2. Start backend:   cd backend && npm run dev
 3. Start frontend:  cd frontend && npm run dev
 4. Start AI modules manually (if needed)
