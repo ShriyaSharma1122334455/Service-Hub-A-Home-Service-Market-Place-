@@ -46,9 +46,9 @@ The home services industry in the US is a **$600B+ market** with a trust problem
 | ----------------------- | ------------------------------------------------------------------------------------- |
 | Unverified providers    | AI-powered multi-step verification — ID OCR, face matching, NSOPW background check    |
 | No damage assessment    | Computer vision damage analysis — upload a photo, get a service recommendation        |
-| Fragmented experience   | End-to-end platform — browse, book, pay, review in one place                          |
+| Fragmented experience   | End-to-end platform — browse, book, review in one place                               |
 | No mutual trust         | Both providers AND customers go through identity verification                         |
-| Manual booking          | Auto-confirmed bookings with real-time availability and instant Stripe payments       |
+| Manual booking          |
 | No intelligent guidance | AI FAQ chatbot built on RAG — answers questions about services, pricing, and policies |
 
 ---
@@ -57,13 +57,13 @@ The home services industry in the US is a **$600B+ market** with a trust problem
 
 Built by a team of 5 engineers at NJIT for the Computer Science Capstone Program, Spring 2026.
 
-| Name         | Role            | What They Own                                                                     |
-| ------------ | --------------- | --------------------------------------------------------------------------------- |
-| **Shriya**   | Frontend Lead   | Authentication flows, user and provider profiles, dashboard UI, responsive design |
-| **Akash**    | Backend Lead    | Booking system, REST APIs, email notifications, service catalog                   |
-| **Deep**     | Full Stack + AI | Reviews, complaints, FAQ chatbot (RAG pipeline + AnythingLLM + Ollama)            |
-| **Jaysheel** | AI Engineer     | Visual damage assessment, computer vision integration, Stripe payment system      |
-| **Pruthvi**  | AI Engineer     | Identity verification pipeline — ID OCR, face matching, NSOPW background check    |
+| Name         | Role                     | What They Own                                                                     |
+| ------------ | ------------------------ | --------------------------------------------------------------------------------- |
+| **Shriya**   | Product Owner            | Authentication flows, user and provider profiles, dashboard UI, responsive design |
+| **Akash**    | Backend Engineer         | Booking system, REST APIs, email notifications, service catalog                   |
+| **Deep**     | Full Stack + QA Engineer | Reviews, complaints, FAQ chatbot (RAG pipeline + AnythingLLM + Ollama)            |
+| **Jaysheel** | Full Stack AI Engineer   | Visual damage assessment, computer vision integration                             |
+| **Pruthvi**  | AI Engineer              | Identity verification pipeline — ID OCR, face matching, NSOPW background check    |
 
 ---
 
@@ -74,8 +74,7 @@ Built by a team of 5 engineers at NJIT for the Computer Science Capstone Program
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   CLIENT LAYER                       │
-│           React + TypeScript (Vite)                  │
-│                 Hosted on Vercel                     │
+│           React + TypeScript (Vite)                  │                     │
 │  CDN-cached static assets — sub-50ms global load    │
 └────────────────────────┬────────────────────────────┘
                          │ HTTPS
@@ -85,27 +84,27 @@ Built by a team of 5 engineers at NJIT for the Computer Science Capstone Program
      │  SUPABASE  │ │ EXPRESS  │ │   SUPABASE   │
      │    AUTH    │ │   API    │ │   STORAGE    │
      │            │ │          │ │              │
-     │ Google     │ │ REST     │ │ ID documents │
-     │ OAuth      │ │ JWT auth │ │ Selfies      │
-     │ Email/Pass │ │ RLS      │ │ Avatars      │
-     │ Auto email │ │ Rate     │ │ Private      │
-     │ verify     │ │ limiting │ │ buckets      │
+     │            │ │ REST     │ │ ID documents │
+     │            │ │ JWT auth │ │ Selfies      │
+     │            │ │ RLS      │ │              |
+     │            │ │ Rate     │ │              │
+     │            │ │ limiting │ │              │
      └────────────┘ └────┬─────┘ └──────────────┘
                          │
                          ▼
               ┌─────────────────────┐
               │    SUPABASE DB      │
               │    (PostgreSQL)     │
-              │                    │
+              │                     │
               │  Row Level Security │
-              │  on every table    │
-              │                    │
-              │  Auto triggers:    │
-              │  - User creation   │
-              │  - Provider setup  │
-              │  - Complaint refs  │
-              │  - Timestamp sync  │
-              └──────────┬─────────┘
+              │  on every table     │
+              │                     │
+              │  Auto triggers:     │
+              │  - User creation    │
+              │  - Provider setup   │
+              │  - Complaint refs   │
+              │  - Timestamp sync   │
+              └──────────┬─────────-┘
                          │
             ┌────────────┴────────────┐
             ▼                         ▼
@@ -121,18 +120,12 @@ Built by a team of 5 engineers at NJIT for the Computer Science Capstone Program
                                       ▼
                            ┌──────────────────────┐
                            │   CHATBOT SERVICE    │
+                           │    (Node.js / API)   │
                            │                      │
-                           │  AnythingLLM         │
-                           │  Ollama (local LLM)  │
-                           │  RAG Pipeline        │
-                           │  Knowledge Base      │
+                           │  Groq (Cloud LLM)    │
+                           │  Ollama (Local LLM)  │
+                           │  Direct DB Context   │
                            └──────────────────────┘
-
-         EXTERNAL SERVICES
-    ┌──────────┐ ┌────────┐ ┌─────────┐
-    │  STRIPE  │ │ RESEND │ │ LEAFLET │
-    │ Payments │ │ Email  │ │  Maps   │
-    └──────────┘ └────────┘ └─────────┘
 ```
 
 ### How We Handle Performance & Reliability
@@ -171,22 +164,19 @@ Built by a team of 5 engineers at NJIT for the Computer Science Capstone Program
 
 ### Why These Choices
 
-| Layer             | Technology            | Why                                                                       |
-| ----------------- | --------------------- | ------------------------------------------------------------------------- |
-| Frontend          | React + TypeScript    | Type-safe component architecture, large ecosystem                         |
-| UI Components     | ShadCN UI             | Accessible, unstyled primitives with full design control                  |
-| Build Tool        | Vite                  | Fastest dev server and build times in the ecosystem                       |
-| Backend           | Node.js + Express     | Non-blocking I/O ideal for a booking platform with concurrent requests    |
-| Database          | Supabase (PostgreSQL) | Relational data, RLS security, Auth + Storage + Realtime in one platform  |
-| Authentication    | Supabase Auth         | Native JWT integration with the DB — eliminates the sync problem entirely |
-| File Storage      | Supabase Storage      | Private buckets with RLS — same security model as the database            |
-| AI Services       | Python + FastAPI      | Async-native, ideal for ML workloads, fastest Python API framework        |
-| Chatbot LLM       | Ollama (local)        | Zero API cost, data never leaves the server, Llama/Mistral quality        |
-| Chatbot Framework | AnythingLLM           | Production-ready RAG pipeline with knowledge base management              |
-| Payments          | Stripe                | Industry standard, PCI compliant, sandbox testing built in                |
-| Email             | Resend                | Modern transactional email with excellent deliverability                  |
-| Maps              | Leaflet               | Open source, no API costs, full customization                             |
-| Hosting           | Vercel (frontend)     | Zero-config deployment, global CDN, preview URLs per PR                   |
+| Layer          | Technology            | Why                                                                       |
+| -------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------- |
+| Frontend       | React + TypeScript    | Type-safe component architecture, large ecosystem                         |
+| Build Tool     | Vite                  | Fastest dev server and build times in the ecosystem                       |
+| Backend        | Node.js + Express     | Non-blocking I/O ideal for a booking platform with concurrent requests    |
+| Database       | Supabase (PostgreSQL) | Relational data, RLS security, Auth + Storage + Realtime in one platform  |
+| Authentication | Supabase Auth         | Native JWT integration with the DB — eliminates the sync problem entirely |
+| File Storage   | Cloudinary & Supabase | Cloudinary for images, Supabase for private documents & ID storage        |
+| AI Services    | Python + FastAPI      | Async-native, ideal for ML workloads, fastest Python API framework        |
+| Chatbot LLM    | Groq / Ollama         | Ultra-fast Llama 3 via Groq API, with Ollama fallback for local dev       |
+| Rate Limiting  | express-rate-limit    | Brute-force protection on auth routes and strict quota limits on AI chats |
+| Email          | Nodemailer + Gmail    | Modern transactional email with excellent deliverability                  | Open source, no API costs, full customization |
+| Hosting        | Vercel (frontend)     | Zero-config deployment, global CDN, preview URLs per PR                   |
 
 ### AI/ML Stack in Detail
 
@@ -197,14 +187,14 @@ Identity Verification Pipeline:
   NSOPW web scraping                 →  Background check
 
 Damage Assessment Pipeline:
-  Google Vision / AWS Rekognition    →  Image label detection
-  Custom label mapping               →  Service category recommendation
+  Gemini API (Gemma 4 multimodal)    →  Visual analysis of user-uploaded images
+  Structured JSON output             →  Service category recommendation & severity
 
 FAQ Chatbot Pipeline:
-  Knowledge base documents           →  Ingested into AnythingLLM
-  User question                      →  Semantic search for relevant context
-  Context + question                 →  Sent to Ollama (Llama/Mistral)
-  Generated answer                   →  Returned to user
+  User role & active bookings        →  Fetched securely via Express backend
+  User question + database context   →  Combined into strict system prompt
+  Groq API (Llama 3 70B)             →  Generates structured JSON response
+  Express Backend                    →  Renders order cards or FAQ text dynamically
 ```
 
 ---
@@ -219,7 +209,7 @@ Register / Login
 Identity Verification (ID upload + selfie)
       ↓
 Browse Service Catalog
-  → Search by category, price, location
+  → Browse by serach bar
   → OR upload a photo → AI damage assessment → recommended category
       ↓
 View Provider Profiles
@@ -227,9 +217,7 @@ View Provider Profiles
       ↓
 Select Time Slot → Book
       ↓
-Stripe Payment → Booking Confirmed
-      ↓
-Email Confirmation (via Resend)
+Email Confirmation (via Nodemailer + Gmail)
       ↓
 Service Completed
       ↓
@@ -250,11 +238,9 @@ Multi-Step AI Verification
 Set Up Profile
   → Business name, description, services offered, custom pricing
       ↓
-Set Availability Calendar
+Receive Booking Requests
       ↓
-Receive Booking Requests → Accept / Reject
-      ↓
-Complete Job → Get Paid → Receive Review
+Complete Job → Receive Review
 ```
 
 ### How to Run Locally
@@ -262,8 +248,8 @@ Complete Job → Get Paid → Receive Review
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/your-org/service-hub.git
-cd service-hub
+git clone https://github.com/ShriyaSharma1122334455/Service-Hub-A-Home-Service-Market-Place-.git
+cd Service-Hub-A-Home-Service-Market-Place-
 ```
 
 **2. Database setup**
@@ -280,10 +266,9 @@ This creates all tables, RLS policies, triggers, and seeds the service catalog.
 
 ```bash
 cd backend
-npm install
-cp .env.example .env
+npm run setup
 # Fill in SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, STRIPE keys
-npm run dev
+npm run start
 # Runs on http://localhost:3000
 ```
 
@@ -291,8 +276,6 @@ npm run dev
 
 ```bash
 cd frontend
-npm install
-cp .env.example .env
 # Fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_BASE_URL
 npm run dev
 # Runs on http://localhost:5173
@@ -327,12 +310,13 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
 
-RESEND_API_KEY=re_...
-FROM_EMAIL=onboarding@resend.dev
-FROM_NAME=ServiceHub
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+GROQ_API_KEY=gsk_...
 ```
 
 **Frontend (`frontend/.env`)**
@@ -375,8 +359,8 @@ We verify both sides. Not just providers. A homeowner on ServiceHub has also con
 **3. Damage assessment before booking**
 No other home services platform helps the customer figure out what they actually need before they book. We do. Upload a photo, get a recommendation. This reduces wrong bookings, increases satisfaction, and makes the platform genuinely useful even before a booking happens.
 
-**4. Privacy-first AI**
-Our FAQ chatbot runs entirely locally via Ollama — no user conversations are sent to OpenAI or any external API. For a platform handling sensitive home and identity information, this is a meaningful trust signal.
+**4. Intelligent & Role-Aware Chatbot**
+Our chatbot dynamically pulls a user's role and booking history from the database to provide highly contextual answers. Using the ultra-fast Groq API (Llama 3) with a strict JSON-only schema, it can securely show order status, service catalogs, or platform FAQs without hallucinating data.
 
 **5. One platform, zero fragmentation**
 Browse, verify, book, pay, review — everything in one place. No external payment links, no WhatsApp conversations to close the deal, no separate review platforms.
