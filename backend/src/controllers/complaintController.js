@@ -1,6 +1,14 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
+// Subjects accepted by the complaints_subject_check DB constraint. Keep this
+// in sync with the Postgres CHECK constraint on public.complaints.subject.
+export const ALLOWED_COMPLAINT_SUBJECTS = [
+  'Provider did not show up',
+  'Safety concern',
+  'Other',
+];
+
 // POST /api/complaints
 export const createComplaint = async (req, res) => {
   try {
@@ -8,6 +16,15 @@ export const createComplaint = async (req, res) => {
 
     if (!subject || !description) {
       return res.status(400).json({ success: false, error: 'subject and description are required' });
+    }
+
+    if (!ALLOWED_COMPLAINT_SUBJECTS.includes(subject)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid subject',
+        message: `Subject must be one of: ${ALLOWED_COMPLAINT_SUBJECTS.join(', ')}.`,
+        allowedSubjects: ALLOWED_COMPLAINT_SUBJECTS,
+      });
     }
 
     const internalUser = await getInternalUser(req.user.id);
