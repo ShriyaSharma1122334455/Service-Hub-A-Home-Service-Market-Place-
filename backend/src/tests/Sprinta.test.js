@@ -141,6 +141,7 @@ const SERVICE_OK         = { id: 'svc-1', base_price: 100, provider_id: 'prov-1'
 const SERVICE_OTHER_PROV = { id: 'svc-2', base_price: 80,  provider_id: 'prov-other', is_active: true };
 const BOOKING_PENDING    = { id: 'bk-1', customer_id: 'user-cust-1', provider_id: 'prov-1', status: 'pending' };
 const BOOKING_CONFIRMED  = { id: 'bk-1', customer_id: 'user-cust-1', provider_id: 'prov-1', status: 'confirmed' };
+const SLOT_AVAILABLE     = { id: 'slot-1', provider_id: 'prov-1', date: '', start_time: '10:00', end_time: '11:00', is_booked: false };
 
 // ── Global cleanup ────────────────────────────────────────────────────────
 beforeEach(() => {
@@ -362,7 +363,6 @@ describe('A-05 · createBooking — self-booking prevention', () => {
     // user_id to match the internal customer id.
     mockAs('customer');
     queue(
-      { data: [], error: null },                 // no slot conflict
       // provider.user_id === internalUser.id  → self-booking detected
       { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-cust-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },   // internalUser.id === 'user-cust-1'
@@ -377,15 +377,17 @@ describe('A-05 · createBooking — self-booking prevention', () => {
   it('allows a customer to book a verified provider', async () => {
     mockAs('customer');
     queue(
-      { data: [], error: null },
       { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },   // different user_id → OK
       { data: SERVICE_OK, error: null },
-      { data: { id: 'bk-new', status: 'pending' }, error: null },
+      { data: { ...SLOT_AVAILABLE, date: TOMORROW.slice(0, 10) }, error: null },
+      { data: [], error: null },
+      { data: { id: 'slot-1' }, error: null },
+      { data: { id: 'bk-new', status: 'pending', availability_id: 'slot-1' }, error: null },
     );
     const res = await request(app)
       .post('/api/bookings').set('Authorization', 'Bearer tok')
-      .send({ provider_id: 'prov-1', service_id: 'svc-1', scheduled_at: TOMORROW });
+      .send({ provider_id: 'prov-1', service_id: 'svc-1', availability_id: 'slot-1', scheduled_at: TOMORROW });
     expect(res.statusCode).toBe(201);
   });
 });
@@ -544,14 +546,13 @@ describe('A-11 · createBooking — service/provider ownership', () => {
   it('returns 400 when service belongs to a different provider', async () => {
     mockAs('customer');
     queue(
-      { data: [], error: null },
       { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },
       { data: SERVICE_OTHER_PROV, error: null },   // provider_id mismatch
     );
     const res = await request(app)
       .post('/api/bookings').set('Authorization', 'Bearer tok')
-      .send({ provider_id: 'prov-1', service_id: 'svc-2', scheduled_at: TOMORROW });
+      .send({ provider_id: 'prov-1', service_id: 'svc-2', availability_id: 'slot-1', scheduled_at: TOMORROW });
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toMatch(/does not belong/i);
   });
@@ -559,14 +560,13 @@ describe('A-11 · createBooking — service/provider ownership', () => {
   it('returns 400 when service is inactive', async () => {
     mockAs('customer');
     queue(
-      { data: [], error: null },
       { data: { id: 'prov-1', is_fully_verified: true, user_id: 'user-prov-1' }, error: null },
       { data: INTERNAL_CUSTOMER, error: null },
       { data: { ...SERVICE_OK, is_active: false }, error: null },
     );
     const res = await request(app)
       .post('/api/bookings').set('Authorization', 'Bearer tok')
-      .send({ provider_id: 'prov-1', service_id: 'svc-1', scheduled_at: TOMORROW });
+      .send({ provider_id: 'prov-1', service_id: 'svc-1', availability_id: 'slot-1', scheduled_at: TOMORROW });
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toMatch(/no longer available/i);
   });

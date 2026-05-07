@@ -33,10 +33,10 @@ export const createBooking = async (req, res) => {
       address_zip,
     } = req.body;
 
-    if (!provider_id || !service_id || !availability_id || !scheduled_at) {
+    if (!provider_id || !service_id || !scheduled_at) {
       return res.status(400).json({
         success: false,
-        error: 'provider_id, service_id, availability_id and scheduled_at are required',
+        error: 'provider_id, service_id and scheduled_at are required',
       });
     }
 
@@ -138,6 +138,13 @@ export const createBooking = async (req, res) => {
       if (providerService.custom_price !== null) {
         priceToCharge = providerService.custom_price;
       }
+    }
+
+    if (!availability_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'availability_id is required',
+      });
     }
 
     const scheduledDateKey = scheduled_at.slice(0, 10);
