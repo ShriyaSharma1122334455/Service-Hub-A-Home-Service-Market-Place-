@@ -1,13 +1,10 @@
 import supabase from '../config/supabase.js';
 import { getInternalUser, profileNotFoundResponse } from '../utils/internalUser.js';
 
-// Subjects accepted by the complaints_subject_check DB constraint. Keep this
-// in sync with the Postgres CHECK constraint on public.complaints.subject.
-export const ALLOWED_COMPLAINT_SUBJECTS = [
-  'Provider did not show up',
-  'Safety concern',
-  'Other',
-];
+// Subject length bounds — generous enough for free-form text, tight enough
+// to block accidental empty / pathological inputs.
+const SUBJECT_MIN_LENGTH = 5;
+const SUBJECT_MAX_LENGTH = 200;
 
 // POST /api/complaints
 export const createComplaint = async (req, res) => {
@@ -18,12 +15,12 @@ export const createComplaint = async (req, res) => {
       return res.status(400).json({ success: false, error: 'subject and description are required' });
     }
 
-    if (!ALLOWED_COMPLAINT_SUBJECTS.includes(subject)) {
+    const trimmedSubject = String(subject).trim();
+    if (trimmedSubject.length < SUBJECT_MIN_LENGTH || trimmedSubject.length > SUBJECT_MAX_LENGTH) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid subject',
-        message: `Subject must be one of: ${ALLOWED_COMPLAINT_SUBJECTS.join(', ')}.`,
-        allowedSubjects: ALLOWED_COMPLAINT_SUBJECTS,
+        error: 'Invalid subject length',
+        message: `Subject must be between ${SUBJECT_MIN_LENGTH} and ${SUBJECT_MAX_LENGTH} characters.`,
       });
     }
 
@@ -35,7 +32,7 @@ export const createComplaint = async (req, res) => {
       .insert({
         user_id:     internalUser.id,
         booking_id:  booking_id || null,
-        subject,
+        subject:     trimmedSubject,
         description,
         priority:    priority || 'MEDIUM',
         status:      'OPEN'

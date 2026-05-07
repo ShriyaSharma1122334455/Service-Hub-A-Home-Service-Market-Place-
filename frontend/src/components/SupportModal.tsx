@@ -37,7 +37,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   userRole,
 }) => {
   const subjectOptions = userRole === "provider" ? PROVIDER_SUBJECTS : CUSTOMER_SUBJECTS;
-  const [subject, setSubject] = useState(subjectOptions[0]);
+  const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +47,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
   if (!isOpen) return null;
 
   const resetForm = () => {
-    setSubject(subjectOptions[0]);
+    setSubject("");
     setDescription("");
     setPriority("MEDIUM");
     setError(null);
@@ -176,18 +176,25 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 <label className="block text-sm font-bold text-slate-700 mb-2">
                   What is your issue about?
                 </label>
-                <select
+                <input
+                  type="text"
                   required
+                  minLength={5}
+                  maxLength={200}
+                  list="support-subject-suggestions"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Briefly describe your issue"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"
-                >
+                />
+                <datalist id="support-subject-suggestions">
                   {subjectOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
+                    <option key={opt} value={opt} />
                   ))}
-                </select>
+                </datalist>
+                <p className="mt-1 text-xs text-slate-400">
+                  Suggestions appear as you type. You can also write your own.
+                </p>
               </div>
 
               {/* Priority */}
