@@ -13,29 +13,23 @@ export const getMe = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Authenticated user required' });
     }
 
-    const meSelect = `
-        id,
-        supabase_id,
-        full_name,
-        email,
-        avatar_url,
-        role,
-        dob,
-        verification_status,
-        providers (
-          id,
-          business_name,
-          description,
-          rating_avg,
-          rating_count,
-          provider_categories ( category_id )
-        )
-      `;
+    // Keep the initial lookup minimal so login doesn't fail when optional
+    // relationships (like `providers(...)`) are missing/misconfigured in the DB.
+    const userSelect = `
+      id,
+      supabase_id,
+      full_name,
+      email,
+      avatar_url,
+      role,
+      dob,
+      verification_status
+    `;
 
     // Step 1 — core columns that are guaranteed to exist
     let { data: user, error } = await supabase
       .from('users')
-      .select(meSelect)
+      .select(userSelect)
       .eq('supabase_id', supabaseId)
       .single();
 
@@ -49,7 +43,7 @@ export const getMe = async (req, res) => {
       if (healed) {
         ({ data: user, error } = await supabase
           .from('users')
-          .select(meSelect)
+          .select(userSelect)
           .eq('supabase_id', supabaseId)
           .single());
       }
@@ -76,13 +70,32 @@ export const getMe = async (req, res) => {
       dob = extras.dob ?? dob;
     }
 
-    // Supabase returns the joined providers row as an object for to-one
-    // relations and as an array for to-many. Handle both shapes.
-    const provider = Array.isArray(user.providers)
-      ? (user.providers[0] ?? null)
-      : (user.providers ?? null);
-
     if (user.role === 'provider') {
+      // Providers are optional during login; fetch them separately so the main
+      // profile endpoint stays reliable even if the `providers` relationship
+      // in PostgREST isn't available.
+      let provider = null;
+      try {
+        const { data: providerRow, error: providerError } = await supabase
+          .from('providers')
+          .select(`
+            id,
+            business_name,
+            description,
+            rating_avg,
+            rating_count,
+            provider_categories ( category_id )
+          `)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!providerError && providerRow) provider = providerRow;
+      } catch (_e) {
+        // If the provider join/relationship fails, return an "incomplete"
+        // provider profile rather than blocking login.
+        provider = null;
+      }
+
       if (!provider) {
         return res.json({
           success: true,

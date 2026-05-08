@@ -286,7 +286,7 @@ npm run dev
 ```bash
 cd app
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8001
 ```
 
 **6. Damage Assessment Service**
@@ -294,7 +294,7 @@ uvicorn main:app --reload --port 8000
 ```bash
 cd visual-damage-assessment
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
+uvicorn main:app --reload --port 8000
 ```
 
 ### Environment Variables

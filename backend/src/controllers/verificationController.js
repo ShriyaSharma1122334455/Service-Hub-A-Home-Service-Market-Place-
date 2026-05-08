@@ -20,7 +20,7 @@ import {
   getSignedUrl,
 } from '../services/supabaseVerificationStorage.js';
 
-const AI_SERVICES_URL = process.env.AI_SERVICES_URL || 'http://localhost:8000';
+const AI_SERVICES_URL = process.env.AI_SERVICES_URL || 'http://localhost:8001';
 const AI_INTERNAL_KEY = process.env.AI_INTERNAL_API_KEY || 'change-me-in-production';
 
 // ── Helpers ──────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ import { jest } from '@jest/globals';
 
 process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-process.env.AI_SERVICES_URL = 'http://localhost:8000';
+process.env.AI_SERVICES_URL = 'http://localhost:8001';
 process.env.AI_INTERNAL_API_KEY = 'test-key';
 
 let supabaseMock;
